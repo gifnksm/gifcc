@@ -5,7 +5,15 @@ try() {
   input="$2"
 
   ./9cc "${input}" > tmp.s
+  if [ "$?" -ne 0 ]; then
+    echo "9cc failed"
+    exit 1
+  fi
   gcc -o tmp tmp.s
+  if [ "$?" -ne 0 ]; then
+    echo "gcc failed"
+    exit 1
+  fi
   ./tmp
   actual="$?"
 
