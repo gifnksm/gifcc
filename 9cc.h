@@ -1,5 +1,16 @@
 #pragma once
 
+typedef struct {
+  void **data;
+  int capacity;
+  int len;
+} Vector;
+
+typedef struct {
+  Vector *keys;
+  Vector *vals;
+} Map;
+
 // トークンの型を表す値
 enum {
   TK_NUM = 256, // 整数トークン
@@ -36,6 +47,11 @@ extern Token tokens[100];
 extern Node *code[100];
 
 __attribute__((noreturn, format(printf, 1, 2))) void error(char *fmt, ...);
+Vector *new_vector(void);
+void vec_push(Vector *vec, void *elem);
+Map *new_map(void);
+void map_put(Map *map, char *key, void *val);
+void *map_get(Map *map, char *key);
 void tokenize(char *p);
 void program(void);
 void gen(Node *node);
