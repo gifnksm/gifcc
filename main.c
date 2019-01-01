@@ -1,8 +1,7 @@
+#include "9cc.h"
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
-
-#include "9cc.h"
 
 // エラーを報告するための関数
 void __attribute__((noreturn)) error(char *fmt, ...) {

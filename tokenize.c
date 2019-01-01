@@ -1,7 +1,6 @@
+#include "9cc.h"
 #include <ctype.h>
 #include <stdlib.h>
-
-#include "9cc.h"
 
 // トークナイズした結果のトークン列はこの配列に保存する
 // 100個以上のトークンは来ないものとする
