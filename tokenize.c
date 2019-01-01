@@ -17,6 +17,22 @@ void tokenize(char *p) {
       continue;
     }
 
+    if (*p == '=' && *(p + 1) == '=') {
+      tokens[i].ty = TK_EQEQ;
+      tokens[i].input = p;
+      i++;
+      p += 2;
+      continue;
+    }
+
+    if (*p == '!' && *(p + 1) == '=') {
+      tokens[i].ty = TK_NOTEQ;
+      tokens[i].input = p;
+      i++;
+      p += 2;
+      continue;
+    }
+
     if (*p == '+' || *p == '-' || *p == '*' || *p == '/' || *p == '(' ||
         *p == ')' || *p == '=' || *p == ';') {
       tokens[i].ty = *p;

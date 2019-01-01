@@ -3,6 +3,7 @@
 #include "9cc.h"
 
 static Node *assign(void);
+static Node *equal(void);
 static Node *expr(void);
 static Node *mul(void);
 static Node *term(void);
@@ -44,10 +45,23 @@ void program(void) {
 }
 
 static Node *assign(void) {
-  Node *lhs = expr();
+  Node *lhs = equal();
   if (tokens[pos].ty == '=') {
     pos++;
-    lhs = new_node('=', lhs, assign());
+    return new_node('=', lhs, assign());
+  }
+  return lhs;
+}
+
+static Node *equal(void) {
+  Node *lhs = expr();
+  if (tokens[pos].ty == TK_EQEQ) {
+    pos++;
+    return new_node(ND_EQEQ, lhs, equal());
+  }
+  if (tokens[pos].ty == TK_NOTEQ) {
+    pos++;
+    return new_node(ND_NOTEQ, lhs, equal());
   }
   return lhs;
 }

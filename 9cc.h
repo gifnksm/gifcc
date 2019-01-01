@@ -3,7 +3,9 @@
 // トークンの型を表す値
 enum {
   TK_NUM = 256, // 整数トークン
-  TK_IDENT,     //識別子
+  TK_IDENT,     // 識別子
+  TK_EQEQ,      // `==`
+  TK_NOTEQ,     // `!=`
   TK_EOF,       // 入力の終わりを表すトークン
 };
 
@@ -18,10 +20,12 @@ typedef struct {
 enum {
   ND_NUM = 256, // 整数のノードの型
   ND_IDENT,
+  ND_EQEQ,
+  ND_NOTEQ,
 };
 
 typedef struct Node {
-  int ty;           // 演算子かND_NUM
+  int ty;           // ノードの型
   struct Node *lhs; // 左辺
   struct Node *rhs; // 右辺
   int val;          // tyがND_NUMの場合のみ使う
