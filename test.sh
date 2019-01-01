@@ -36,5 +36,7 @@ try 4 'a = b = 2; a + b'
 try 14 '
   a = 3;
   b = 5 * 6 - 8;
-  a + b / 2;'
+  a + b / 2;
+'
+try 10 'b = (a = 5); a + b;'
 echo OK

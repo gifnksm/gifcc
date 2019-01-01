@@ -85,7 +85,7 @@ static Node *term(void) {
     return new_node_ident(tokens[pos++].name);
   if (tokens[pos].ty == '(') {
     pos++;
-    Node *node = expr();
+    Node *node = assign();
     if (tokens[pos].ty != ')')
       error("開きカッコに対応する閉じカッコがありません: %s",
             tokens[pos].input);
