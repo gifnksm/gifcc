@@ -8,6 +8,7 @@ DEPS=$(SRCS:.c=.d)
 	$(CC) $^ -o $@
 
 test: 9cc
+	./9cc -test
 	./test.sh
 .PHONY: test
 

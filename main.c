@@ -2,6 +2,7 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 // エラーを報告するための関数
 void __attribute__((noreturn)) error(char *fmt, ...) {
@@ -16,6 +17,11 @@ void __attribute__((noreturn)) error(char *fmt, ...) {
 int main(int argc, char **argv) {
   if (argc != 2) {
     error("引数の個数が正しくありません");
+  }
+
+  if (strcmp(argv[1], "-test") == 0) {
+    runtest();
+    exit(0);
   }
 
   // トークナイズしてパースする

@@ -52,6 +52,7 @@ void vec_push(Vector *vec, void *elem);
 Map *new_map(void);
 void map_put(Map *map, char *key, void *val);
 void *map_get(Map *map, char *key);
+void runtest(void);
 void tokenize(char *p);
 void program(void);
 void gen(Node *node);
