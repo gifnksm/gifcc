@@ -57,5 +57,7 @@ void tokenize(char *p);
 
 Node *get_node(int pos);
 void program(void);
+int get_stack_size(void);
+int get_stack_offset(char *name);
 
 void gen(Node *node);

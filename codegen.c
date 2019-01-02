@@ -4,7 +4,7 @@
 static void gen_lval(Node *node) {
   if (node->ty == ND_IDENT) {
     printf("  mov rax, rbp\n");
-    printf("  sub rax, %d\n", ('z' - node->name[0] + 1) * 8);
+    printf("  sub rax, %d\n", get_stack_offset(node->name) + 8);
     printf("  push rax\n");
     return;
   }

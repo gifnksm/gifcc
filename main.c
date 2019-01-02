@@ -35,10 +35,10 @@ int main(int argc, char **argv) {
   printf("main:\n");
 
   // プロローグ
-  // 変数26個分の領域を確保する
+  // スタックサイズ分の領域を確保する
   printf("  push rbp\n");
   printf("  mov rbp, rsp\n");
-  printf("  sub rsp, 208\n");
+  printf("  sub rsp, %d\n", get_stack_size());
 
   // 先頭の式から順にコード生成
   for (int i = 0; get_node(i); i++) {

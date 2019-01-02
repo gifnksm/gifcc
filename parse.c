@@ -1,5 +1,6 @@
 #include "9cc.h"
 #include <stdlib.h>
+#include <stdint.h>
 
 static Node *assign(void);
 static Node *equal(void);
@@ -9,6 +10,8 @@ static Node *term(void);
 
 static int pos = 0;
 static Vector *code;
+static int stack_size = 0;
+static Map *stack_map;
 
 static Node *new_node(int ty, Node *lhs, Node *rhs) {
   Node *node = malloc(sizeof(Node));
@@ -29,13 +32,22 @@ static Node *new_node_ident(char *name) {
   Node *node = malloc(sizeof(Node));
   node->ty = ND_IDENT;
   node->name = name;
+  if (!map_get(stack_map, name)) {
+    int *offset = malloc(sizeof(int));
+    *offset = stack_size;
+    map_put(stack_map, name, offset);
+    stack_size += 8;
+  }
   return node;
 }
 
 Node *get_node(int pos) { return code->data[pos]; }
+int get_stack_size(void) { return stack_size; }
+int get_stack_offset(char *name) { return *(int *)map_get(stack_map, name); }
 
 void program(void) {
   code = new_vector();
+  stack_map = new_map();
 
   while (get_token(pos)->ty != TK_EOF) {
     vec_push(code, assign());
