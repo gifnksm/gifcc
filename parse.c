@@ -8,8 +8,7 @@ static Node *mul(void);
 static Node *term(void);
 
 static int pos = 0;
-
-Node *code[100];
+static Vector *code;
 
 static Node *new_node(int ty, Node *lhs, Node *rhs) {
   Node *node = malloc(sizeof(Node));
@@ -33,14 +32,16 @@ static Node *new_node_ident(char name) {
   return node;
 }
 
+Node *get_node(int pos) { return code->data[pos]; }
+
 void program(void) {
-  int i = 0;
+  code = new_vector();
   while (get_token(pos)->ty != TK_EOF) {
-    code[i++] = assign();
+    vec_push(code, assign());
     if (get_token(pos)->ty == ';')
       pos++;
   }
-  code[i] = NULL;
+  vec_push(code, NULL);
 }
 
 static Node *assign(void) {

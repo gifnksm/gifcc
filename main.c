@@ -41,8 +41,8 @@ int main(int argc, char **argv) {
   printf("  sub rsp, 208\n");
 
   // 先頭の式から順にコード生成
-  for (int i = 0; code[i]; i++) {
-    gen(code[i]);
+  for (int i = 0; get_node(i); i++) {
+    gen(get_node(i));
 
     // 式の評価結果としてスタックに一つの値が残っている
     // はずなので、スタックが溢れないようにポップしておく

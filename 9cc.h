@@ -43,16 +43,19 @@ typedef struct Node {
   char name;        // tyがND_IDENTの場合のみ使う
 } Node;
 
-extern Node *code[100];
-
 __attribute__((noreturn, format(printf, 1, 2))) void error(char *fmt, ...);
+
 Vector *new_vector(void);
 void vec_push(Vector *vec, void *elem);
 Map *new_map(void);
 void map_put(Map *map, char *key, void *val);
 void *map_get(Map *map, char *key);
 void runtest(void);
+
 Token *get_token(int pos);
 void tokenize(char *p);
+
+Node *get_node(int pos);
 void program(void);
+
 void gen(Node *node);
