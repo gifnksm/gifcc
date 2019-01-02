@@ -5,7 +5,7 @@
 #include <string.h>
 
 // エラーを報告するための関数
-void __attribute__((noreturn)) error(char *fmt, ...) {
+void error(char *fmt, ...) {
   va_list ap;
   va_start(ap, fmt);
   vfprintf(stderr, fmt, ap);
