@@ -25,7 +25,7 @@ static Node *new_node_num(int val) {
   return node;
 }
 
-static Node *new_node_ident(char name) {
+static Node *new_node_ident(char *name) {
   Node *node = malloc(sizeof(Node));
   node->ty = ND_IDENT;
   node->name = name;
@@ -36,6 +36,7 @@ Node *get_node(int pos) { return code->data[pos]; }
 
 void program(void) {
   code = new_vector();
+
   while (get_token(pos)->ty != TK_EOF) {
     vec_push(code, assign());
     if (get_token(pos)->ty == ';')

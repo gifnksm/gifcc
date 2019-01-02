@@ -1,13 +1,14 @@
 #include "9cc.h"
 #include <ctype.h>
 #include <stdlib.h>
+#include <string.h>
 
 // トークナイズした結果のトークン列はこのベクタに保存する
 static Vector *tokens = NULL;
 
 static Token *new_token(int ty, char *input);
 static Token *new_token_num(char *input, int val);
-static Token *new_token_ident(char *input, char name);
+static Token *new_token_ident(char *input, char *name);
 
 // pos番目のtokenを取得する
 Token *get_token(int pos) { return tokens->data[pos]; }
@@ -42,7 +43,7 @@ void tokenize(char *p) {
     }
 
     if ('a' <= *p && *p <= 'z') {
-      vec_push(tokens, new_token_ident(p, *p));
+      vec_push(tokens, new_token_ident(p, strndup(p, 1)));
       p++;
       continue;
     }
@@ -73,7 +74,7 @@ static Token *new_token_num(char *input, int val) {
   return token;
 }
 
-static Token *new_token_ident(char *input, char name) {
+static Token *new_token_ident(char *input, char *name) {
   Token *token = malloc(sizeof(Token));
   token->ty = TK_IDENT;
   token->input = input;
