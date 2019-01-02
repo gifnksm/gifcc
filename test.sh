@@ -1,28 +1,35 @@
 #!/bin/bash
 
+index=0
+
 try() {
   expected="$1"
   input="$2"
 
-  target/9cc "${input}" > target/tmp.s
+  mkdir -p target/test
+  target/9cc "${input}" > target/test/${index}.s
   if [ "$?" -ne 0 ]; then
-    echo "9cc failed"
+    echo "test #${index}: 9cc failed"
     exit 1
   fi
-  gcc -o target/tmp target/tmp.s
+  gcc -o target/test/${index} target/test/${index}.s
   if [ "$?" -ne 0 ]; then
-    echo "gcc failed"
+    echo "test #${index}: gcc failed"
     exit 1
   fi
-  target/tmp
+  target/test/${index}
   actual="$?"
 
   if [ "${actual}" = "${expected}" ]; then
-    echo "${input} => ${actual}"
+    echo "test #${index}:"
+    echo "${input}" | sed 's/^/  /'
+    echo "  => ${actual}"
   else
-    echo "${expected} expected, but got ${actual}"
+    echo "test #${index}: ${expected} expected, but got ${actual}"
     exit 1
   fi
+
+  (( index += 1 ))
 }
 
 try 0 0
