@@ -4,17 +4,17 @@ try() {
   expected="$1"
   input="$2"
 
-  ./9cc "${input}" > tmp.s
+  target/9cc "${input}" > target/tmp.s
   if [ "$?" -ne 0 ]; then
     echo "9cc failed"
     exit 1
   fi
-  gcc -o tmp tmp.s
+  gcc -o target/tmp target/tmp.s
   if [ "$?" -ne 0 ]; then
     echo "gcc failed"
     exit 1
   fi
-  ./tmp
+  target/tmp
   actual="$?"
 
   if [ "${actual}" = "${expected}" ]; then

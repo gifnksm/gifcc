@@ -1,6 +1,2 @@
 *~
-*.o
-*.d
-tmp*
-9cc
-
+target

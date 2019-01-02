@@ -1,23 +1,29 @@
 CFLAGS=-Wall -std=c11 -MMD
 SRCS=$(wildcard *.c)
 HDRS=$(wildcard *.h)
-OBJS=$(SRCS:.c=.o)
-DEPS=$(SRCS:.c=.d)
+OBJS=$(patsubst %.c,target/%.o,$(SRCS))
+DEPS=$(patsubst %.c,target/%.d,$(SRCS))
 
-9cc: $(OBJS)
-	$(CC) $^ -o $@
+target/9cc: $(OBJS)
+	$(CC) -o $@ $^
 
-test: 9cc
-	./9cc -test
+test: target/9cc
+	./target/9cc -test
 	./test.sh
 .PHONY: test
 
 clean:
-	rm -f 9cc *.o *.d *~ tmp*
+	$(RM) -r target
 .PHONY: clean
 
 format:
 	clang-format -i $(SRCS) $(HDRS)
 .PHONY: format
+
+target/%.o: %.c | target/
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+%/:
+	mkdir -p $@
 
 -include $(DEPS)
