@@ -2,13 +2,19 @@
 #include <ctype.h>
 #include <stdlib.h>
 
-// トークナイズした結果のトークン列はこの配列に保存する
-// 100個以上のトークンは来ないものとする
-Token tokens[100];
+// トークナイズした結果のトークン列はこのベクタに保存する
+static Vector *tokens = NULL;
+
+static Token *new_token(int ty, char *input);
+static Token *new_token_num(char *input, int val);
+static Token *new_token_ident(char *input, char name);
+
+// pos番目のtokenを取得する
+Token *get_token(int pos) { return tokens->data[pos]; }
 
 // pが指している文字列をトークンに分割してtokensに保存する
 void tokenize(char *p) {
-  int i = 0;
+  tokens = new_vector();
   while (*p) {
     // 空白文字をスキップ
     if (isspace(*p)) {
@@ -17,50 +23,60 @@ void tokenize(char *p) {
     }
 
     if (*p == '=' && *(p + 1) == '=') {
-      tokens[i].ty = TK_EQEQ;
-      tokens[i].input = p;
-      i++;
+      vec_push(tokens, new_token(TK_EQEQ, p));
       p += 2;
       continue;
     }
 
     if (*p == '!' && *(p + 1) == '=') {
-      tokens[i].ty = TK_NOTEQ;
-      tokens[i].input = p;
-      i++;
+      vec_push(tokens, new_token(TK_NOTEQ, p));
       p += 2;
       continue;
     }
 
     if (*p == '+' || *p == '-' || *p == '*' || *p == '/' || *p == '(' ||
         *p == ')' || *p == '=' || *p == ';') {
-      tokens[i].ty = *p;
-      tokens[i].input = p;
-      i++;
+      vec_push(tokens, new_token(*p, p));
       p++;
       continue;
     }
 
     if ('a' <= *p && *p <= 'z') {
-      tokens[i].ty = TK_IDENT;
-      tokens[i].input = p;
-      tokens[i].name = *p;
-      i++;
+      vec_push(tokens, new_token_ident(p, *p));
       p++;
       continue;
     }
 
     if (isdigit(*p)) {
-      tokens[i].ty = TK_NUM;
-      tokens[i].input = p;
-      tokens[i].val = strtol(p, &p, 10);
-      i++;
+      vec_push(tokens, new_token_num(p, strtol(p, &p, 10)));
       continue;
     }
 
     error("トークナイズできません: %s\n", p);
   }
 
-  tokens[i].ty = TK_EOF;
-  tokens[i].input = p;
+  vec_push(tokens, new_token(TK_EOF, p));
+}
+
+static Token *new_token(int ty, char *input) {
+  Token *token = malloc(sizeof(Token));
+  token->ty = ty;
+  token->input = input;
+  return token;
+}
+
+static Token *new_token_num(char *input, int val) {
+  Token *token = malloc(sizeof(Token));
+  token->ty = TK_NUM;
+  token->input = input;
+  token->val = val;
+  return token;
+}
+
+static Token *new_token_ident(char *input, char name) {
+  Token *token = malloc(sizeof(Token));
+  token->ty = TK_IDENT;
+  token->input = input;
+  token->name = name;
+  return token;
 }

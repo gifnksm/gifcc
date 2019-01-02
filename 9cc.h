@@ -43,7 +43,6 @@ typedef struct Node {
   char name;        // tyがND_IDENTの場合のみ使う
 } Node;
 
-extern Token tokens[100];
 extern Node *code[100];
 
 __attribute__((noreturn, format(printf, 1, 2))) void error(char *fmt, ...);
@@ -53,6 +52,7 @@ Map *new_map(void);
 void map_put(Map *map, char *key, void *val);
 void *map_get(Map *map, char *key);
 void runtest(void);
+Token *get_token(int pos);
 void tokenize(char *p);
 void program(void);
 void gen(Node *node);

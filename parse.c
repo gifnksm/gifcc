@@ -35,9 +35,9 @@ static Node *new_node_ident(char name) {
 
 void program(void) {
   int i = 0;
-  while (tokens[pos].ty != TK_EOF) {
+  while (get_token(pos)->ty != TK_EOF) {
     code[i++] = assign();
-    if (tokens[pos].ty == ';')
+    if (get_token(pos)->ty == ';')
       pos++;
   }
   code[i] = NULL;
@@ -45,7 +45,7 @@ void program(void) {
 
 static Node *assign(void) {
   Node *lhs = equal();
-  if (tokens[pos].ty == '=') {
+  if (get_token(pos)->ty == '=') {
     pos++;
     return new_node('=', lhs, assign());
   }
@@ -54,11 +54,11 @@ static Node *assign(void) {
 
 static Node *equal(void) {
   Node *lhs = expr();
-  if (tokens[pos].ty == TK_EQEQ) {
+  if (get_token(pos)->ty == TK_EQEQ) {
     pos++;
     return new_node(ND_EQEQ, lhs, equal());
   }
-  if (tokens[pos].ty == TK_NOTEQ) {
+  if (get_token(pos)->ty == TK_NOTEQ) {
     pos++;
     return new_node(ND_NOTEQ, lhs, equal());
   }
@@ -67,11 +67,11 @@ static Node *equal(void) {
 
 static Node *expr(void) {
   Node *lhs = mul();
-  if (tokens[pos].ty == '+') {
+  if (get_token(pos)->ty == '+') {
     pos++;
     return new_node('+', lhs, expr());
   }
-  if (tokens[pos].ty == '-') {
+  if (get_token(pos)->ty == '-') {
     pos++;
     return new_node('-', lhs, expr());
   }
@@ -80,11 +80,11 @@ static Node *expr(void) {
 
 static Node *mul(void) {
   Node *lhs = term();
-  if (tokens[pos].ty == '*') {
+  if (get_token(pos)->ty == '*') {
     pos++;
     return new_node('*', lhs, mul());
   }
-  if (tokens[pos].ty == '/') {
+  if (get_token(pos)->ty == '/') {
     pos++;
     return new_node('/', lhs, mul());
   }
@@ -92,19 +92,19 @@ static Node *mul(void) {
 }
 
 static Node *term(void) {
-  if (tokens[pos].ty == TK_NUM)
-    return new_node_num(tokens[pos++].val);
-  if (tokens[pos].ty == TK_IDENT)
-    return new_node_ident(tokens[pos++].name);
-  if (tokens[pos].ty == '(') {
+  if (get_token(pos)->ty == TK_NUM)
+    return new_node_num(get_token(pos++)->val);
+  if (get_token(pos)->ty == TK_IDENT)
+    return new_node_ident(get_token(pos++)->name);
+  if (get_token(pos)->ty == '(') {
     pos++;
     Node *node = assign();
-    if (tokens[pos].ty != ')')
+    if (get_token(pos)->ty != ')')
       error("開きカッコに対応する閉じカッコがありません: %s",
-            tokens[pos].input);
+            get_token(pos)->input);
 
     pos++;
     return node;
   }
-  error("数値でも開きカッコでもないトークンです: %s", tokens[pos].input);
+  error("数値でも開きカッコでもないトークンです: %s", get_token(pos)->input);
 }
