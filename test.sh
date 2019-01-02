@@ -72,4 +72,15 @@ try 6 '
   a=1;c=2;d=3;
   a+c+d;
 '
+try 6 '
+  a = 1;
+  ab = 2;
+  abc = 3;
+  a + ab + abc;
+'
+try 124 '
+  _ = 123;
+  a_ = 1;
+  _ + a_;
+'
 echo OK

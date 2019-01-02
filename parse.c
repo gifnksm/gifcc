@@ -1,6 +1,6 @@
 #include "9cc.h"
-#include <stdlib.h>
 #include <stdint.h>
+#include <stdlib.h>
 
 static Node *assign(void);
 static Node *equal(void);

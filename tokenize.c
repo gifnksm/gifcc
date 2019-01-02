@@ -42,9 +42,14 @@ void tokenize(char *p) {
       continue;
     }
 
-    if ('a' <= *p && *p <= 'z') {
-      vec_push(tokens, new_token_ident(p, strndup(p, 1)));
-      p++;
+    if (('a' <= *p && *p <= 'z') || ('A' <= *p && *p <= 'Z') || *p == '_') {
+      char *q = p;
+      while (('a' <= *q && *q <= 'z') || ('A' <= *q && *q <= 'Z') ||
+             *q == '_' || ('0' <= *q && *q <= '9')) {
+        q++;
+      }
+      vec_push(tokens, new_token_ident(p, strndup(p, q - p)));
+      p = q;
       continue;
     }
 
