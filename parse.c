@@ -5,7 +5,7 @@
 
 static Node *assign(void);
 static Node *equal(void);
-static Node *expr(void);
+static Node *add(void);
 static Node *mul(void);
 static Node *term(void);
 
@@ -73,30 +73,39 @@ static Node *assign(void) {
 }
 
 static Node *equal(void) {
-  Node *lhs = expr();
-  if (consume(TK_EQEQ))
-    return new_node(ND_EQEQ, lhs, equal());
-  if (consume(TK_NOTEQ))
-    return new_node(ND_NOTEQ, lhs, equal());
-  return lhs;
+  Node *node = add();
+  while (true) {
+    if (consume(TK_EQEQ))
+      node = new_node(ND_EQEQ, node, add());
+    else if (consume(TK_NOTEQ))
+      node = new_node(ND_NOTEQ, node, add());
+    else
+      return node;
+  }
 }
 
-static Node *expr(void) {
-  Node *lhs = mul();
-  if (consume('+'))
-    return new_node('+', lhs, expr());
-  if (consume('-'))
-    return new_node('-', lhs, expr());
-  return lhs;
+static Node *add(void) {
+  Node *node = mul();
+  while (true) {
+    if (consume('+'))
+      node = new_node('+', node, mul());
+    else if (consume('-'))
+      node = new_node('-', node, mul());
+    else
+      return node;
+  }
 }
 
 static Node *mul(void) {
-  Node *lhs = term();
-  if (consume('*'))
-    return new_node('*', lhs, mul());
-  if (consume('/'))
-    return new_node('/', lhs, mul());
-  return lhs;
+  Node *node = term();
+  while (true) {
+    if (consume('*'))
+      node = new_node('*', node, term());
+    else if (consume('/'))
+      node = new_node('/', node, term());
+    else
+      return node;
+  }
 }
 
 static Node *term(void) {
