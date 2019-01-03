@@ -1,4 +1,5 @@
 #include "9cc.h"
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
 
@@ -41,6 +42,13 @@ static Node *new_node_ident(char *name) {
   return node;
 }
 
+static bool consume(int ty) {
+  if (get_token(pos)->ty != ty)
+    return false;
+  pos++;
+  return true;
+}
+
 Node *get_node(int pos) { return code->data[pos]; }
 int get_stack_size(void) { return stack_size; }
 int get_stack_offset(char *name) { return *(int *)map_get(stack_map, name); }
@@ -51,57 +59,43 @@ void program(void) {
 
   while (get_token(pos)->ty != TK_EOF) {
     vec_push(code, assign());
-    if (get_token(pos)->ty == ';')
-      pos++;
+    while (consume(';'))
+      ;
   }
   vec_push(code, NULL);
 }
 
 static Node *assign(void) {
   Node *lhs = equal();
-  if (get_token(pos)->ty == '=') {
-    pos++;
+  if (consume('='))
     return new_node('=', lhs, assign());
-  }
   return lhs;
 }
 
 static Node *equal(void) {
   Node *lhs = expr();
-  if (get_token(pos)->ty == TK_EQEQ) {
-    pos++;
+  if (consume(TK_EQEQ))
     return new_node(ND_EQEQ, lhs, equal());
-  }
-  if (get_token(pos)->ty == TK_NOTEQ) {
-    pos++;
+  if (consume(TK_NOTEQ))
     return new_node(ND_NOTEQ, lhs, equal());
-  }
   return lhs;
 }
 
 static Node *expr(void) {
   Node *lhs = mul();
-  if (get_token(pos)->ty == '+') {
-    pos++;
+  if (consume('+'))
     return new_node('+', lhs, expr());
-  }
-  if (get_token(pos)->ty == '-') {
-    pos++;
+  if (consume('-'))
     return new_node('-', lhs, expr());
-  }
   return lhs;
 }
 
 static Node *mul(void) {
   Node *lhs = term();
-  if (get_token(pos)->ty == '*') {
-    pos++;
+  if (consume('*'))
     return new_node('*', lhs, mul());
-  }
-  if (get_token(pos)->ty == '/') {
-    pos++;
+  if (consume('/'))
     return new_node('/', lhs, mul());
-  }
   return lhs;
 }
 
@@ -110,14 +104,11 @@ static Node *term(void) {
     return new_node_num(get_token(pos++)->val);
   if (get_token(pos)->ty == TK_IDENT)
     return new_node_ident(get_token(pos++)->name);
-  if (get_token(pos)->ty == '(') {
-    pos++;
+  if (consume('(')) {
     Node *node = assign();
-    if (get_token(pos)->ty != ')')
+    if (!consume(')'))
       error("開きカッコに対応する閉じカッコがありません: %s",
             get_token(pos)->input);
-
-    pos++;
     return node;
   }
   error("数値でも開きカッコでもないトークンです: %s", get_token(pos)->input);
