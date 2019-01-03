@@ -1,5 +1,7 @@
 #include "9cc.h"
+#include <getopt.h>
 #include <stdarg.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -14,19 +16,39 @@ void error(char *fmt, ...) {
   exit(1);
 }
 
+enum {
+  OPTVAL_TEST = 256,
+};
+
+struct option longopts[] = {
+    {"test", no_argument, NULL, OPTVAL_TEST},
+    {NULL, 0, 0, 0},
+};
+
 int main(int argc, char **argv) {
-  if (argc != 2) {
+  while (true) {
+    int c = getopt_long(argc, argv, "", longopts, NULL);
+    if (c == -1)
+      break;
+
+    switch (c) {
+    case OPTVAL_TEST:
+      runtest();
+      return 0;
+    case '?':
+      return 1;
+    }
+  }
+
+  if (optind != argc - 1) {
     error("引数の個数が正しくありません");
   }
 
-  if (strcmp(argv[1], "-test") == 0) {
-    runtest();
-    exit(0);
-  }
+  char *input = argv[optind];
 
   // トークナイズしてパースする
   // 結果はcodeに保存される
-  tokenize(argv[1]);
+  tokenize(input);
   program();
 
   // アセンブリの前半部分を出力

@@ -8,7 +8,7 @@ target/9cc: $(OBJS)
 	$(CC) -o $@ $^
 
 test: target/9cc
-	./target/9cc -test
+	./target/9cc --test
 	./test.sh
 .PHONY: test
 
