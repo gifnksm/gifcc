@@ -1,4 +1,4 @@
-CFLAGS=-Wall -std=c11 -D_POSIX_C_SOURCE=201809L -MMD
+CFLAGS=-Wall -std=c11 -g3 -D_POSIX_C_SOURCE=201809L -MMD
 SRCS=$(wildcard *.c)
 HDRS=$(wildcard *.h)
 OBJS=$(patsubst %.c,target/%.o,$(SRCS))
