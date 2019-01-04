@@ -73,10 +73,10 @@ static void dump_node(Node *node, int level) {
     printf("%*s(IDENT %s)\n", 2 * level, "", node->name);
     break;
   case ND_EQEQ:
-    dump_complex_node(node, "[==]", level + 1);
+    dump_complex_node(node, "[==]", level);
     break;
   case ND_NOTEQ:
-    dump_complex_node(node, "[!=]", level + 1);
+    dump_complex_node(node, "[!=]", level);
     break;
   }
 }
