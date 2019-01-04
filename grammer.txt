@@ -22,9 +22,13 @@ program: ε
   <additive_expression> "-" <multiplicative_expression>
 
 <multiplicative_expression>:
+  <postfix_expression>
+  <multiplicative_expression> "*" <postfix_expression>
+  <multiplicative_expression> "/" <postfix_expression>
+
+<postfix_expression>:
   <primary_expression>
-  <multiplicative_expression> "*" <primary_expression>
-  <multiplicative_expression> "/" <primary_expression>
+  <postfix_expression>"(" ")"
 
 <primary_expression>:
   <decimal-constant>

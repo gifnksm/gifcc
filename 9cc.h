@@ -33,6 +33,7 @@ enum {
   ND_IDENT,
   ND_EQEQ,
   ND_NOTEQ,
+  ND_CALL,
 };
 
 typedef struct Node {

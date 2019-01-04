@@ -78,6 +78,9 @@ static void dump_node(Node *node, int level) {
   case ND_NOTEQ:
     dump_complex_node(node, "[!=]", level);
     break;
+  case ND_CALL:
+    dump_complex_node(node, "CALL", level);
+    break;
   }
 }
 

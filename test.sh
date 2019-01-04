@@ -93,4 +93,13 @@ try 124 '
   a_ = 1;
   _ + a_;
 '
+echo a | try 97 '
+  getchar();
+'
+echo aBc | try 4 '
+  (getchar() == 97)
+    + (getchar() == 66)
+    + (getchar() == 99)
+    + (getchar() == 10);
+'
 echo OK

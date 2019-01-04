@@ -8,6 +8,7 @@ static Node *assignment_expression(void);
 static Node *equality_expression(void);
 static Node *addtive_expression(void);
 static Node *multiplicative_expression(void);
+static Node *postfix_expression(void);
 static Node *primary_expression(void);
 
 static int pos = 0;
@@ -100,14 +101,28 @@ static Node *addtive_expression(void) {
 }
 
 static Node *multiplicative_expression(void) {
-  Node *node = primary_expression();
+  Node *node = postfix_expression();
   while (true) {
     if (consume('*'))
-      node = new_node('*', node, primary_expression());
+      node = new_node('*', node, postfix_expression());
     else if (consume('/'))
-      node = new_node('/', node, primary_expression());
+      node = new_node('/', node, postfix_expression());
     else
       return node;
+  }
+}
+
+static Node *postfix_expression(void) {
+  Node *node = primary_expression();
+  while (true) {
+    if (consume('(')) {
+      if (!consume(')'))
+        error("開きカッコに対応する閇じカッコがありません: %s",
+              get_token(pos)->input);
+      node = new_node(ND_CALL, node, NULL);
+    } else {
+      return node;
+    }
   }
 }
 
