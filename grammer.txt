@@ -1,0 +1,29 @@
+http://www.open-std.org/jtc1/sc22/wg14/www/docs/n1548.pdf
+Annex A を参考に作成
+
+program: <assignment_expression> ";" program
+program: ε
+
+<assignment_expression>:
+  <equality_expression>
+  <equality_expression> "=" <assignment_expression>
+
+<equality_expression>:
+  <additive_expression>
+  <equality_expression> "==" <additive_expression>
+  <equality_expression> "!=" <additive_expression>
+
+<additive_expression>:
+  <multiplicative_expression>
+  <additive_expression> "+" <multiplicative_expression>
+  <additive_expression> "-" <multiplicative_expression>
+
+<multiplicative_expression>:
+  <primary_expression>
+  <multiplicative_expression> "*" <primary_expression>
+  <multiplicative_expression> "/" <primary_expression>
+
+<primary_expression>:
+  <decimal-constant>
+  <identifier>
+  "(" <assignment_expression> ")"
