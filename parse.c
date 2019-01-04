@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 
+static Node *expression(void);
 static Node *assignment_expression(void);
 static Node *equality_expression(void);
 static Node *addtive_expression(void);
@@ -58,12 +59,14 @@ void program(void) {
   stack_map = new_map();
 
   while (get_token(pos)->ty != TK_EOF) {
-    vec_push(code, assignment_expression());
+    vec_push(code, expression());
     while (consume(';'))
       ;
   }
   vec_push(code, NULL);
 }
+
+static Node *expression(void) { return assignment_expression(); }
 
 static Node *assignment_expression(void) {
   Node *lhs = equality_expression();
@@ -114,7 +117,7 @@ static Node *primary_expression(void) {
   if (get_token(pos)->ty == TK_IDENT)
     return new_node_ident(get_token(pos++)->name);
   if (consume('(')) {
-    Node *node = assignment_expression();
+    Node *node = expression();
     if (!consume(')'))
       error("開きカッコに対応する閉じカッコがありません: %s",
             get_token(pos)->input);
