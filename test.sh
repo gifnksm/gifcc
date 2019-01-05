@@ -27,7 +27,7 @@ try() {
     echo "test #${index}: gcc failed"
     exit 1
   fi
-  target/test/${index}
+  echo -n "$INPUT" | target/test/${index}
   actual="$?"
 
   if [ "${actual}" = "${expected}" ]; then
@@ -93,10 +93,11 @@ try 124 '
   a_ = 1;
   _ + a_;
 '
-echo a | try 97 '
+INPUT=a try 97 '
   getchar();
 '
-echo aBc | try 4 '
+INPUT='aBc
+' try 4 '
   (getchar() == 97)
     + (getchar() == 66)
     + (getchar() == 99)
