@@ -26,10 +26,40 @@ void gen(Node *node) {
   }
 
   if (node->ty == ND_CALL) {
-    if (node->lhs->ty != ND_IDENT) {
+    Vector *arg = node->argument;
+    if (node->callee->ty != ND_IDENT) {
       error("識別子以外を関数として呼び出そうとしました");
     }
-    printf("  call %s\n", node->lhs->name);
+    if (arg && arg->len > 0) {
+      for (int i = arg->len - 1; i >= 0; i--) {
+        gen(arg->data[i]);
+        switch (i) {
+        // 0~5番目の引数はレジスタ経由で渡す
+        case 0:
+          printf("  pop rdi\n");
+          break;
+        case 1:
+          printf("  pop rsi\n");
+          break;
+        case 2:
+          printf("  pop rdx\n");
+          break;
+        case 3:
+          printf("  pop rcx\n");
+          break;
+        case 4:
+          printf("  pop r8d\n");
+          break;
+        case 5:
+          printf("  pop r9d\n");
+          break;
+        // 6番目以降の引数はスタック経由で渡すため、pushされたままにする
+        default:
+          break;
+        }
+      }
+    }
+    printf("  call %s\n", node->callee->name);
     printf("  push rax\n");
     return;
   }

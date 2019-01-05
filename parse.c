@@ -9,6 +9,7 @@ static Node *equality_expression(void);
 static Node *addtive_expression(void);
 static Node *multiplicative_expression(void);
 static Node *postfix_expression(void);
+static Vector *argument_expression_list(void);
 static Node *primary_expression(void);
 
 static int pos = 0;
@@ -41,6 +42,14 @@ static Node *new_node_ident(char *name) {
     map_put(stack_map, name, offset);
     stack_size += 8;
   }
+  return node;
+}
+
+static Node *new_node_call(Node *callee, Vector *argument) {
+  Node *node = malloc(sizeof(Node));
+  node->ty = ND_CALL;
+  node->callee = callee;
+  node->argument = argument;
   return node;
 }
 
@@ -116,14 +125,29 @@ static Node *postfix_expression(void) {
   Node *node = primary_expression();
   while (true) {
     if (consume('(')) {
+      Vector *argument = NULL;
+      if (get_token(pos)->ty != ')') {
+        argument = argument_expression_list();
+      }
       if (!consume(')'))
         error("開きカッコに対応する閇じカッコがありません: %s",
               get_token(pos)->input);
-      node = new_node(ND_CALL, node, NULL);
+      node = new_node_call(node, argument);
     } else {
       return node;
     }
   }
+}
+
+static Vector *argument_expression_list(void) {
+  Vector *argument = new_vector();
+  while (true) {
+    vec_push(argument, assignment_expression());
+    if (!consume(',')) {
+      break;
+    }
+  }
+  return argument;
 }
 
 static Node *primary_expression(void) {

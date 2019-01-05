@@ -103,4 +103,19 @@ INPUT='aBc
     + (getchar() == 99)
     + (getchar() == 10);
 '
+try 10 '
+  putchar(97);
+  putchar(66);
+  putchar(99);
+  putchar(10);
+'
+INPUT='xy' try 10 '
+  a = getchar();
+  putchar(a);
+  putchar(getchar());
+  c = a + 2;
+  putchar(c);
+  putchar(10);
+'
+
 echo OK

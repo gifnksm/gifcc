@@ -28,7 +28,11 @@ program: ε
 
 <postfix_expression>:
   <primary_expression>
-  <postfix_expression>"(" ")"
+  <postfix_expression>"(" [<argument_expression_list>] ")"
+
+<argument_expression_list>:
+  <assignment_expression>
+  <argument_expression_list> "," <assignment_expression>
 
 <primary_expression>:
   <decimal-constant>

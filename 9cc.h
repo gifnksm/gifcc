@@ -37,11 +37,13 @@ enum {
 };
 
 typedef struct Node {
-  int ty;           // ノードの型
-  struct Node *lhs; // 左辺
-  struct Node *rhs; // 右辺
-  int val;          // tyがND_NUMの場合のみ使う
-  char *name;       // tyがND_IDENTの場合のみ使う
+  int ty;              // ノードの型
+  struct Node *lhs;    // 左辺
+  struct Node *rhs;    // 右辺
+  int val;             // tyがND_NUMの場合のみ使う
+  char *name;          // tyがND_IDENTの場合のみ使う
+  struct Node *callee; // tyがND_CALLの場合のみ使う
+  Vector *argument;    // tyがND_CALLの場合のみ使う
 } Node;
 
 __attribute__((noreturn, format(printf, 1, 2))) void error(char *fmt, ...);
