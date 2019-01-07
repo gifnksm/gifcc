@@ -118,5 +118,9 @@ INPUT='xy' try 10 '
   putchar(c);
   putchar(10);
 '
+try 8 '1 << 2 << 1'
+try 8 '1 << 2 << 1'
+try 0 '1 >> 3'
+try 255 '0 - 1 >> 3'
 
 echo OK

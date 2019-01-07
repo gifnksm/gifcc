@@ -159,7 +159,18 @@ static Node *additive_expression(void) {
   }
 }
 
-static Node *shift_expression(void) { return additive_expression(); }
+static Node *shift_expression(void) {
+  Node *node = additive_expression();
+  while (true) {
+    if (consume(TK_LSHIFT))
+      node = new_node(ND_LSHIFT, node, additive_expression());
+    else if (consume(TK_RSHIFT))
+      node = new_node(ND_RSHIFT, node, additive_expression());
+    else
+      return node;
+  }
+  return node;
+}
 
 static Node *relational_expression(void) { return shift_expression(); }
 

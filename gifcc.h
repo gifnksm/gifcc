@@ -17,6 +17,8 @@ enum {
   TK_IDENT,     // 識別子
   TK_EQEQ,      // `==`
   TK_NOTEQ,     // `!=`
+  TK_LSHIFT,    // `<<`
+  TK_RSHIFT,    // `>>`
   TK_EOF,       // 入力の終わりを表すトークン
 };
 
@@ -33,6 +35,8 @@ enum {
   ND_IDENT,
   ND_EQEQ,
   ND_NOTEQ,
+  ND_LSHIFT,
+  ND_RSHIFT,
   ND_CALL,
 };
 

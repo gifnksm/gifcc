@@ -104,6 +104,14 @@ void gen(Node *node) {
     printf("  setne al\n");
     printf("  movzb rax, al\n");
     break;
+  case ND_LSHIFT:
+    printf("  mov rcx, rdi\n");
+    printf("  shl rax, cl\n");
+    break;
+  case ND_RSHIFT:
+    printf("  mov rcx, rdi\n");
+    printf("  sar rax, cl\n");
+    break;
   default:
     error("未知のノード種別です: %d", node->ty);
   }

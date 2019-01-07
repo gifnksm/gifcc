@@ -35,6 +35,18 @@ void tokenize(char *p) {
       continue;
     }
 
+    if (*p == '<' && *(p + 1) == '<') {
+      vec_push(tokens, new_token(TK_LSHIFT, p));
+      p += 2;
+      continue;
+    }
+
+    if (*p == '>' && *(p + 1) == '>') {
+      vec_push(tokens, new_token(TK_RSHIFT, p));
+      p += 2;
+      continue;
+    }
+
     if (*p == '+' || *p == '-' || *p == '*' || *p == '/' || *p == '(' ||
         *p == ')' || *p == '=' || *p == ';') {
       vec_push(tokens, new_token(*p, p));
