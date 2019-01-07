@@ -155,6 +155,11 @@ void gen(Node *node) {
     printf("  mov rdx, 0\n");
     printf("  div rdi\n");
     break;
+  case '%':
+    printf("  mov rdx, 0\n");
+    printf("  div rdi\n");
+    printf("  mov rax,rdx\n");
+    break;
   case ND_EQEQ:
     printf("  cmp rax, rdi\n");
     printf("  sete al\n");

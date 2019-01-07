@@ -151,6 +151,8 @@ static Node *multiplicative_expression(void) {
       node = new_node('*', node, cast_expression());
     else if (consume('/'))
       node = new_node('/', node, cast_expression());
+    else if (consume('%'))
+      node = new_node('%', node, cast_expression());
     else
       return node;
   }
