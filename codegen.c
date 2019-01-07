@@ -1,5 +1,13 @@
 #include "gifcc.h"
 #include <stdio.h>
+#include <string.h>
+
+static char *make_label(void) {
+  static int count = 0;
+  char buf[256];
+  sprintf(buf, ".L%d", count++);
+  return strdup(buf);
+}
 
 static void gen_lval(Node *node) {
   if (node->ty == ND_IDENT) {
@@ -71,6 +79,43 @@ void gen(Node *node) {
     printf("  pop rax\n");
     printf("  mov [rax], rdi\n");
     printf("  push rdi\n");
+    return;
+  }
+
+  if (node->ty == ND_LOGAND) {
+    gen(node->lhs);
+    char *false_label = make_label();
+    char *end_label = make_label();
+    printf("  pop rax\n");
+    printf("  cmp rax, 0\n");
+    printf("  je %s\n", false_label);
+    gen(node->rhs);
+    printf("  pop rax\n");
+    printf("  cmp rax, 0\n");
+    printf("  je %s\n", false_label);
+    printf("  push 1\n");
+    printf("  jmp %s\n", end_label);
+    printf("%s:\n", false_label);
+    printf("  push 0\n");
+    printf("%s:\n", end_label);
+    return;
+  }
+  if (node->ty == ND_LOGOR) {
+    gen(node->lhs);
+    char *true_label = make_label();
+    char *end_label = make_label();
+    printf("  pop rax\n");
+    printf("  cmp rax, 0\n");
+    printf("  jne %s\n", true_label);
+    gen(node->rhs);
+    printf("  pop rax\n");
+    printf("  cmp rax, 0\n");
+    printf("  jne %s\n", true_label);
+    printf("  push 0\n");
+    printf("  jmp %s\n", end_label);
+    printf("%s:\n", true_label);
+    printf("  push 1\n");
+    printf("%s:\n", end_label);
     return;
   }
 

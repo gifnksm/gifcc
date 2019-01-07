@@ -21,6 +21,8 @@ enum {
   TK_GTEQ,      // `>=`
   TK_LSHIFT,    // `<<`
   TK_RSHIFT,    // `>>`
+  TK_LOGAND,    // `&&`
+  TK_LOGOR,     // `||`
   TK_EOF,       // 入力の終わりを表すトークン
 };
 
@@ -41,6 +43,8 @@ enum {
   ND_GTEQ,
   ND_LSHIFT,
   ND_RSHIFT,
+  ND_LOGAND,
+  ND_LOGOR,
   ND_CALL,
 };
 

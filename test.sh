@@ -133,5 +133,12 @@ try 1 '3 >= 3'
 try 1 '5 & 3'
 try 6 '5 ^ 3'
 try 7 '5 | 3'
+try 1 '3 && 5'
+try 0 '3 && 0'
+try 0 '0 && abort()'
+try 1 '3 || 5'
+try 1 '3 || abort()'
+try 1 '0 || 1'
+try 0 '0 || 0'
 
 echo OK

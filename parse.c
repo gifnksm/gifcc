@@ -232,8 +232,27 @@ static Node *inclusive_or_expression(void) {
   }
   return node;
 }
-static Node *logical_and_expression(void) { return inclusive_or_expression(); }
-static Node *logical_or_expression(void) { return logical_and_expression(); }
+static Node *logical_and_expression(void) {
+  Node *node = inclusive_or_expression();
+  while (true) {
+    if (consume(TK_LOGAND))
+      node = new_node(ND_LOGAND, node, inclusive_or_expression());
+    else
+      return node;
+  }
+  return node;
+}
+static Node *logical_or_expression(void) {
+  Node *node = logical_and_expression();
+  while (true) {
+
+    if (consume(TK_LOGOR))
+      node = new_node(ND_LOGOR, node, logical_and_expression());
+    else
+      return node;
+  }
+  return node;
+}
 static Node *conditional_expression(void) { return logical_or_expression(); }
 
 static Node *assignment_expression(void) {

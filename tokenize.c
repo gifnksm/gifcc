@@ -75,6 +75,28 @@ void tokenize(char *p) {
       continue;
     }
 
+    if (*p == '&') {
+      if (*(p + 1) == '&') {
+        vec_push(tokens, new_token(TK_LOGAND, p));
+        p += 2;
+        continue;
+      }
+      vec_push(tokens, new_token(*p, p));
+      p++;
+      continue;
+    }
+
+    if (*p == '|') {
+      if (*(p + 1) == '|') {
+        vec_push(tokens, new_token(TK_LOGOR, p));
+        p += 2;
+        continue;
+      }
+      vec_push(tokens, new_token(*p, p));
+      p++;
+      continue;
+    }
+
     if (*p == '+' || *p == '-' || *p == '*' || *p == '/' || *p == '(' ||
         *p == ')' || *p == '=' || *p == ';' || *p == '&' || *p == '^' ||
         *p == '|') {

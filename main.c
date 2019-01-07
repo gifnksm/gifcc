@@ -50,6 +50,12 @@ static void output_token(void) {
     case TK_RSHIFT:
       printf("%03d [>>]\n", pos);
       break;
+    case TK_LOGAND:
+      printf("%03d [&&]\n", pos);
+      break;
+    case TK_LOGOR:
+      printf("%03d [||]\n", pos);
+      break;
     case TK_EOF:
       printf("%03d EOF\n", pos);
       break;
@@ -103,6 +109,12 @@ static void dump_node(Node *node, int level) {
     break;
   case ND_RSHIFT:
     dump_complex_node(node, "[>>]", level);
+    break;
+  case ND_LOGAND:
+    dump_complex_node(node, "[&&]", level);
+    break;
+  case ND_LOGOR:
+    dump_complex_node(node, "[||]", level);
     break;
   case ND_CALL:
     dump_complex_node(node, "CALL", level);
