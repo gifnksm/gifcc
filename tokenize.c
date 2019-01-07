@@ -76,7 +76,8 @@ void tokenize(char *p) {
     }
 
     if (*p == '+' || *p == '-' || *p == '*' || *p == '/' || *p == '(' ||
-        *p == ')' || *p == '=' || *p == ';') {
+        *p == ')' || *p == '=' || *p == ';' || *p == '&' || *p == '^' ||
+        *p == '|') {
       vec_push(tokens, new_token(*p, p));
       p++;
       continue;

@@ -201,9 +201,37 @@ static Node *equality_expression(void) {
   }
 }
 
-static Node *and_expression(void) { return equality_expression(); }
-static Node *exclusive_or_expression(void) { return and_expression(); }
-static Node *inclusive_or_expression(void) { return exclusive_or_expression(); }
+static Node *and_expression(void) {
+  Node *node = equality_expression();
+  while (true) {
+    if (consume('&'))
+      node = new_node('&', node, equality_expression());
+    else
+      return node;
+  }
+  return node;
+}
+
+static Node *exclusive_or_expression(void) {
+  Node *node = and_expression();
+  while (true) {
+    if (consume('^'))
+      node = new_node('^', node, and_expression());
+    else
+      return node;
+  }
+  return node;
+}
+static Node *inclusive_or_expression(void) {
+  Node *node = exclusive_or_expression();
+  while (true) {
+    if (consume('|'))
+      node = new_node('|', node, exclusive_or_expression());
+    else
+      return node;
+  }
+  return node;
+}
 static Node *logical_and_expression(void) { return inclusive_or_expression(); }
 static Node *logical_or_expression(void) { return logical_and_expression(); }
 static Node *conditional_expression(void) { return logical_or_expression(); }

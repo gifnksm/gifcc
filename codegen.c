@@ -132,6 +132,15 @@ void gen(Node *node) {
     printf("  mov rcx, rdi\n");
     printf("  sar rax, cl\n");
     break;
+  case '&':
+    printf("  and rax, rdi\n");
+    break;
+  case '^':
+    printf("  xor rax, rdi\n");
+    break;
+  case '|':
+    printf("  or rax, rdi\n");
+    break;
   default:
     error("未知のノード種別です: %d", node->ty);
   }
