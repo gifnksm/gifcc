@@ -100,6 +100,7 @@ void gen(Node *node) {
     printf("%s:\n", end_label);
     return;
   }
+
   if (node->ty == ND_LOGOR) {
     gen(node->lhs);
     char *true_label = make_label();

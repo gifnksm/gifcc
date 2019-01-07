@@ -23,7 +23,8 @@ void tokenize(char *p) {
       continue;
     }
 
-    if (*p == '=') {
+    switch (*p) {
+    case '=': {
       if (*(p + 1) == '=') {
         vec_push(tokens, new_token(TK_EQEQ, p));
         p += 2;
@@ -33,8 +34,7 @@ void tokenize(char *p) {
       p++;
       continue;
     }
-
-    if (*p == '!') {
+    case '!': {
       if (*(p + 1) == '=') {
         vec_push(tokens, new_token(TK_NOTEQ, p));
         p += 2;
@@ -42,8 +42,7 @@ void tokenize(char *p) {
       }
       goto ERROR;
     }
-
-    if (*p == '<') {
+    case '<': {
       if (*(p + 1) == '<') {
         vec_push(tokens, new_token(TK_LSHIFT, p));
         p += 2;
@@ -58,8 +57,7 @@ void tokenize(char *p) {
       p++;
       continue;
     }
-
-    if (*p == '>') {
+    case '>': {
       if (*(p + 1) == '>') {
         vec_push(tokens, new_token(TK_RSHIFT, p));
         p += 2;
@@ -74,8 +72,7 @@ void tokenize(char *p) {
       p++;
       continue;
     }
-
-    if (*p == '&') {
+    case '&': {
       if (*(p + 1) == '&') {
         vec_push(tokens, new_token(TK_LOGAND, p));
         p += 2;
@@ -85,8 +82,7 @@ void tokenize(char *p) {
       p++;
       continue;
     }
-
-    if (*p == '|') {
+    case '|': {
       if (*(p + 1) == '|') {
         vec_push(tokens, new_token(TK_LOGOR, p));
         p += 2;
@@ -96,13 +92,18 @@ void tokenize(char *p) {
       p++;
       continue;
     }
-
-    if (*p == '+' || *p == '-' || *p == '*' || *p == '/' || *p == '(' ||
-        *p == ')' || *p == '=' || *p == ';' || *p == '&' || *p == '^' ||
-        *p == '|') {
+    case '+':
+    case '-':
+    case '*':
+    case '/':
+    case '(':
+    case ')':
+    case ';':
+    case '^': {
       vec_push(tokens, new_token(*p, p));
       p++;
       continue;
+    }
     }
 
     if (('a' <= *p && *p <= 'z') || ('A' <= *p && *p <= 'Z') || *p == '_') {
