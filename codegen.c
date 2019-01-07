@@ -135,22 +135,22 @@ void gen(Node *node) {
     return;
   }
 
-  if (node->ty == '+' && node->rhs == NULL) {
+  if (node->ty == '+' && node->lhs == NULL) {
     // 単項の `+`
-    gen(node->lhs);
+    gen(node->rhs);
     return;
   }
-  if (node->ty == '-' && node->rhs == NULL) {
+  if (node->ty == '-' && node->lhs == NULL) {
     // 単項の `-`
-    gen(node->lhs);
+    gen(node->rhs);
     printf("  pop rax\n");
     printf("  neg rax\n");
     printf("  push rax\n");
     return;
   }
-  if (node->ty == '~' && node->rhs == NULL) {
+  if (node->ty == '~' && node->lhs == NULL) {
     // 単項の `~`
-    gen(node->lhs);
+    gen(node->rhs);
     printf("  pop rax\n");
     printf("  not rax\n");
     printf("  push rax\n");

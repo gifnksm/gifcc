@@ -142,11 +142,11 @@ static Vector *argument_expression_list(void) {
 
 static Node *unary_expression(void) {
   if (consume('+'))
-    return new_node('+', cast_expression(), NULL);
+    return new_node('+', NULL, cast_expression());
   if (consume('-'))
-    return new_node('-', cast_expression(), NULL);
+    return new_node('-', NULL, cast_expression());
   if (consume('~'))
-    return new_node('~', cast_expression(), NULL);
+    return new_node('~', NULL, cast_expression());
   return postfix_expression();
 }
 
