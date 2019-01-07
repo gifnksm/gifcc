@@ -41,6 +41,8 @@ static void output_token(void) {
     case TK_EOF:
       printf("%03d EOF\n", pos);
       break;
+    default:
+      error("未知のトークンです: %d\n", token->ty);
     }
 
     if (token->ty == TK_EOF) {
@@ -81,6 +83,8 @@ static void dump_node(Node *node, int level) {
   case ND_CALL:
     dump_complex_node(node, "CALL", level);
     break;
+  default:
+    error("未知のノードです: %d\n", node->ty);
   }
 }
 
