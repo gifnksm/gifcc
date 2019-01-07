@@ -23,28 +23,42 @@ void tokenize(char *p) {
       continue;
     }
 
-    if (*p == '=' && *(p + 1) == '=') {
-      vec_push(tokens, new_token(TK_EQEQ, p));
-      p += 2;
+    if (*p == '=') {
+      if (*(p + 1) == '=') {
+        vec_push(tokens, new_token(TK_EQEQ, p));
+        p += 2;
+        continue;
+      }
+      vec_push(tokens, new_token(*p, p));
+      p++;
       continue;
     }
 
-    if (*p == '!' && *(p + 1) == '=') {
-      vec_push(tokens, new_token(TK_NOTEQ, p));
-      p += 2;
-      continue;
+    if (*p == '!') {
+      if (*(p + 1) == '=') {
+        vec_push(tokens, new_token(TK_NOTEQ, p));
+        p += 2;
+        continue;
+      }
+      goto ERROR;
     }
 
-    if (*p == '<' && *(p + 1) == '<') {
-      vec_push(tokens, new_token(TK_LSHIFT, p));
-      p += 2;
-      continue;
+    if (*p == '<') {
+      if (*(p + 1) == '<') {
+        vec_push(tokens, new_token(TK_LSHIFT, p));
+        p += 2;
+        continue;
+      }
+      goto ERROR;
     }
 
-    if (*p == '>' && *(p + 1) == '>') {
-      vec_push(tokens, new_token(TK_RSHIFT, p));
-      p += 2;
-      continue;
+    if (*p == '>') {
+      if (*(p + 1) == '>') {
+        vec_push(tokens, new_token(TK_RSHIFT, p));
+        p += 2;
+        continue;
+      }
+      goto ERROR;
     }
 
     if (*p == '+' || *p == '-' || *p == '*' || *p == '/' || *p == '(' ||
@@ -70,6 +84,7 @@ void tokenize(char *p) {
       continue;
     }
 
+  ERROR:
     error("トークナイズできません: %s\n", p);
   }
 
