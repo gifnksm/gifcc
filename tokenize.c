@@ -49,7 +49,14 @@ void tokenize(char *p) {
         p += 2;
         continue;
       }
-      goto ERROR;
+      if (*(p + 1) == '=') {
+        vec_push(tokens, new_token(TK_LTEQ, p));
+        p += 2;
+        continue;
+      }
+      vec_push(tokens, new_token(*p, p));
+      p++;
+      continue;
     }
 
     if (*p == '>') {
@@ -58,7 +65,14 @@ void tokenize(char *p) {
         p += 2;
         continue;
       }
-      goto ERROR;
+      if (*(p + 1) == '=') {
+        vec_push(tokens, new_token(TK_GTEQ, p));
+        p += 2;
+        continue;
+      }
+      vec_push(tokens, new_token(*p, p));
+      p++;
+      continue;
     }
 
     if (*p == '+' || *p == '-' || *p == '*' || *p == '/' || *p == '(' ||

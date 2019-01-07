@@ -172,7 +172,22 @@ static Node *shift_expression(void) {
   return node;
 }
 
-static Node *relational_expression(void) { return shift_expression(); }
+static Node *relational_expression(void) {
+  Node *node = shift_expression();
+  while (true) {
+    if (consume('<'))
+      node = new_node('<', node, shift_expression());
+    else if (consume('>'))
+      node = new_node('>', node, shift_expression());
+    else if (consume(TK_LTEQ))
+      node = new_node(ND_LTEQ, node, shift_expression());
+    else if (consume(TK_GTEQ))
+      node = new_node(ND_GTEQ, node, shift_expression());
+    else
+      return node;
+  }
+  return node;
+}
 
 static Node *equality_expression(void) {
   Node *node = relational_expression();

@@ -38,14 +38,20 @@ static void output_token(void) {
     case TK_NOTEQ:
       printf("%03d [!=]\n", pos);
       break;
-    case TK_EOF:
-      printf("%03d EOF\n", pos);
+    case TK_LTEQ:
+      printf("%03d [<=]\n", pos);
+      break;
+    case TK_GTEQ:
+      printf("%03d [>=]\n", pos);
       break;
     case TK_LSHIFT:
       printf("%03d [<<]\n", pos);
       break;
     case TK_RSHIFT:
       printf("%03d [>>]\n", pos);
+      break;
+    case TK_EOF:
+      printf("%03d EOF\n", pos);
       break;
     default:
       error("未知のトークンです: %d\n", token->ty);
@@ -86,14 +92,20 @@ static void dump_node(Node *node, int level) {
   case ND_NOTEQ:
     dump_complex_node(node, "[!=]", level);
     break;
-  case ND_CALL:
-    dump_complex_node(node, "CALL", level);
+  case ND_LTEQ:
+    dump_complex_node(node, "[<=]", level);
+    break;
+  case ND_GTEQ:
+    dump_complex_node(node, "[>=]", level);
     break;
   case ND_LSHIFT:
     dump_complex_node(node, "[<<]", level);
     break;
   case ND_RSHIFT:
     dump_complex_node(node, "[>>]", level);
+    break;
+  case ND_CALL:
+    dump_complex_node(node, "CALL", level);
     break;
   default:
     error("未知のノードです: %d\n", node->ty);
