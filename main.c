@@ -82,7 +82,7 @@ static void dump_binop_node(Node *node, char *label, int level) {
 
 static void dump_node(Node *node, int level) {
   if (node->ty <= 255) {
-    dump_binop_node(node, (char[]){'[', node->ty, ']', '\0'}, level + 1);
+    dump_binop_node(node, (char[]){'[', node->ty, ']', '\0'}, level);
     return;
   }
 
