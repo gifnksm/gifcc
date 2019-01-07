@@ -123,6 +123,10 @@ static Node *postfix_expression(void) {
         error("開きカッコに対応する閇じカッコがありません: %s",
               get_token(pos)->input);
       node = new_node_call(node, argument);
+    } else if (consume(TK_INC)) {
+      return new_node(ND_INC, node, NULL);
+    } else if (consume(TK_DEC)) {
+      return new_node(ND_DEC, node, NULL);
     } else {
       return node;
     }

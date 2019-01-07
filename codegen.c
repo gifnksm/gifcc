@@ -157,24 +157,45 @@ void gen(Node *node) {
     return;
   }
 
-  if (node->ty == ND_INC && node->lhs == NULL) {
-    // 前置の `++`
-    gen_lval(node->rhs);
+  if (node->ty == ND_INC) {
+    if (node->lhs == NULL) {
+      // 前置の `++`
+      gen_lval(node->rhs);
+      printf("  pop rax\n");
+      printf("  mov rdi, [rax]\n");
+      printf("  add rdi, 1\n");
+      printf("  mov [rax], rdi\n");
+      printf("  push rdi\n");
+      return;
+    }
+    // 後置の `++`
+    gen_lval(node->lhs);
     printf("  pop rax\n");
     printf("  mov rdi, [rax]\n");
+    printf("  push rdi\n");
     printf("  add rdi, 1\n");
     printf("  mov [rax], rdi\n");
-    printf("  push rdi\n");
     return;
   }
-  if (node->ty == ND_DEC && node->lhs == NULL) {
-    // 前置の `--`
-    gen_lval(node->rhs);
+
+  if (node->ty == ND_DEC) {
+    if (node->lhs == NULL) {
+      // 前置の `--`
+      gen_lval(node->rhs);
+      printf("  pop rax\n");
+      printf("  mov rdi, [rax]\n");
+      printf("  sub rdi, 1\n");
+      printf("  mov [rax], rdi\n");
+      printf("  push rdi\n");
+      return;
+    }
+    // 後置の `--`
+    gen_lval(node->lhs);
     printf("  pop rax\n");
     printf("  mov rdi, [rax]\n");
+    printf("  push rdi\n");
     printf("  sub rdi, 1\n");
     printf("  mov [rax], rdi\n");
-    printf("  push rdi\n");
     return;
   }
 

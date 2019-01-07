@@ -150,5 +150,9 @@ try 3 'a = 2; ++a;'
 try 33 'a = 2; b = ++a; 10 * a + b;'
 try 1 'a = 2; --a;'
 try 11 'a = 2; b = --a; 10 * a + b;'
+try 2 'a = 2; a++;'
+try 32 'a = 2; b = a++; 10 * a + b;'
+try 2 'a = 2; a--;'
+try 12 'a = 2; b = a--; 10 * a + b;'
 
 echo OK
