@@ -60,7 +60,10 @@ typedef struct Node {
   struct Node *cond;   // tyがND_CONDの場合のみ使う
 } Node;
 
-__attribute__((noreturn, format(printf, 1, 2))) void error(char *fmt, ...);
+#define error(fmt, ...) error_raw(__FILE__, __LINE__, fmt, ##__VA_ARGS__)
+
+__attribute__((noreturn, format(printf, 3, 4))) void
+error_raw(const char *file, int line, char *fmt, ...);
 
 Vector *new_vector(void);
 void vec_push(Vector *vec, void *elem);

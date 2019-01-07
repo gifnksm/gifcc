@@ -7,9 +7,10 @@
 #include <string.h>
 
 // エラーを報告するための関数
-void error(char *fmt, ...) {
+void error_raw(const char *file, int line, char *fmt, ...) {
   va_list ap;
   va_start(ap, fmt);
+  fprintf(stderr, "%s:%d:", file, line);
   vfprintf(stderr, fmt, ap);
   fprintf(stderr, "\n");
   va_end(ap);
