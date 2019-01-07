@@ -135,6 +135,32 @@ void gen(Node *node) {
     return;
   }
 
+  if (node->ty == '+' && node->rhs == NULL) {
+    // 単項の `+`
+    gen(node->lhs);
+    return;
+  }
+  if (node->ty == '-' && node->rhs == NULL) {
+    // 単項の `-`
+    gen(node->lhs);
+    printf("  pop rax\n");
+    printf("  neg rax\n");
+    printf("  push rax\n");
+    return;
+  }
+  if (node->ty == '~' && node->rhs == NULL) {
+    // 単項の `~`
+    gen(node->lhs);
+    printf("  pop rax\n");
+    printf("  not rax\n");
+    printf("  push rax\n");
+    return;
+  }
+
+  // 二項演算子
+  if (node->lhs == NULL || node->rhs == NULL)
+    error("lhs, rhsのいずれかまたは両方が空です: %p %p", node->lhs, node->rhs);
+
   gen(node->lhs);
   gen(node->rhs);
 

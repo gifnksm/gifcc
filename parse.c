@@ -140,7 +140,15 @@ static Vector *argument_expression_list(void) {
   return argument;
 }
 
-static Node *unary_expression(void) { return postfix_expression(); }
+static Node *unary_expression(void) {
+  if (consume('+'))
+    return new_node('+', cast_expression(), NULL);
+  if (consume('-'))
+    return new_node('-', cast_expression(), NULL);
+  if (consume('~'))
+    return new_node('~', cast_expression(), NULL);
+  return postfix_expression();
+}
 
 static Node *cast_expression(void) { return unary_expression(); }
 
