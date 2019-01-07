@@ -4,11 +4,11 @@ HDRS=$(wildcard *.h)
 OBJS=$(patsubst %.c,target/%.o,$(SRCS))
 DEPS=$(patsubst %.c,target/%.d,$(SRCS))
 
-target/9cc: $(OBJS)
+target/gifcc: $(OBJS)
 	$(CC) -o $@ $^
 
-test: target/9cc
-	./target/9cc --test
+test: target/gifcc
+	./target/gifcc --test
 	./test.sh
 .PHONY: test
 

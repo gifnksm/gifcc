@@ -1,4 +1,4 @@
-#include "9cc.h"
+#include "gifcc.h"
 #include <stdio.h>
 
 static void gen_lval(Node *node) {

@@ -1,4 +1,4 @@
-#include "9cc.h"
+#include "gifcc.h"
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>

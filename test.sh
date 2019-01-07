@@ -7,19 +7,19 @@ try() {
   input="$2"
 
   mkdir -p target/test
-  target/9cc --output token "${input}" > target/test/${index}.token
+  target/gifcc --output token "${input}" > target/test/${index}.token
   if [ "$?" -ne 0 ]; then
-    echo "test #${index}: 9cc(token) failed"
+    echo "test #${index}: gifcc(token) failed"
     exit 1
   fi
-  target/9cc --output ast "${input}" > target/test/${index}.ast
+  target/gifcc --output ast "${input}" > target/test/${index}.ast
   if [ "$?" -ne 0 ]; then
-    echo "test #${index}: 9cc(ast) failed"
+    echo "test #${index}: gifcc(ast) failed"
     exit 1
   fi
-  target/9cc "${input}" > target/test/${index}.s
+  target/gifcc "${input}" > target/test/${index}.s
   if [ "$?" -ne 0 ]; then
-    echo "test #${index}: 9cc(asm) failed"
+    echo "test #${index}: gifcc(asm) failed"
     exit 1
   fi
   gcc -o target/test/${index} target/test/${index}.s
