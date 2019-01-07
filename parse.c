@@ -64,6 +64,15 @@ static Node *new_node_call(Node *callee, Vector *argument) {
   return node;
 }
 
+static Node *new_node_cond(Node *cond, Node *then_expr, Node *else_expr) {
+  Node *node = malloc(sizeof(Node));
+  node->ty = ND_COND;
+  node->cond = cond;
+  node->lhs = then_expr;
+  node->rhs = else_expr;
+  return node;
+}
+
 static bool consume(int ty) {
   if (get_token(pos)->ty != ty)
     return false;
@@ -253,7 +262,17 @@ static Node *logical_or_expression(void) {
   }
   return node;
 }
-static Node *conditional_expression(void) { return logical_or_expression(); }
+static Node *conditional_expression(void) {
+  Node *cond = logical_or_expression();
+  if (consume('?')) {
+    Node *then_expr = expression();
+    if (!consume(':'))
+      error("`?` に対応する `:` がありません: %s", get_token(pos)->input);
+    Node *else_expr = conditional_expression();
+    return new_node_cond(cond, then_expr, else_expr);
+  }
+  return cond;
+}
 
 static Node *assignment_expression(void) {
   Node *lhs = conditional_expression();

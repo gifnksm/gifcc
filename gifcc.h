@@ -45,6 +45,7 @@ enum {
   ND_RSHIFT,
   ND_LOGAND,
   ND_LOGOR,
+  ND_COND,
   ND_CALL,
 };
 
@@ -56,6 +57,7 @@ typedef struct Node {
   char *name;          // tyがND_IDENTの場合のみ使う
   struct Node *callee; // tyがND_CALLの場合のみ使う
   Vector *argument;    // tyがND_CALLの場合のみ使う
+  struct Node *cond;   // tyがND_CONDの場合のみ使う
 } Node;
 
 __attribute__((noreturn, format(printf, 1, 2))) void error(char *fmt, ...);

@@ -70,7 +70,7 @@ static void output_token(void) {
 }
 
 static void dump_node(Node *node, int level);
-static void dump_complex_node(Node *node, char *label, int level) {
+static void dump_binop_node(Node *node, char *label, int level) {
   printf("%*s(%s\n", 2 * level, "", label);
   if (node->lhs != NULL)
     dump_node(node->lhs, level + 1);
@@ -81,7 +81,7 @@ static void dump_complex_node(Node *node, char *label, int level) {
 
 static void dump_node(Node *node, int level) {
   if (node->ty <= 255) {
-    dump_complex_node(node, (char[]){'[', node->ty, ']', '\0'}, level + 1);
+    dump_binop_node(node, (char[]){'[', node->ty, ']', '\0'}, level + 1);
     return;
   }
 
@@ -93,31 +93,38 @@ static void dump_node(Node *node, int level) {
     printf("%*s(IDENT %s)\n", 2 * level, "", node->name);
     break;
   case ND_EQEQ:
-    dump_complex_node(node, "[==]", level);
+    dump_binop_node(node, "[==]", level);
     break;
   case ND_NOTEQ:
-    dump_complex_node(node, "[!=]", level);
+    dump_binop_node(node, "[!=]", level);
     break;
   case ND_LTEQ:
-    dump_complex_node(node, "[<=]", level);
+    dump_binop_node(node, "[<=]", level);
     break;
   case ND_GTEQ:
-    dump_complex_node(node, "[>=]", level);
+    dump_binop_node(node, "[>=]", level);
     break;
   case ND_LSHIFT:
-    dump_complex_node(node, "[<<]", level);
+    dump_binop_node(node, "[<<]", level);
     break;
   case ND_RSHIFT:
-    dump_complex_node(node, "[>>]", level);
+    dump_binop_node(node, "[>>]", level);
     break;
   case ND_LOGAND:
-    dump_complex_node(node, "[&&]", level);
+    dump_binop_node(node, "[&&]", level);
     break;
   case ND_LOGOR:
-    dump_complex_node(node, "[||]", level);
+    dump_binop_node(node, "[||]", level);
+    break;
+  case ND_COND:
+    printf("%*s(COND\n", 2 * level, "");
+    dump_node(node->cond, level + 1);
+    dump_node(node->lhs, level + 1);
+    dump_node(node->rhs, level + 1);
+    printf("%*s)\n", 2 * level, "");
     break;
   case ND_CALL:
-    dump_complex_node(node, "CALL", level);
+    dump_binop_node(node, "CALL", level);
     break;
   default:
     error("未知のノードです: %d\n", node->ty);

@@ -120,6 +120,21 @@ void gen(Node *node) {
     return;
   }
 
+  if (node->ty == ND_COND) {
+    gen(node->cond);
+    char *else_label = make_label();
+    char *end_label = make_label();
+    printf("  pop rax\n");
+    printf("  cmp rax, 0\n");
+    printf("  je %s\n", else_label);
+    gen(node->lhs);
+    printf("  jmp %s\n", end_label);
+    printf("%s:\n", else_label);
+    gen(node->rhs);
+    printf("%s:\n", end_label);
+    return;
+  }
+
   gen(node->lhs);
   gen(node->rhs);
 
