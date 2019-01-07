@@ -104,6 +104,8 @@ void gen(Node *node) {
     printf("  setne al\n");
     printf("  movzb rax, al\n");
     break;
+  default:
+    error("未知のノード種別です: %d", node->ty);
   }
 
   printf("  push rax\n");
