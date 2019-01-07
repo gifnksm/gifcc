@@ -7,9 +7,19 @@
 static Node *primary_expression(void);
 static Node *postfix_expression(void);
 static Vector *argument_expression_list(void);
+static Node *unary_expression(void);
+static Node *cast_expression(void);
 static Node *multiplicative_expression(void);
-static Node *addtive_expression(void);
+static Node *additive_expression(void);
+static Node *shift_expression(void);
+static Node *relational_expression(void);
 static Node *equality_expression(void);
+static Node *and_expression(void);
+static Node *exclusive_or_expression(void);
+static Node *inclusive_or_expression(void);
+static Node *logical_and_expression(void);
+static Node *logical_or_expression(void);
+static Node *conditional_expression(void);
 static Node *assignment_expression(void);
 static Node *expression(void);
 
@@ -121,19 +131,23 @@ static Vector *argument_expression_list(void) {
   return argument;
 }
 
+static Node *unary_expression(void) { return postfix_expression(); }
+
+static Node *cast_expression(void) { return unary_expression(); }
+
 static Node *multiplicative_expression(void) {
-  Node *node = postfix_expression();
+  Node *node = cast_expression();
   while (true) {
     if (consume('*'))
-      node = new_node('*', node, postfix_expression());
+      node = new_node('*', node, cast_expression());
     else if (consume('/'))
-      node = new_node('/', node, postfix_expression());
+      node = new_node('/', node, cast_expression());
     else
       return node;
   }
 }
 
-static Node *addtive_expression(void) {
+static Node *additive_expression(void) {
   Node *node = multiplicative_expression();
   while (true) {
     if (consume('+'))
@@ -145,20 +159,31 @@ static Node *addtive_expression(void) {
   }
 }
 
+static Node *shift_expression(void) { return additive_expression(); }
+
+static Node *relational_expression(void) { return shift_expression(); }
+
 static Node *equality_expression(void) {
-  Node *node = addtive_expression();
+  Node *node = relational_expression();
   while (true) {
     if (consume(TK_EQEQ))
-      node = new_node(ND_EQEQ, node, addtive_expression());
+      node = new_node(ND_EQEQ, node, relational_expression());
     else if (consume(TK_NOTEQ))
-      node = new_node(ND_NOTEQ, node, addtive_expression());
+      node = new_node(ND_NOTEQ, node, relational_expression());
     else
       return node;
   }
 }
 
+static Node *and_expression(void) { return equality_expression(); }
+static Node *exclusive_or_expression(void) { return and_expression(); }
+static Node *inclusive_or_expression(void) { return exclusive_or_expression(); }
+static Node *logical_and_expression(void) { return inclusive_or_expression(); }
+static Node *logical_or_expression(void) { return logical_and_expression(); }
+static Node *conditional_expression(void) { return logical_or_expression(); }
+
 static Node *assignment_expression(void) {
-  Node *lhs = equality_expression();
+  Node *lhs = conditional_expression();
   if (consume('='))
     return new_node('=', lhs, assignment_expression());
   return lhs;
