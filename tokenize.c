@@ -92,8 +92,26 @@ void tokenize(char *p) {
       p++;
       continue;
     }
-    case '+':
-    case '-':
+    case '+': {
+      if (*(p + 1) == '+') {
+        vec_push(tokens, new_token(TK_INC, p));
+        p += 2;
+        continue;
+      }
+      vec_push(tokens, new_token(*p, p));
+      p++;
+      continue;
+    }
+    case '-': {
+      if (*(p + 1) == '-') {
+        vec_push(tokens, new_token(TK_DEC, p));
+        p += 2;
+        continue;
+      }
+      vec_push(tokens, new_token(*p, p));
+      p++;
+      continue;
+    }
     case '*':
     case '/':
     case '%':

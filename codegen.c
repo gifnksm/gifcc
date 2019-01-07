@@ -157,6 +157,27 @@ void gen(Node *node) {
     return;
   }
 
+  if (node->ty == ND_INC && node->lhs == NULL) {
+    // 前置の `++`
+    gen_lval(node->rhs);
+    printf("  pop rax\n");
+    printf("  mov rdi, [rax]\n");
+    printf("  add rdi, 1\n");
+    printf("  mov [rax], rdi\n");
+    printf("  push rdi\n");
+    return;
+  }
+  if (node->ty == ND_DEC && node->lhs == NULL) {
+    // 前置の `--`
+    gen_lval(node->rhs);
+    printf("  pop rax\n");
+    printf("  mov rdi, [rax]\n");
+    printf("  sub rdi, 1\n");
+    printf("  mov [rax], rdi\n");
+    printf("  push rdi\n");
+    return;
+  }
+
   // 二項演算子
   if (node->lhs == NULL || node->rhs == NULL)
     error("lhs, rhsのいずれかまたは両方が空です: %p %p", node->lhs, node->rhs);

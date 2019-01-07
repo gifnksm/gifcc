@@ -23,6 +23,8 @@ enum {
   TK_RSHIFT,    // `>>`
   TK_LOGAND,    // `&&`
   TK_LOGOR,     // `||`
+  TK_INC,       // `++`
+  TK_DEC,       // `--`
   TK_EOF,       // 入力の終わりを表すトークン
 };
 
@@ -46,6 +48,8 @@ enum {
   ND_LOGAND,
   ND_LOGOR,
   ND_COND,
+  ND_INC,
+  ND_DEC,
   ND_CALL,
 };
 

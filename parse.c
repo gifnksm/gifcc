@@ -147,6 +147,10 @@ static Node *unary_expression(void) {
     return new_node('-', NULL, cast_expression());
   if (consume('~'))
     return new_node('~', NULL, cast_expression());
+  if (consume(TK_INC))
+    return new_node(ND_INC, NULL, cast_expression());
+  if (consume(TK_DEC))
+    return new_node(ND_DEC, NULL, cast_expression());
   return postfix_expression();
 }
 

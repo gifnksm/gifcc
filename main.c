@@ -60,6 +60,12 @@ static void output_token(void) {
     case TK_EOF:
       printf("%03d EOF\n", pos);
       break;
+    case TK_INC:
+      printf("%03d [++]\n", pos);
+      break;
+    case TK_DEC:
+      printf("%03d [--]\n", pos);
+      break;
     default:
       error("未知のトークンです: %d\n", token->ty);
     }
@@ -75,8 +81,12 @@ static void dump_binop_node(Node *node, char *label, int level) {
   printf("%*s(%s\n", 2 * level, "", label);
   if (node->lhs != NULL)
     dump_node(node->lhs, level + 1);
+  else
+    printf("%*s(NULL)\n", 2 * (level + 1), "");
   if (node->rhs != NULL)
     dump_node(node->rhs, level + 1);
+  else
+    printf("%*s(NULL)\n", 2 * (level + 1), "");
   printf("%*s)\n", 2 * level, "");
 }
 
@@ -123,6 +133,12 @@ static void dump_node(Node *node, int level) {
     dump_node(node->lhs, level + 1);
     dump_node(node->rhs, level + 1);
     printf("%*s)\n", 2 * level, "");
+    break;
+  case ND_INC:
+    dump_binop_node(node, "INC", level);
+    break;
+  case ND_DEC:
+    dump_binop_node(node, "DEC", level);
     break;
   case ND_CALL:
     dump_binop_node(node, "CALL", level);

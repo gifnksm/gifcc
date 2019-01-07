@@ -146,5 +146,9 @@ try 3 '8 % 5'
 try 103 'a = +3; 100 + a'
 try 97 'a = -3; 100 + a'
 try 252 '~3'
+try 3 'a = 2; ++a;'
+try 33 'a = 2; b = ++a; 10 * a + b;'
+try 1 'a = 2; --a;'
+try 11 'a = 2; b = --a; 10 * a + b;'
 
 echo OK
