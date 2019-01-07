@@ -6,6 +6,9 @@ try() {
   expected="$1"
   input="$2"
 
+  echo "test #${index}:"
+  echo "${input}" | sed 's/^/  /'
+
   mkdir -p target/test
   target/gifcc --output token "${input}" > target/test/${index}.token
   if [ "$?" -ne 0 ]; then
@@ -31,8 +34,6 @@ try() {
   actual="$?"
 
   if [ "${actual}" = "${expected}" ]; then
-    echo "test #${index}:"
-    echo "${input}" | sed 's/^/  /'
     echo "  => ${actual}"
   else
     echo "test #${index}: ${expected} expected, but got ${actual}"
