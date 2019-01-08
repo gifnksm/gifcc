@@ -176,6 +176,8 @@ static Token *new_token_ident(char *input, char *name) {
     token->ty = TK_ELSE;
   } else if (strcmp(name, "while") == 0) {
     token->ty = TK_WHILE;
+  } else if (strcmp(name, "do") == 0) {
+    token->ty = TK_DO;
   } else {
     token->ty = TK_IDENT;
   }

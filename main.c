@@ -75,6 +75,9 @@ static void output_token(void) {
     case TK_WHILE:
       printf("%03d [WHILE]\n", pos);
       break;
+    case TK_DO:
+      printf("%03d [DO]\n", pos);
+      break;
     default:
       error("未知のトークンです: %d\n", token->ty);
     }
@@ -176,6 +179,11 @@ static void dump_node(Node *node, int level) {
     dump_node(node->body, level + 1);
     printf("%*s)\n", 2 * level, "");
     break;
+  case ND_DO_WHILE:
+    printf("%*s(DO_WHILE\n", 2 * level, "");
+    dump_node(node->cond, level + 1);
+    dump_node(node->body, level + 1);
+    printf("%*s)\n", 2 * level, "");
     break;
   case ND_NULL:
     printf("%*s(NULL)\n", 2 * level, "");

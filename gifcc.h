@@ -28,6 +28,7 @@ enum {
   TK_IF,        // `if`
   TK_ELSE,      // `else`
   TK_WHILE,     // `while`
+  TK_DO,        // `do`
   TK_EOF,       // 入力の終わりを表すトークン
 };
 
@@ -59,6 +60,7 @@ enum {
   ND_COMPOUND,
   ND_IF,
   ND_WHILE,
+  ND_DO_WHILE,
   ND_NULL,
 };
 
@@ -73,9 +75,10 @@ typedef struct Node {
   struct Node *callee;
   Vector *argument;
 
-  // ND_COND:  <cond> ? <then_node> : <else_node>
-  // ND_IF:    if (<cond>) <then_node> else <else_node>
-  // ND_WHILE: while (<cond>) <body>
+  // ND_COND:     <cond> ? <then_node> : <else_node>
+  // ND_IF:       if (<cond>) <then_node> else <else_node>
+  // ND_WHILE:    while (<cond>) <body>
+  // ND_DO_WHILE: do <body> while(<cond>);
   struct Node *cond;
   struct Node *then_node;
   struct Node *else_node;

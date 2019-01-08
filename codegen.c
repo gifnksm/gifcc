@@ -327,6 +327,16 @@ void gen(Node *stmt) {
     printf("%s:\n", end_label);
     break;
   }
+  case ND_DO_WHILE: {
+    char *loop_label = make_label();
+    printf("%s:\n", loop_label);
+    gen(stmt->body);
+    gen_expr(stmt->cond);
+    printf("  pop rax\n");
+    printf("  cmp rax, 0\n");
+    printf("  jne %s\n", loop_label);
+    break;
+  }
   default: { error("未知のノード種別です: %d", stmt->ty); }
   }
 }

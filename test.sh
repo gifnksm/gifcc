@@ -167,5 +167,7 @@ try 5 'a = b = 1; if (0) a = 5; else a = 3; b = 2; a + b;'
 try 5 'a = 0; while (a < 5) { a++; } a;'
 try 10 'a = b = 0; while (a < 5) { b = b + 2; a++; } b;'
 try 10 'c = 97; while (c <= 122) { putchar(c); c++; }; putchar(10); '
+try 10 'a = 0; do a = 10; while (0); a;'
+try 10 'a = 0; do a++; while (a < 10); a;'
 
 echo OK
