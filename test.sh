@@ -169,5 +169,7 @@ try 10 'a = b = 0; while (a < 5) { b = b + 2; a++; } b;'
 try 10 'c = 97; while (c <= 122) { putchar(c); c++; }; putchar(10); '
 try 10 'a = 0; do a = 10; while (0); a;'
 try 10 'a = 0; do a++; while (a < 10); a;'
-
+try 55 's = 0; for (a = 1; a <= 10; a++) s = s + a; s;'
+try 55 'a = 1; s = 0; for (; a <= 10; a++) s = s + a; s;'
+try 55 'a = 1; s = 0; for (; a <= 10;) { s = s + a; a++; } s;'
 echo OK

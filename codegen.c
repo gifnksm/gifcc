@@ -337,6 +337,25 @@ void gen(Node *stmt) {
     printf("  jne %s\n", loop_label);
     break;
   }
+  case ND_FOR: {
+    char *cond_label = make_label();
+    char *end_label = make_label();
+    if (stmt->init != NULL)
+      gen_expr(stmt->init);
+    printf("%s:\n", cond_label);
+    if (stmt->cond != NULL) {
+      gen_expr(stmt->cond);
+      printf("  pop rax\n");
+      printf("  cmp rax, 0\n");
+      printf("  je %s\n", end_label);
+    }
+    gen(stmt->body);
+    if (stmt->inc != NULL)
+      gen_expr(stmt->inc);
+    printf("  jmp %s\n", cond_label);
+    printf("%s:\n", end_label);
+    break;
+  }
   default: { error("未知のノード種別です: %d", stmt->ty); }
   }
 }

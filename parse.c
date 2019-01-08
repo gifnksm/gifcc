@@ -110,6 +110,16 @@ static Node *new_node_do_while(Node *cond, Node *body) {
   return node;
 }
 
+static Node *new_node_for(Node *init, Node *cond, Node *inc, Node *body) {
+  Node *node = malloc(sizeof(Node));
+  node->ty = ND_FOR;
+  node->init = init;
+  node->cond = cond;
+  node->inc = inc;
+  node->body = body;
+  return node;
+}
+
 static bool consume(int ty) {
   if (get_token(pos)->ty != ty)
     return false;
@@ -375,6 +385,28 @@ static Node *statement(void) {
     if (!consume(';'))
       error("`;` がありません: %s", get_token(pos)->input);
     return new_node_do_while(cond, body);
+  }
+  case TK_FOR: {
+    pos++;
+    Node *init = NULL;
+    Node *cond = NULL;
+    Node *inc = NULL;
+    if (!consume('('))
+      error("`(` がありません: %s", get_token(pos)->input);
+    if (get_token(pos)->ty != ';')
+      init = expression();
+    if (!consume(';'))
+      error("`;` がありません: %s", get_token(pos)->input);
+    if (get_token(pos)->ty != ';')
+      cond = expression();
+    if (!consume(';'))
+      error("`;` がありません: %s", get_token(pos)->input);
+    if (get_token(pos)->ty != ')')
+      inc = expression();
+    if (!consume(')'))
+      error("`)` がありません: %s", get_token(pos)->input);
+    Node *body = statement();
+    return new_node_for(init, cond, inc, body);
   }
   case '{': {
     return compound_statement();
