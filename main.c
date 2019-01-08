@@ -66,6 +66,12 @@ static void output_token(void) {
     case TK_DEC:
       printf("%03d [--]\n", pos);
       break;
+    case TK_IF:
+      printf("%03d [IF]\n", pos);
+      break;
+    case TK_ELSE:
+      printf("%03d [ELSE]\n", pos);
+      break;
     default:
       error("未知のトークンです: %d\n", token->ty);
     }
@@ -130,8 +136,8 @@ static void dump_node(Node *node, int level) {
   case ND_COND:
     printf("%*s(COND\n", 2 * level, "");
     dump_node(node->cond, level + 1);
-    dump_node(node->lhs, level + 1);
-    dump_node(node->rhs, level + 1);
+    dump_node(node->then_node, level + 1);
+    dump_node(node->else_node, level + 1);
     printf("%*s)\n", 2 * level, "");
     break;
   case ND_INC:
@@ -146,6 +152,19 @@ static void dump_node(Node *node, int level) {
   case ND_EXPR:
     printf("%*s(EXPR\n", 2 * level, "");
     dump_node(node->expr, level + 1);
+    printf("%*s)\n", 2 * level, "");
+    break;
+  case ND_COMPOUND:
+    printf("%*s(COMPOUND\n", 2 * level, "");
+    for (int i = 0; i < node->stmts->len; i++)
+      dump_node(node->stmts->data[i], level + 1);
+    printf("%*s)\n", 2 * level, "");
+    break;
+  case ND_IF:
+    printf("%*s(IF\n", 2 * level, "");
+    dump_node(node->cond, level + 1);
+    dump_node(node->then_node, level + 1);
+    dump_node(node->else_node, level + 1);
     printf("%*s)\n", 2 * level, "");
     break;
   case ND_NULL:

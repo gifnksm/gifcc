@@ -127,10 +127,10 @@ static void gen_expr(Node *node) {
     printf("  pop rax\n");
     printf("  cmp rax, 0\n");
     printf("  je %s\n", else_label);
-    gen_expr(node->lhs);
+    gen_expr(node->then_node);
     printf("  jmp %s\n", end_label);
     printf("%s:\n", else_label);
-    gen_expr(node->rhs);
+    gen_expr(node->else_node);
     printf("%s:\n", end_label);
     return;
   }
@@ -284,16 +284,36 @@ static void gen_expr(Node *node) {
 
 void gen(Node *stmt) {
   switch (stmt->ty) {
-  case ND_NULL:
+  case ND_NULL: {
     return;
-  case ND_EXPR:
+  }
+  case ND_EXPR: {
     gen_expr(stmt->expr);
 
     // 式の評価結果としてスタックに一つの値が残っている
     // はずなので、スタックが溢れないようにポップしておく
     printf("  pop rax\n");
     break;
-  default:
-    error("未知のノード種別です: %d", stmt->ty);
+  }
+  case ND_COMPOUND: {
+    for (int i = 0; i < stmt->stmts->len; i++)
+      gen(stmt->stmts->data[i]);
+    break;
+  }
+  case ND_IF: {
+    gen_expr(stmt->cond);
+    char *else_label = make_label();
+    char *end_label = make_label();
+    printf("  pop rax\n");
+    printf("  cmp rax, 0\n");
+    printf("  je %s\n", else_label);
+    gen(stmt->then_node);
+    printf("  jmp %s\n", end_label);
+    printf("%s:\n", else_label);
+    gen(stmt->else_node);
+    printf("%s:\n", end_label);
+    break;
+  }
+  default: { error("未知のノード種別です: %d", stmt->ty); }
   }
 }

@@ -23,6 +23,7 @@ static Node *conditional_expression(void);
 static Node *assignment_expression(void);
 static Node *expression(void);
 static Node *statement(void);
+static Node *compound_statement(void);
 
 static int pos = 0;
 static Vector *code;
@@ -72,8 +73,8 @@ static Node *new_node_cond(Node *cond, Node *then_expr, Node *else_expr) {
   Node *node = malloc(sizeof(Node));
   node->ty = ND_COND;
   node->cond = cond;
-  node->lhs = then_expr;
-  node->rhs = else_expr;
+  node->then_node = then_expr;
+  node->else_node = else_expr;
   return node;
 }
 
@@ -81,6 +82,15 @@ static Node *new_node_expr(Node *expr) {
   Node *node = malloc(sizeof(Node));
   node->ty = ND_EXPR;
   node->expr = expr;
+  return node;
+}
+
+static Node *new_node_if(Node *cond, Node *then_node, Node *else_node) {
+  Node *node = malloc(sizeof(Node));
+  node->ty = ND_IF;
+  node->cond = cond;
+  node->then_node = then_node;
+  node->else_node = else_node;
   return node;
 }
 
@@ -312,10 +322,45 @@ static Node *assignment_expression(void) {
 static Node *expression(void) { return assignment_expression(); }
 
 static Node *statement(void) {
-  if (consume(';'))
+  switch (get_token(pos)->ty) {
+  case TK_IF: {
+    pos++;
+    if (!consume('('))
+      error("`(` がありません: %s", get_token(pos)->input);
+    Node *cond = expression();
+    if (!consume(')'))
+      error("`)` がありません: %s", get_token(pos)->input);
+    Node *then_stmt = statement();
+    Node *else_stmt = &null_stmt;
+    if (consume(TK_ELSE))
+      else_stmt = statement();
+    return new_node_if(cond, then_stmt, else_stmt);
+  }
+  case '{': {
+    return compound_statement();
+  }
+  case ';': {
+    pos++;
     return &null_stmt;
-  Node *expr = expression();
-  if (!consume(';'))
-    error("`;` がありません: %s", get_token(pos)->input);
-  return new_node_expr(expr);
+  }
+  default: {
+    Node *expr = expression();
+    if (!consume(';'))
+      error("`;` がありません: %s", get_token(pos)->input);
+    return new_node_expr(expr);
+  }
+  }
+}
+
+static Node *compound_statement(void) {
+  if (!consume('{')) {
+    error("`{` がありません: %s", get_token(pos)->input);
+  }
+
+  Node *node = new_node(ND_COMPOUND, NULL, NULL);
+  node->stmts = new_vector();
+  while (!consume('}')) {
+    vec_push(node->stmts, statement());
+  }
+  return node;
 }

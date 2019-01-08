@@ -121,7 +121,9 @@ void tokenize(char *p) {
     case '^':
     case '?':
     case ':':
-    case '~': {
+    case '~':
+    case '{':
+    case '}': {
       vec_push(tokens, new_token(*p, p));
       p++;
       continue;
@@ -168,7 +170,13 @@ static Token *new_token_num(char *input, int val) {
 
 static Token *new_token_ident(char *input, char *name) {
   Token *token = malloc(sizeof(Token));
-  token->ty = TK_IDENT;
+  if (strcmp(name, "if") == 0) {
+    token->ty = TK_IF;
+  } else if (strcmp(name, "else") == 0) {
+    token->ty = TK_ELSE;
+  } else {
+    token->ty = TK_IDENT;
+  }
   token->input = input;
   token->name = name;
   return token;

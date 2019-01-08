@@ -25,6 +25,8 @@ enum {
   TK_LOGOR,     // `||`
   TK_INC,       // `++`
   TK_DEC,       // `--`
+  TK_IF,        // `if`
+  TK_ELSE,      // `else`
   TK_EOF,       // 入力の終わりを表すトークン
 };
 
@@ -53,19 +55,24 @@ enum {
   ND_CALL,
   // statement
   ND_EXPR,
+  ND_COMPOUND,
+  ND_IF,
   ND_NULL,
 };
 
 typedef struct Node {
-  int ty;              // ノードの型
-  struct Node *lhs;    // 左辺
-  struct Node *rhs;    // 右辺
-  int val;             // tyがND_NUMの場合のみ使う
-  char *name;          // tyがND_IDENTの場合のみ使う
-  struct Node *callee; // tyがND_CALLの場合のみ使う
-  Vector *argument;    // tyがND_CALLの場合のみ使う
-  struct Node *cond;   // tyがND_CONDの場合のみ使う
-  struct Node *expr;   // tyがND_EXPRの場合のみ使う
+  int ty;                 // ノードの型
+  struct Node *lhs;       // 左辺
+  struct Node *rhs;       // 右辺
+  int val;                // tyがND_NUMの場合のみ使う
+  char *name;             // tyがND_IDENTの場合のみ使う
+  struct Node *callee;    // tyがND_CALLの場合のみ使う
+  Vector *argument;       // tyがND_CALLの場合のみ使う
+  struct Node *cond;      // tyがND_CONDの場合のみ使う
+  struct Node *then_node; // tyがND_CONDの場合のみ使う
+  struct Node *else_node; // tyがND_CONDの場合のみ使う
+  struct Node *expr;      // tyがND_EXPRの場合のみ使う
+  Vector *stmts;          // tyがND_COMPOUNDの場合のみ使う
 } Node;
 
 #define error(fmt, ...) error_raw(__FILE__, __LINE__, fmt, ##__VA_ARGS__)
