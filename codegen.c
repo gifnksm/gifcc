@@ -83,9 +83,9 @@ static void gen_expr(Node *node) {
   }
 
   if (node->ty == ND_LOGAND) {
-    gen_expr(node->lhs);
     char *false_label = make_label();
     char *end_label = make_label();
+    gen_expr(node->lhs);
     printf("  pop rax\n");
     printf("  cmp rax, 0\n");
     printf("  je %s\n", false_label);
@@ -102,9 +102,9 @@ static void gen_expr(Node *node) {
   }
 
   if (node->ty == ND_LOGOR) {
-    gen_expr(node->lhs);
     char *true_label = make_label();
     char *end_label = make_label();
+    gen_expr(node->lhs);
     printf("  pop rax\n");
     printf("  cmp rax, 0\n");
     printf("  jne %s\n", true_label);
@@ -121,9 +121,9 @@ static void gen_expr(Node *node) {
   }
 
   if (node->ty == ND_COND) {
-    gen_expr(node->cond);
     char *else_label = make_label();
     char *end_label = make_label();
+    gen_expr(node->cond);
     printf("  pop rax\n");
     printf("  cmp rax, 0\n");
     printf("  je %s\n", else_label);
@@ -301,9 +301,9 @@ void gen(Node *stmt) {
     break;
   }
   case ND_IF: {
-    gen_expr(stmt->cond);
     char *else_label = make_label();
     char *end_label = make_label();
+    gen_expr(stmt->cond);
     printf("  pop rax\n");
     printf("  cmp rax, 0\n");
     printf("  je %s\n", else_label);
