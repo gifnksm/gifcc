@@ -22,11 +22,15 @@ static Node *logical_or_expression(void);
 static Node *conditional_expression(void);
 static Node *assignment_expression(void);
 static Node *expression(void);
+static Node *statement(void);
 
 static int pos = 0;
 static Vector *code;
 static int stack_size = 0;
 static Map *stack_map;
+static Node null_stmt = {
+    .ty = ND_NULL,
+};
 
 static Node *new_node(int ty, Node *lhs, Node *rhs) {
   Node *node = malloc(sizeof(Node));
@@ -73,6 +77,13 @@ static Node *new_node_cond(Node *cond, Node *then_expr, Node *else_expr) {
   return node;
 }
 
+static Node *new_node_expr(Node *expr) {
+  Node *node = malloc(sizeof(Node));
+  node->ty = ND_EXPR;
+  node->expr = expr;
+  return node;
+}
+
 static bool consume(int ty) {
   if (get_token(pos)->ty != ty)
     return false;
@@ -89,10 +100,9 @@ void program(void) {
   stack_map = new_map();
 
   while (get_token(pos)->ty != TK_EOF) {
-    vec_push(code, expression());
-    while (consume(';'))
-      ;
+    vec_push(code, statement());
   }
+
   vec_push(code, NULL);
 }
 
@@ -300,3 +310,12 @@ static Node *assignment_expression(void) {
 }
 
 static Node *expression(void) { return assignment_expression(); }
+
+static Node *statement(void) {
+  if (consume(';'))
+    return &null_stmt;
+  Node *expr = expression();
+  if (!consume(';'))
+    error("`;` がありません: %s", get_token(pos)->input);
+  return new_node_expr(expr);
+}

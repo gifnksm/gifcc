@@ -19,7 +19,7 @@ static void gen_lval(Node *node) {
   error("代入の左辺値が変数ではありません");
 }
 
-void gen(Node *node) {
+static void gen_expr(Node *node) {
   if (node->ty == ND_NUM) {
     printf("  push %d\n", node->val);
     return;
@@ -40,7 +40,7 @@ void gen(Node *node) {
     }
     if (arg && arg->len > 0) {
       for (int i = arg->len - 1; i >= 0; i--) {
-        gen(arg->data[i]);
+        gen_expr(arg->data[i]);
         switch (i) {
         // 0~5番目の引数はレジスタ経由で渡す
         case 0:
@@ -74,7 +74,7 @@ void gen(Node *node) {
 
   if (node->ty == '=') {
     gen_lval(node->lhs);
-    gen(node->rhs);
+    gen_expr(node->rhs);
     printf("  pop rdi\n");
     printf("  pop rax\n");
     printf("  mov [rax], rdi\n");
@@ -83,13 +83,13 @@ void gen(Node *node) {
   }
 
   if (node->ty == ND_LOGAND) {
-    gen(node->lhs);
+    gen_expr(node->lhs);
     char *false_label = make_label();
     char *end_label = make_label();
     printf("  pop rax\n");
     printf("  cmp rax, 0\n");
     printf("  je %s\n", false_label);
-    gen(node->rhs);
+    gen_expr(node->rhs);
     printf("  pop rax\n");
     printf("  cmp rax, 0\n");
     printf("  je %s\n", false_label);
@@ -102,13 +102,13 @@ void gen(Node *node) {
   }
 
   if (node->ty == ND_LOGOR) {
-    gen(node->lhs);
+    gen_expr(node->lhs);
     char *true_label = make_label();
     char *end_label = make_label();
     printf("  pop rax\n");
     printf("  cmp rax, 0\n");
     printf("  jne %s\n", true_label);
-    gen(node->rhs);
+    gen_expr(node->rhs);
     printf("  pop rax\n");
     printf("  cmp rax, 0\n");
     printf("  jne %s\n", true_label);
@@ -121,28 +121,28 @@ void gen(Node *node) {
   }
 
   if (node->ty == ND_COND) {
-    gen(node->cond);
+    gen_expr(node->cond);
     char *else_label = make_label();
     char *end_label = make_label();
     printf("  pop rax\n");
     printf("  cmp rax, 0\n");
     printf("  je %s\n", else_label);
-    gen(node->lhs);
+    gen_expr(node->lhs);
     printf("  jmp %s\n", end_label);
     printf("%s:\n", else_label);
-    gen(node->rhs);
+    gen_expr(node->rhs);
     printf("%s:\n", end_label);
     return;
   }
 
   if (node->ty == '+' && node->lhs == NULL) {
     // 単項の `+`
-    gen(node->rhs);
+    gen_expr(node->rhs);
     return;
   }
   if (node->ty == '-' && node->lhs == NULL) {
     // 単項の `-`
-    gen(node->rhs);
+    gen_expr(node->rhs);
     printf("  pop rax\n");
     printf("  neg rax\n");
     printf("  push rax\n");
@@ -150,7 +150,7 @@ void gen(Node *node) {
   }
   if (node->ty == '~' && node->lhs == NULL) {
     // 単項の `~`
-    gen(node->rhs);
+    gen_expr(node->rhs);
     printf("  pop rax\n");
     printf("  not rax\n");
     printf("  push rax\n");
@@ -203,8 +203,8 @@ void gen(Node *node) {
   if (node->lhs == NULL || node->rhs == NULL)
     error("lhs, rhsのいずれかまたは両方が空です: %p %p", node->lhs, node->rhs);
 
-  gen(node->lhs);
-  gen(node->rhs);
+  gen_expr(node->lhs);
+  gen_expr(node->rhs);
 
   printf("  pop rdi\n");
   printf("  pop rax\n");
@@ -280,4 +280,20 @@ void gen(Node *node) {
   }
 
   printf("  push rax\n");
+}
+
+void gen(Node *stmt) {
+  switch (stmt->ty) {
+  case ND_NULL:
+    return;
+  case ND_EXPR:
+    gen_expr(stmt->expr);
+
+    // 式の評価結果としてスタックに一つの値が残っている
+    // はずなので、スタックが溢れないようにポップしておく
+    printf("  pop rax\n");
+    break;
+  default:
+    error("未知のノード種別です: %d", stmt->ty);
+  }
 }

@@ -51,6 +51,9 @@ enum {
   ND_INC,
   ND_DEC,
   ND_CALL,
+  // statement
+  ND_EXPR,
+  ND_NULL,
 };
 
 typedef struct Node {
@@ -62,6 +65,7 @@ typedef struct Node {
   struct Node *callee; // tyがND_CALLの場合のみ使う
   Vector *argument;    // tyがND_CALLの場合のみ使う
   struct Node *cond;   // tyがND_CONDの場合のみ使う
+  struct Node *expr;   // tyがND_EXPRの場合のみ使う
 } Node;
 
 #define error(fmt, ...) error_raw(__FILE__, __LINE__, fmt, ##__VA_ARGS__)

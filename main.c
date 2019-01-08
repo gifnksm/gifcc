@@ -143,6 +143,14 @@ static void dump_node(Node *node, int level) {
   case ND_CALL:
     dump_binop_node(node, "CALL", level);
     break;
+  case ND_EXPR:
+    printf("%*s(EXPR\n", 2 * level, "");
+    dump_node(node->expr, level + 1);
+    printf("%*s)\n", 2 * level, "");
+    break;
+  case ND_NULL:
+    printf("%*s(NULL)\n", 2 * level, "");
+    break;
   default:
     error("未知のノードです: %d\n", node->ty);
   }
@@ -238,10 +246,6 @@ int main(int argc, char **argv) {
   // 先頭の式から順にコード生成
   for (int i = 0; get_node(i); i++) {
     gen(get_node(i));
-
-    // 式の評価結果としてスタックに一つの値が残っている
-    // はずなので、スタックが溢れないようにポップしておく
-    printf("  pop rax\n");
   }
 
   // エピローグ
