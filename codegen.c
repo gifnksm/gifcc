@@ -314,6 +314,19 @@ void gen(Node *stmt) {
     printf("%s:\n", end_label);
     break;
   }
+  case ND_WHILE: {
+    char *cond_label = make_label();
+    char *end_label = make_label();
+    printf("%s:\n", cond_label);
+    gen_expr(stmt->cond);
+    printf("  pop rax\n");
+    printf("  cmp rax, 0\n");
+    printf("  je %s\n", end_label);
+    gen(stmt->body);
+    printf("  jmp %s\n", cond_label);
+    printf("%s:\n", end_label);
+    break;
+  }
   default: { error("未知のノード種別です: %d", stmt->ty); }
   }
 }

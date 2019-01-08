@@ -94,6 +94,14 @@ static Node *new_node_if(Node *cond, Node *then_node, Node *else_node) {
   return node;
 }
 
+static Node *new_node_while(Node *cond, Node *body) {
+  Node *node = malloc(sizeof(Node));
+  node->ty = ND_WHILE;
+  node->cond = cond;
+  node->body = body;
+  return node;
+}
+
 static bool consume(int ty) {
   if (get_token(pos)->ty != ty)
     return false;
@@ -335,6 +343,16 @@ static Node *statement(void) {
     if (consume(TK_ELSE))
       else_stmt = statement();
     return new_node_if(cond, then_stmt, else_stmt);
+  }
+  case TK_WHILE: {
+    pos++;
+    if (!consume('('))
+      error("`(` がありません: %s", get_token(pos)->input);
+    Node *cond = expression();
+    if (!consume(')'))
+      error("`)` がありません: %s", get_token(pos)->input);
+    Node *body = statement();
+    return new_node_while(cond, body);
   }
   case '{': {
     return compound_statement();

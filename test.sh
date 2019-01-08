@@ -164,5 +164,8 @@ try 8 'a = b = 1; if (1) a = 5; b = 3; a + b;'
 try 4 'a = b = 1; if (0) a = 5; b = 3; a + b;'
 try 7 'a = b = 1; if (1) a = 5; else a = 3; b = 2; a + b;'
 try 5 'a = b = 1; if (0) a = 5; else a = 3; b = 2; a + b;'
+try 5 'a = 0; while (a < 5) { a++; } a;'
+try 10 'a = b = 0; while (a < 5) { b = b + 2; a++; } b;'
+try 10 'c = 97; while (c <= 122) { putchar(c); c++; }; putchar(10); '
 
 echo OK
