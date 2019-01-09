@@ -30,6 +30,8 @@ enum {
   TK_WHILE,     // `while`
   TK_DO,        // `do`
   TK_FOR,       // `for`
+  TK_BREAK,     // `break`
+  TK_CONTINUE,  // `continue`
   TK_EOF,       // 入力の終わりを表すトークン
 };
 
@@ -63,6 +65,8 @@ enum {
   ND_WHILE,
   ND_DO_WHILE,
   ND_FOR,
+  ND_BREAK,
+  ND_CONTINUE,
   ND_NULL,
 };
 
@@ -101,6 +105,7 @@ error_raw(const char *file, int line, char *fmt, ...);
 
 Vector *new_vector(void);
 void vec_push(Vector *vec, void *elem);
+void *vec_pop(Vector *vec);
 Map *new_map(void);
 void map_put(Map *map, char *key, void *val);
 void *map_get(Map *map, char *key);

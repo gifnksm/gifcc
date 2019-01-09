@@ -2,6 +2,9 @@
 #include <stdio.h>
 #include <string.h>
 
+Vector *break_labels = NULL;
+Vector *continue_labels = NULL;
+
 static char *make_label(void) {
   static int count = 0;
   char buf[256];
@@ -282,7 +285,7 @@ static void gen_expr(Node *node) {
   printf("  push rax\n");
 }
 
-void gen(Node *stmt) {
+static void gen_stmt(Node *stmt) {
   switch (stmt->ty) {
   case ND_NULL: {
     return;
@@ -297,7 +300,7 @@ void gen(Node *stmt) {
   }
   case ND_COMPOUND: {
     for (int i = 0; i < stmt->stmts->len; i++)
-      gen(stmt->stmts->data[i]);
+      gen_stmt(stmt->stmts->data[i]);
     break;
   }
   case ND_IF: {
@@ -307,10 +310,10 @@ void gen(Node *stmt) {
     printf("  pop rax\n");
     printf("  cmp rax, 0\n");
     printf("  je %s\n", else_label);
-    gen(stmt->then_node);
+    gen_stmt(stmt->then_node);
     printf("  jmp %s\n", end_label);
     printf("%s:\n", else_label);
-    gen(stmt->else_node);
+    gen_stmt(stmt->else_node);
     printf("%s:\n", end_label);
     break;
   }
@@ -322,23 +325,40 @@ void gen(Node *stmt) {
     printf("  pop rax\n");
     printf("  cmp rax, 0\n");
     printf("  je %s\n", end_label);
-    gen(stmt->body);
+
+    vec_push(break_labels, end_label);
+    vec_push(continue_labels, cond_label);
+    gen_stmt(stmt->body);
+    vec_pop(break_labels);
+    vec_pop(continue_labels);
+
     printf("  jmp %s\n", cond_label);
     printf("%s:\n", end_label);
     break;
   }
   case ND_DO_WHILE: {
     char *loop_label = make_label();
+    char *cond_label = make_label();
+    char *end_label = make_label();
     printf("%s:\n", loop_label);
-    gen(stmt->body);
+
+    vec_push(break_labels, end_label);
+    vec_push(continue_labels, cond_label);
+    gen_stmt(stmt->body);
+    vec_pop(break_labels);
+    vec_pop(continue_labels);
+
+    printf("%s:\n", cond_label);
     gen_expr(stmt->cond);
     printf("  pop rax\n");
     printf("  cmp rax, 0\n");
     printf("  jne %s\n", loop_label);
+    printf("%s:\n", end_label);
     break;
   }
   case ND_FOR: {
     char *cond_label = make_label();
+    char *inc_label = make_label();
     char *end_label = make_label();
     if (stmt->init != NULL)
       gen_expr(stmt->init);
@@ -349,13 +369,39 @@ void gen(Node *stmt) {
       printf("  cmp rax, 0\n");
       printf("  je %s\n", end_label);
     }
-    gen(stmt->body);
+
+    vec_push(break_labels, end_label);
+    vec_push(continue_labels, inc_label);
+    gen_stmt(stmt->body);
+    vec_pop(break_labels);
+    vec_pop(continue_labels);
+
+    printf("%s:\n", inc_label);
     if (stmt->inc != NULL)
       gen_expr(stmt->inc);
     printf("  jmp %s\n", cond_label);
     printf("%s:\n", end_label);
     break;
   }
+  case ND_BREAK: {
+    if (break_labels->len <= 0)
+      error("ループでもswitch文中でもない箇所にbreakがあります");
+    printf("  jmp %s\n", (char *)break_labels->data[break_labels->len - 1]);
+    break;
+  }
+  case ND_CONTINUE: {
+    if (continue_labels->len <= 0)
+      error("ループ中でない箇所にcontinueがあります");
+    printf("  jmp %s\n",
+           (char *)continue_labels->data[continue_labels->len - 1]);
+    break;
+  }
   default: { error("未知のノード種別です: %d", stmt->ty); }
   }
+}
+
+void gen(Node *node) {
+  break_labels = new_vector();
+  continue_labels = new_vector();
+  gen_stmt(node);
 }

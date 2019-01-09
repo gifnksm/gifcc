@@ -81,6 +81,12 @@ static void output_token(void) {
     case TK_FOR:
       printf("%03d [FOR]\n", pos);
       break;
+    case TK_BREAK:
+      printf("%03d [BREAK]\n", pos);
+      break;
+    case TK_CONTINUE:
+      printf("%03d [CONTINUE]\n", pos);
+      break;
     default:
       error("未知のトークンです: %d\n", token->ty);
     }
@@ -204,6 +210,12 @@ static void dump_node(Node *node, int level) {
       printf("%*s(NULL)\n", 2 * (level + 1), "");
     dump_node(node->body, level + 1);
     printf("%*s)\n", 2 * level, "");
+    break;
+  case ND_BREAK:
+    printf("%*s(BREAK)\n", 2 * level, "");
+    break;
+  case ND_CONTINUE:
+    printf("%*s(CONTINUE)\n", 2 * level, "");
     break;
   case ND_NULL:
     printf("%*s(NULL)\n", 2 * level, "");

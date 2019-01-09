@@ -408,6 +408,18 @@ static Node *statement(void) {
     Node *body = statement();
     return new_node_for(init, cond, inc, body);
   }
+  case TK_BREAK: {
+    pos++;
+    if (!consume(';'))
+      error("`;` がありません: %s", get_token(pos)->input);
+    return new_node(ND_BREAK, NULL, NULL);
+  }
+  case TK_CONTINUE: {
+    pos++;
+    if (!consume(';'))
+      error("`;` がありません: %s", get_token(pos)->input);
+    return new_node(ND_CONTINUE, NULL, NULL);
+  }
   case '{': {
     return compound_statement();
   }
