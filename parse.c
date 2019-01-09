@@ -344,6 +344,26 @@ static Node *assignment_expression(void) {
   Node *lhs = conditional_expression();
   if (consume('='))
     return new_node('=', lhs, assignment_expression());
+  if (consume(TK_MUL_ASSIGN))
+    return new_node(ND_MUL_ASSIGN, lhs, assignment_expression());
+  if (consume(TK_DIV_ASSIGN))
+    return new_node(ND_DIV_ASSIGN, lhs, assignment_expression());
+  if (consume(TK_MOD_ASSIGN))
+    return new_node(ND_MOD_ASSIGN, lhs, assignment_expression());
+  if (consume(TK_ADD_ASSIGN))
+    return new_node(ND_ADD_ASSIGN, lhs, assignment_expression());
+  if (consume(TK_SUB_ASSIGN))
+    return new_node(ND_SUB_ASSIGN, lhs, assignment_expression());
+  if (consume(TK_LSHIFT_ASSIGN))
+    return new_node(ND_LSHIFT_ASSIGN, lhs, assignment_expression());
+  if (consume(TK_RSHIFT_ASSIGN))
+    return new_node(ND_RSHIFT_ASSIGN, lhs, assignment_expression());
+  if (consume(TK_AND_ASSIGN))
+    return new_node(ND_AND_ASSIGN, lhs, assignment_expression());
+  if (consume(TK_OR_ASSIGN))
+    return new_node(ND_OR_ASSIGN, lhs, assignment_expression());
+  if (consume(TK_XOR_ASSIGN))
+    return new_node(ND_XOR_ASSIGN, lhs, assignment_expression());
   return lhs;
 }
 

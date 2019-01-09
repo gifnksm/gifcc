@@ -13,26 +13,36 @@ typedef struct {
 
 // トークンの型を表す値
 enum {
-  TK_NUM = 256, // 整数トークン
-  TK_IDENT,     // 識別子
-  TK_EQEQ,      // `==`
-  TK_NOTEQ,     // `!=`
-  TK_LTEQ,      // `<=`
-  TK_GTEQ,      // `>=`
-  TK_LSHIFT,    // `<<`
-  TK_RSHIFT,    // `>>`
-  TK_LOGAND,    // `&&`
-  TK_LOGOR,     // `||`
-  TK_INC,       // `++`
-  TK_DEC,       // `--`
-  TK_IF,        // `if`
-  TK_ELSE,      // `else`
-  TK_WHILE,     // `while`
-  TK_DO,        // `do`
-  TK_FOR,       // `for`
-  TK_BREAK,     // `break`
-  TK_CONTINUE,  // `continue`
-  TK_EOF,       // 入力の終わりを表すトークン
+  TK_NUM = 256,     // 整数トークン
+  TK_IDENT,         // 識別子
+  TK_EQEQ,          // `==`
+  TK_NOTEQ,         // `!=`
+  TK_LTEQ,          // `<=`
+  TK_GTEQ,          // `>=`
+  TK_LSHIFT,        // `<<`
+  TK_RSHIFT,        // `>>`
+  TK_LOGAND,        // `&&`
+  TK_LOGOR,         // `||`
+  TK_INC,           // `++`
+  TK_DEC,           // `--`
+  TK_MUL_ASSIGN,    // `*=`
+  TK_DIV_ASSIGN,    // `/=`
+  TK_MOD_ASSIGN,    // `%=`
+  TK_ADD_ASSIGN,    // `+=`
+  TK_SUB_ASSIGN,    // `-=`
+  TK_LSHIFT_ASSIGN, // `<<=`
+  TK_RSHIFT_ASSIGN, // `>>=`
+  TK_AND_ASSIGN,    // `&=`
+  TK_OR_ASSIGN,     // `|=`
+  TK_XOR_ASSIGN,    // `^=`
+  TK_IF,            // `if`
+  TK_ELSE,          // `else`
+  TK_WHILE,         // `while`
+  TK_DO,            // `do`
+  TK_FOR,           // `for`
+  TK_BREAK,         // `break`
+  TK_CONTINUE,      // `continue`
+  TK_EOF,           // 入力の終わりを表すトークン
 };
 
 // トークンの型
@@ -57,6 +67,16 @@ enum {
   ND_COND,
   ND_INC,
   ND_DEC,
+  ND_MUL_ASSIGN,
+  ND_DIV_ASSIGN,
+  ND_MOD_ASSIGN,
+  ND_ADD_ASSIGN,
+  ND_SUB_ASSIGN,
+  ND_LSHIFT_ASSIGN,
+  ND_RSHIFT_ASSIGN,
+  ND_AND_ASSIGN,
+  ND_OR_ASSIGN,
+  ND_XOR_ASSIGN,
   ND_CALL,
   // statement
   ND_EXPR,

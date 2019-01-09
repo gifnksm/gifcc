@@ -66,6 +66,36 @@ static void output_token(void) {
     case TK_DEC:
       printf("%03d [--]\n", pos);
       break;
+    case TK_MUL_ASSIGN:
+      printf("%03d [*=]\n", pos);
+      break;
+    case TK_DIV_ASSIGN:
+      printf("%03d [/=]\n", pos);
+      break;
+    case TK_MOD_ASSIGN:
+      printf("%03d [%%=]\n", pos);
+      break;
+    case TK_ADD_ASSIGN:
+      printf("%03d [+=]\n", pos);
+      break;
+    case TK_SUB_ASSIGN:
+      printf("%03d [-=]\n", pos);
+      break;
+    case TK_LSHIFT_ASSIGN:
+      printf("%03d [<<=]\n", pos);
+      break;
+    case TK_RSHIFT_ASSIGN:
+      printf("%03d [>>=]\n", pos);
+      break;
+    case TK_AND_ASSIGN:
+      printf("%03d [&=]\n", pos);
+      break;
+    case TK_OR_ASSIGN:
+      printf("%03d [|=]\n", pos);
+      break;
+    case TK_XOR_ASSIGN:
+      printf("%03d [^=]\n", pos);
+      break;
     case TK_IF:
       printf("%03d [IF]\n", pos);
       break;
@@ -156,10 +186,40 @@ static void dump_node(Node *node, int level) {
     printf("%*s)\n", 2 * level, "");
     break;
   case ND_INC:
-    dump_binop_node(node, "INC", level);
+    dump_binop_node(node, "[++]", level);
     break;
   case ND_DEC:
-    dump_binop_node(node, "DEC", level);
+    dump_binop_node(node, "[--]", level);
+    break;
+  case ND_MUL_ASSIGN:
+    dump_binop_node(node, "[*=]", level);
+    break;
+  case ND_DIV_ASSIGN:
+    dump_binop_node(node, "[/=]", level);
+    break;
+  case ND_MOD_ASSIGN:
+    dump_binop_node(node, "[%%=]", level);
+    break;
+  case ND_ADD_ASSIGN:
+    dump_binop_node(node, "[+=]", level);
+    break;
+  case ND_SUB_ASSIGN:
+    dump_binop_node(node, "[-=]", level);
+    break;
+  case ND_LSHIFT_ASSIGN:
+    dump_binop_node(node, "[<<=]", level);
+    break;
+  case ND_RSHIFT_ASSIGN:
+    dump_binop_node(node, "[>>=]", level);
+    break;
+  case ND_AND_ASSIGN:
+    dump_binop_node(node, "[^=]", level);
+    break;
+  case ND_OR_ASSIGN:
+    dump_binop_node(node, "[|=]", level);
+    break;
+  case ND_XOR_ASSIGN:
+    dump_binop_node(node, "[^=]", level);
     break;
   case ND_CALL:
     dump_binop_node(node, "CALL", level);

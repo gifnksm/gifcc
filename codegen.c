@@ -84,7 +84,57 @@ static void gen_expr(Node *node) {
     printf("  push rdi\n");
     return;
   }
-
+  if (node->ty == ND_MUL_ASSIGN || node->ty == ND_DIV_ASSIGN ||
+      node->ty == ND_MOD_ASSIGN || node->ty == ND_ADD_ASSIGN ||
+      node->ty == ND_SUB_ASSIGN || node->ty == ND_LSHIFT_ASSIGN ||
+      node->ty == ND_RSHIFT_ASSIGN || node->ty == ND_AND_ASSIGN ||
+      node->ty == ND_OR_ASSIGN || node->ty == ND_XOR_ASSIGN) {
+    gen_lval(node->lhs);
+    gen_expr(node->rhs);
+    printf("  pop rdi\n");
+    printf("  pop rsi\n");
+    printf("  mov rax, [rsi]\n");
+    switch (node->ty) {
+    case ND_MUL_ASSIGN:
+      printf("  mul rdi\n");
+      break;
+    case ND_DIV_ASSIGN:
+      printf("  mov rdx, 0\n");
+      printf("  div rdi\n");
+      break;
+    case ND_MOD_ASSIGN:
+      printf("  mov rdx, 0\n");
+      printf("  div rdi\n");
+      printf("  mov rax, rdx\n");
+      break;
+    case ND_ADD_ASSIGN:
+      printf("  add rax, rdi\n");
+      break;
+    case ND_SUB_ASSIGN:
+      printf("  sub rax, rdi\n");
+      break;
+    case ND_LSHIFT_ASSIGN:
+      printf("  mov rcx, rdi\n");
+      printf("  shl rax, cl\n");
+      break;
+    case ND_RSHIFT_ASSIGN:
+      printf("  mov rcx, rdi\n");
+      printf("  sar rax, cl\n");
+      break;
+    case ND_AND_ASSIGN:
+      printf("  and rax, rdi\n");
+      break;
+    case ND_OR_ASSIGN:
+      printf("  or rax, rdi\n");
+      break;
+    case ND_XOR_ASSIGN:
+      printf("  xor rax, rdi\n");
+      break;
+    }
+    printf("  mov [rsi], rax\n");
+    printf("  push rax\n");
+    return;
+  }
   if (node->ty == ND_LOGAND) {
     char *false_label = make_label();
     char *end_label = make_label();
@@ -238,7 +288,7 @@ static void gen_expr(Node *node) {
   case '%':
     printf("  mov rdx, 0\n");
     printf("  div rdi\n");
-    printf("  mov rax,rdx\n");
+    printf("  mov rax, rdx\n");
     break;
   case ND_EQEQ:
     printf("  cmp rax, rdi\n");

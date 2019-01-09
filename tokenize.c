@@ -46,6 +46,11 @@ void tokenize(char *p) {
     }
     case '<': {
       if (*(p + 1) == '<') {
+        if (*(p + 2) == '=') {
+          vec_push(tokens, new_token(TK_LSHIFT_ASSIGN, p));
+          p += 3;
+          continue;
+        }
         vec_push(tokens, new_token(TK_LSHIFT, p));
         p += 2;
         continue;
@@ -61,6 +66,11 @@ void tokenize(char *p) {
     }
     case '>': {
       if (*(p + 1) == '>') {
+        if (*(p + 2) == '=') {
+          vec_push(tokens, new_token(TK_RSHIFT_ASSIGN, p));
+          p += 3;
+          continue;
+        }
         vec_push(tokens, new_token(TK_RSHIFT, p));
         p += 2;
         continue;
@@ -80,6 +90,11 @@ void tokenize(char *p) {
         p += 2;
         continue;
       }
+      if (*(p + 1) == '=') {
+        vec_push(tokens, new_token(TK_AND_ASSIGN, p));
+        p += 2;
+        continue;
+      }
       vec_push(tokens, new_token(*p, p));
       p++;
       continue;
@@ -87,6 +102,21 @@ void tokenize(char *p) {
     case '|': {
       if (*(p + 1) == '|') {
         vec_push(tokens, new_token(TK_LOGOR, p));
+        p += 2;
+        continue;
+      }
+      if (*(p + 1) == '=') {
+        vec_push(tokens, new_token(TK_OR_ASSIGN, p));
+        p += 2;
+        continue;
+      }
+      vec_push(tokens, new_token(*p, p));
+      p++;
+      continue;
+    }
+    case '^': {
+      if (*(p + 1) == '=') {
+        vec_push(tokens, new_token(TK_XOR_ASSIGN, p));
         p += 2;
         continue;
       }
@@ -100,6 +130,11 @@ void tokenize(char *p) {
         p += 2;
         continue;
       }
+      if (*(p + 1) == '=') {
+        vec_push(tokens, new_token(TK_ADD_ASSIGN, p));
+        p += 2;
+        continue;
+      }
       vec_push(tokens, new_token(*p, p));
       p++;
       continue;
@@ -110,17 +145,48 @@ void tokenize(char *p) {
         p += 2;
         continue;
       }
+      if (*(p + 1) == '=') {
+        vec_push(tokens, new_token(TK_SUB_ASSIGN, p));
+        p += 2;
+        continue;
+      }
       vec_push(tokens, new_token(*p, p));
       p++;
       continue;
     }
-    case '*':
-    case '/':
-    case '%':
+    case '*': {
+      if (*(p + 1) == '=') {
+        vec_push(tokens, new_token(TK_MUL_ASSIGN, p));
+        p += 2;
+        continue;
+      }
+      vec_push(tokens, new_token(*p, p));
+      p++;
+      continue;
+    }
+    case '/': {
+      if (*(p + 1) == '=') {
+        vec_push(tokens, new_token(TK_DIV_ASSIGN, p));
+        p += 2;
+        continue;
+      }
+      vec_push(tokens, new_token(*p, p));
+      p++;
+      continue;
+    }
+    case '%': {
+      if (*(p + 1) == '=') {
+        vec_push(tokens, new_token(TK_MOD_ASSIGN, p));
+        p += 2;
+        continue;
+      }
+      vec_push(tokens, new_token(*p, p));
+      p++;
+      continue;
+    }
     case '(':
     case ')':
     case ';':
-    case '^':
     case '?':
     case ':':
     case '~':
