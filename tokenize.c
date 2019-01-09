@@ -40,7 +40,9 @@ void tokenize(char *p) {
         p += 2;
         continue;
       }
-      goto ERROR;
+      vec_push(tokens, new_token(*p, p));
+      p++;
+      continue;
     }
     case '<': {
       if (*(p + 1) == '<') {
@@ -145,9 +147,6 @@ void tokenize(char *p) {
       vec_push(tokens, new_token_num(p, strtol(p, &p, 10)));
       continue;
     }
-
-  ERROR:
-    error("トークナイズできません: %s\n", p);
   }
 
   vec_push(tokens, new_token(TK_EOF, p));

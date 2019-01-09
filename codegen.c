@@ -151,15 +151,24 @@ static void gen_expr(Node *node) {
     printf("  push rax\n");
     return;
   }
-  if (node->ty == '~' && node->lhs == NULL) {
-    // 単項の `~`
+  if (node->ty == '~') {
+    // `~`
     gen_expr(node->rhs);
     printf("  pop rax\n");
     printf("  not rax\n");
     printf("  push rax\n");
     return;
   }
-
+  if (node->ty == '!') {
+    // `!`
+    gen_expr(node->rhs);
+    printf("  pop rax\n");
+    printf("  cmp rax, 0\n");
+    printf("  sete al\n");
+    printf("  movzb rax, al\n");
+    printf("  push rax\n");
+    return;
+  }
   if (node->ty == ND_INC) {
     if (node->lhs == NULL) {
       // 前置の `++`

@@ -178,4 +178,7 @@ try 45 'a = 0; s = 0; for (;;) { a++; if (a >= 10) break; s = s + a; } s;'
 try 30 'a = 0; s = 0; while (a < 10) { a++; if (a % 2) continue; s = s + a; } s;'
 try 30 'a = 0; s = 0; do { a++; if (a % 2) continue; s = s + a; } while (a < 10); s;'
 try 30 'a = 0; s = 0; for (a = 1; a <= 10; a++) { if (a % 2) continue; s = s + a; } s;'
+try 0 '!1;'
+try 0 '!3;'
+try 1 '!0;'
 echo OK
