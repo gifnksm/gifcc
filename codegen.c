@@ -5,6 +5,8 @@
 Vector *break_labels = NULL;
 Vector *continue_labels = NULL;
 
+static void gen_expr(Node *node);
+
 static char *make_label(void) {
   static int count = 0;
   char buf[256];
@@ -19,7 +21,11 @@ static void gen_lval(Node *node) {
     printf("  push rax\n");
     return;
   }
-  error("代入の左辺値が変数ではありません");
+  if (node->ty == '*' && node->lhs == NULL) {
+    gen_expr(node->rhs);
+    return;
+  }
+  error("左辺値が変数ではありません");
 }
 
 static void gen_expr(Node *node) {
@@ -188,6 +194,19 @@ static void gen_expr(Node *node) {
     return;
   }
 
+  if (node->ty == '&' && node->lhs == NULL) {
+    // 単項の `&`
+    gen_lval(node->rhs);
+    return;
+  }
+  if (node->ty == '*' && node->lhs == NULL) {
+    // 単項の `*`
+    gen_expr(node->rhs);
+    printf("  pop rax\n");
+    printf("  mov rax, [rax]");
+    printf("  push rax\n");
+    return;
+  }
   if (node->ty == '+' && node->lhs == NULL) {
     // 単項の `+`
     gen_expr(node->rhs);

@@ -191,6 +191,10 @@ static Vector *argument_expression_list(void) {
 }
 
 static Node *unary_expression(void) {
+  if (consume('&'))
+    return new_node('&', NULL, cast_expression());
+  if (consume('*'))
+    return new_node('*', NULL, cast_expression());
   if (consume('+'))
     return new_node('+', NULL, cast_expression());
   if (consume('-'))

@@ -192,4 +192,8 @@ try 1 'a = 5; a &= 3; a;'
 try 7 'a = 5; a |= 3; a;'
 try 6 'a = 5; a ^= 3; a;'
 try 3 '5, 4, 3;'
+try 1 '&a == &a;'
+try 1 '&a != 0;'
+try 8 'a = 5; b = &a; *b += 3; a;'
+
 echo OK
