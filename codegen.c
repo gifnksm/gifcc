@@ -337,6 +337,9 @@ static void gen_expr(Node *node) {
   case '|':
     printf("  or rax, rdi\n");
     break;
+  case ',':
+    printf("  mov rax, rdi\n");
+    break;
   default:
     error("未知のノード種別です: %d", node->ty);
   }

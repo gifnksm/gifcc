@@ -367,7 +367,16 @@ static Node *assignment_expression(void) {
   return lhs;
 }
 
-static Node *expression(void) { return assignment_expression(); }
+static Node *expression(void) {
+  Node *node = assignment_expression();
+  while (true) {
+    if (consume(','))
+      node = new_node(',', node, assignment_expression());
+    else
+      return node;
+  }
+  return node;
+}
 
 static Node *statement(void) {
   switch (get_token(pos)->ty) {

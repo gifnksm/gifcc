@@ -191,7 +191,8 @@ void tokenize(char *p) {
     case ':':
     case '~':
     case '{':
-    case '}': {
+    case '}':
+    case ',': {
       vec_push(tokens, new_token(*p, p));
       p++;
       continue;

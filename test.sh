@@ -191,4 +191,5 @@ try 4 'a = 32; a >>= 3; a;'
 try 1 'a = 5; a &= 3; a;'
 try 7 'a = 5; a |= 3; a;'
 try 6 'a = 5; a ^= 3; a;'
+try 3 '5, 4, 3;'
 echo OK
