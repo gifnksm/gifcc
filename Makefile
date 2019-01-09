@@ -20,6 +20,9 @@ format:
 	clang-format -i $(SRCS) $(HDRS)
 .PHONY: format
 
+clang-tidy:
+	clang-tidy -fix -fix-errors $(SRCS) -- $(CFLAGS)
+
 target/%.o: %.c | target/
 	$(CC) $(CFLAGS) -c -o $@ $<
 

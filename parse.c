@@ -122,8 +122,9 @@ static Node *new_node_for(Node *init, Node *cond, Node *inc, Node *body) {
 }
 
 static bool consume(int ty) {
-  if (get_token(pos)->ty != ty)
+  if (get_token(pos)->ty != ty) {
     return false;
+  }
   pos++;
   return true;
 }
@@ -155,10 +156,12 @@ void program(void) {
 }
 
 static Node *primary_expression(void) {
-  if (get_token(pos)->ty == TK_NUM)
+  if (get_token(pos)->ty == TK_NUM) {
     return new_node_num(get_token(pos++)->val);
-  if (get_token(pos)->ty == TK_IDENT)
+  }
+  if (get_token(pos)->ty == TK_IDENT) {
     return new_node_ident(get_token(pos++)->name);
+  }
   if (consume('(')) {
     Node *node = expression();
     expect(')');
@@ -199,22 +202,30 @@ static Vector *argument_expression_list(void) {
 }
 
 static Node *unary_expression(void) {
-  if (consume('&'))
+  if (consume('&')) {
     return new_node('&', NULL, cast_expression());
-  if (consume('*'))
+  }
+  if (consume('*')) {
     return new_node('*', NULL, cast_expression());
-  if (consume('+'))
+  }
+  if (consume('+')) {
     return new_node('+', NULL, cast_expression());
-  if (consume('-'))
+  }
+  if (consume('-')) {
     return new_node('-', NULL, cast_expression());
-  if (consume('~'))
+  }
+  if (consume('~')) {
     return new_node('~', NULL, cast_expression());
-  if (consume('!'))
+  }
+  if (consume('!')) {
     return new_node('!', NULL, cast_expression());
-  if (consume(TK_INC))
+  }
+  if (consume(TK_INC)) {
     return new_node(ND_INC, NULL, cast_expression());
-  if (consume(TK_DEC))
+  }
+  if (consume(TK_DEC)) {
     return new_node(ND_DEC, NULL, cast_expression());
+  }
   return postfix_expression();
 }
 
@@ -223,38 +234,41 @@ static Node *cast_expression(void) { return unary_expression(); }
 static Node *multiplicative_expression(void) {
   Node *node = cast_expression();
   while (true) {
-    if (consume('*'))
+    if (consume('*')) {
       node = new_node('*', node, cast_expression());
-    else if (consume('/'))
+    } else if (consume('/')) {
       node = new_node('/', node, cast_expression());
-    else if (consume('%'))
+    } else if (consume('%')) {
       node = new_node('%', node, cast_expression());
-    else
+    } else {
       return node;
+    }
   }
 }
 
 static Node *additive_expression(void) {
   Node *node = multiplicative_expression();
   while (true) {
-    if (consume('+'))
+    if (consume('+')) {
       node = new_node('+', node, multiplicative_expression());
-    else if (consume('-'))
+    } else if (consume('-')) {
       node = new_node('-', node, multiplicative_expression());
-    else
+    } else {
       return node;
+    }
   }
 }
 
 static Node *shift_expression(void) {
   Node *node = additive_expression();
   while (true) {
-    if (consume(TK_LSHIFT))
+    if (consume(TK_LSHIFT)) {
       node = new_node(ND_LSHIFT, node, additive_expression());
-    else if (consume(TK_RSHIFT))
+    } else if (consume(TK_RSHIFT)) {
       node = new_node(ND_RSHIFT, node, additive_expression());
-    else
+    } else {
       return node;
+    }
   }
   return node;
 }
@@ -262,16 +276,17 @@ static Node *shift_expression(void) {
 static Node *relational_expression(void) {
   Node *node = shift_expression();
   while (true) {
-    if (consume('<'))
+    if (consume('<')) {
       node = new_node('<', node, shift_expression());
-    else if (consume('>'))
+    } else if (consume('>')) {
       node = new_node('>', node, shift_expression());
-    else if (consume(TK_LTEQ))
+    } else if (consume(TK_LTEQ)) {
       node = new_node(ND_LTEQ, node, shift_expression());
-    else if (consume(TK_GTEQ))
+    } else if (consume(TK_GTEQ)) {
       node = new_node(ND_GTEQ, node, shift_expression());
-    else
+    } else {
       return node;
+    }
   }
   return node;
 }
@@ -279,22 +294,24 @@ static Node *relational_expression(void) {
 static Node *equality_expression(void) {
   Node *node = relational_expression();
   while (true) {
-    if (consume(TK_EQEQ))
+    if (consume(TK_EQEQ)) {
       node = new_node(ND_EQEQ, node, relational_expression());
-    else if (consume(TK_NOTEQ))
+    } else if (consume(TK_NOTEQ)) {
       node = new_node(ND_NOTEQ, node, relational_expression());
-    else
+    } else {
       return node;
+    }
   }
 }
 
 static Node *and_expression(void) {
   Node *node = equality_expression();
   while (true) {
-    if (consume('&'))
+    if (consume('&')) {
       node = new_node('&', node, equality_expression());
-    else
+    } else {
       return node;
+    }
   }
   return node;
 }
@@ -302,40 +319,44 @@ static Node *and_expression(void) {
 static Node *exclusive_or_expression(void) {
   Node *node = and_expression();
   while (true) {
-    if (consume('^'))
+    if (consume('^')) {
       node = new_node('^', node, and_expression());
-    else
+    } else {
       return node;
+    }
   }
   return node;
 }
 static Node *inclusive_or_expression(void) {
   Node *node = exclusive_or_expression();
   while (true) {
-    if (consume('|'))
+    if (consume('|')) {
       node = new_node('|', node, exclusive_or_expression());
-    else
+    } else {
       return node;
+    }
   }
   return node;
 }
 static Node *logical_and_expression(void) {
   Node *node = inclusive_or_expression();
   while (true) {
-    if (consume(TK_LOGAND))
+    if (consume(TK_LOGAND)) {
       node = new_node(ND_LOGAND, node, inclusive_or_expression());
-    else
+    } else {
       return node;
+    }
   }
   return node;
 }
 static Node *logical_or_expression(void) {
   Node *node = logical_and_expression();
   while (true) {
-    if (consume(TK_LOGOR))
+    if (consume(TK_LOGOR)) {
       node = new_node(ND_LOGOR, node, logical_and_expression());
-    else
+    } else {
       return node;
+    }
   }
   return node;
 }
@@ -352,38 +373,50 @@ static Node *conditional_expression(void) {
 
 static Node *assignment_expression(void) {
   Node *lhs = conditional_expression();
-  if (consume('='))
+  if (consume('=')) {
     return new_node('=', lhs, assignment_expression());
-  if (consume(TK_MUL_ASSIGN))
+  }
+  if (consume(TK_MUL_ASSIGN)) {
     return new_node(ND_MUL_ASSIGN, lhs, assignment_expression());
-  if (consume(TK_DIV_ASSIGN))
+  }
+  if (consume(TK_DIV_ASSIGN)) {
     return new_node(ND_DIV_ASSIGN, lhs, assignment_expression());
-  if (consume(TK_MOD_ASSIGN))
+  }
+  if (consume(TK_MOD_ASSIGN)) {
     return new_node(ND_MOD_ASSIGN, lhs, assignment_expression());
-  if (consume(TK_ADD_ASSIGN))
+  }
+  if (consume(TK_ADD_ASSIGN)) {
     return new_node(ND_ADD_ASSIGN, lhs, assignment_expression());
-  if (consume(TK_SUB_ASSIGN))
+  }
+  if (consume(TK_SUB_ASSIGN)) {
     return new_node(ND_SUB_ASSIGN, lhs, assignment_expression());
-  if (consume(TK_LSHIFT_ASSIGN))
+  }
+  if (consume(TK_LSHIFT_ASSIGN)) {
     return new_node(ND_LSHIFT_ASSIGN, lhs, assignment_expression());
-  if (consume(TK_RSHIFT_ASSIGN))
+  }
+  if (consume(TK_RSHIFT_ASSIGN)) {
     return new_node(ND_RSHIFT_ASSIGN, lhs, assignment_expression());
-  if (consume(TK_AND_ASSIGN))
+  }
+  if (consume(TK_AND_ASSIGN)) {
     return new_node(ND_AND_ASSIGN, lhs, assignment_expression());
-  if (consume(TK_OR_ASSIGN))
+  }
+  if (consume(TK_OR_ASSIGN)) {
     return new_node(ND_OR_ASSIGN, lhs, assignment_expression());
-  if (consume(TK_XOR_ASSIGN))
+  }
+  if (consume(TK_XOR_ASSIGN)) {
     return new_node(ND_XOR_ASSIGN, lhs, assignment_expression());
+  }
   return lhs;
 }
 
 static Node *expression(void) {
   Node *node = assignment_expression();
   while (true) {
-    if (consume(','))
+    if (consume(',')) {
       node = new_node(',', node, assignment_expression());
-    else
+    } else {
       return node;
+    }
   }
   return node;
 }
@@ -397,8 +430,9 @@ static Node *statement(void) {
     expect(')');
     Node *then_stmt = statement();
     Node *else_stmt = &null_stmt;
-    if (consume(TK_ELSE))
+    if (consume(TK_ELSE)) {
       else_stmt = statement();
+    }
     return new_node_if(cond, then_stmt, else_stmt);
   }
   case TK_WHILE: {
@@ -425,14 +459,17 @@ static Node *statement(void) {
     Node *cond = NULL;
     Node *inc = NULL;
     expect('(');
-    if (get_token(pos)->ty != ';')
+    if (get_token(pos)->ty != ';') {
       init = expression();
+    }
     expect(';');
-    if (get_token(pos)->ty != ';')
+    if (get_token(pos)->ty != ';') {
       cond = expression();
+    }
     expect(';');
-    if (get_token(pos)->ty != ')')
+    if (get_token(pos)->ty != ')') {
       inc = expression();
+    }
     expect(')');
     Node *body = statement();
     return new_node_for(init, cond, inc, body);

@@ -5,8 +5,9 @@
 #include <stdlib.h>
 
 static void expect(int line, intptr_t expected, intptr_t actual) {
-  if (expected == actual)
+  if (expected == actual) {
     return;
+  }
 
   fprintf(stderr, "%d: %" PRIXPTR " expected, but got %" PRIXPTR "\n", line,
           expected, actual);
@@ -17,8 +18,9 @@ static void test_vector(void) {
   Vector *vec = new_vector();
   expect(__LINE__, 0, vec->len);
 
-  for (intptr_t i = 0; i < 100; i++)
+  for (intptr_t i = 0; i < 100; i++) {
     vec_push(vec, (void *)i);
+  }
 
   expect(__LINE__, 100, vec->len);
   expect(__LINE__, 0, (intptr_t)vec->data[0]);

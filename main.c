@@ -130,14 +130,16 @@ static void output_token(void) {
 static void dump_node(Node *node, int level);
 static void dump_binop_node(Node *node, char *label, int level) {
   printf("%*s(%s\n", 2 * level, "", label);
-  if (node->lhs != NULL)
+  if (node->lhs != NULL) {
     dump_node(node->lhs, level + 1);
-  else
+  } else {
     printf("%*s(NULL)\n", 2 * (level + 1), "");
-  if (node->rhs != NULL)
+  }
+  if (node->rhs != NULL) {
     dump_node(node->rhs, level + 1);
-  else
+  } else {
     printf("%*s(NULL)\n", 2 * (level + 1), "");
+  }
   printf("%*s)\n", 2 * level, "");
 }
 
@@ -231,8 +233,9 @@ static void dump_node(Node *node, int level) {
     break;
   case ND_COMPOUND:
     printf("%*s(COMPOUND\n", 2 * level, "");
-    for (int i = 0; i < node->stmts->len; i++)
+    for (int i = 0; i < node->stmts->len; i++) {
       dump_node(node->stmts->data[i], level + 1);
+    }
     printf("%*s)\n", 2 * level, "");
     break;
   case ND_IF:
@@ -256,18 +259,21 @@ static void dump_node(Node *node, int level) {
     break;
   case ND_FOR:
     printf("%*s(FOR\n", 2 * level, "");
-    if (node->init != NULL)
+    if (node->init != NULL) {
       dump_node(node->init, level + 1);
-    else
+    } else {
       printf("%*s(NULL)\n", 2 * (level + 1), "");
-    if (node->cond != NULL)
+    }
+    if (node->cond != NULL) {
       dump_node(node->cond, level + 1);
-    else
+    } else {
       printf("%*s(NULL)\n", 2 * (level + 1), "");
-    if (node->inc != NULL)
+    }
+    if (node->inc != NULL) {
       dump_node(node->inc, level + 1);
-    else
+    } else {
       printf("%*s(NULL)\n", 2 * (level + 1), "");
+    }
     dump_node(node->body, level + 1);
     printf("%*s)\n", 2 * level, "");
     break;
@@ -317,8 +323,9 @@ int main(int argc, char **argv) {
   output_t output_mode = OUTPUT_ASM;
   while (true) {
     int c = getopt_long(argc, argv, "", longopts, NULL);
-    if (c == -1)
+    if (c == -1) {
       break;
+    }
 
     switch (c) {
     case OPTVAL_TEST:

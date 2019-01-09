@@ -281,8 +281,9 @@ static void gen_expr(Node *node) {
   }
 
   // 二項演算子
-  if (node->lhs == NULL || node->rhs == NULL)
+  if (node->lhs == NULL || node->rhs == NULL) {
     error("lhs, rhsのいずれかまたは両方が空です: %p %p", node->lhs, node->rhs);
+  }
 
   gen_expr(node->lhs);
   gen_expr(node->rhs);
@@ -380,8 +381,9 @@ static void gen_stmt(Node *stmt) {
     break;
   }
   case ND_COMPOUND: {
-    for (int i = 0; i < stmt->stmts->len; i++)
+    for (int i = 0; i < stmt->stmts->len; i++) {
       gen_stmt(stmt->stmts->data[i]);
+    }
     break;
   }
   case ND_IF: {
@@ -441,8 +443,9 @@ static void gen_stmt(Node *stmt) {
     char *cond_label = make_label();
     char *inc_label = make_label();
     char *end_label = make_label();
-    if (stmt->init != NULL)
+    if (stmt->init != NULL) {
       gen_expr(stmt->init);
+    }
     printf("%s:\n", cond_label);
     if (stmt->cond != NULL) {
       gen_expr(stmt->cond);
@@ -458,21 +461,24 @@ static void gen_stmt(Node *stmt) {
     vec_pop(continue_labels);
 
     printf("%s:\n", inc_label);
-    if (stmt->inc != NULL)
+    if (stmt->inc != NULL) {
       gen_expr(stmt->inc);
+    }
     printf("  jmp %s\n", cond_label);
     printf("%s:\n", end_label);
     break;
   }
   case ND_BREAK: {
-    if (break_labels->len <= 0)
+    if (break_labels->len <= 0) {
       error("ループでもswitch文中でもない箇所にbreakがあります");
+    }
     printf("  jmp %s\n", (char *)break_labels->data[break_labels->len - 1]);
     break;
   }
   case ND_CONTINUE: {
-    if (continue_labels->len <= 0)
+    if (continue_labels->len <= 0) {
       error("ループ中でない箇所にcontinueがあります");
+    }
     printf("  jmp %s\n",
            (char *)continue_labels->data[continue_labels->len - 1]);
     break;
