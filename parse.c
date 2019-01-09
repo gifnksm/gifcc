@@ -1,4 +1,5 @@
 #include "gifcc.h"
+#include <assert.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -127,6 +128,17 @@ static bool consume(int ty) {
   return true;
 }
 
+static void expect(int ty) {
+  if (!consume(ty)) {
+    if (ty <= 255) {
+      error("'%c' がありません: %s", ty, get_token(pos)->input);
+    } else {
+      assert(ty == TK_WHILE);
+      error("'while' がありません: %s", get_token(pos)->input);
+    }
+  }
+}
+
 Node *get_node(int pos) { return code->data[pos]; }
 int get_stack_size(void) { return stack_size; }
 int get_stack_offset(char *name) { return *(int *)map_get(stack_map, name); }
@@ -149,9 +161,7 @@ static Node *primary_expression(void) {
     return new_node_ident(get_token(pos++)->name);
   if (consume('(')) {
     Node *node = expression();
-    if (!consume(')'))
-      error("開きカッコに対応する閉じカッコがありません: %s",
-            get_token(pos)->input);
+    expect(')');
     return node;
   }
   error("数値でも開きカッコでもないトークンです: %s", get_token(pos)->input);
@@ -165,9 +175,7 @@ static Node *postfix_expression(void) {
       if (get_token(pos)->ty != ')') {
         argument = argument_expression_list();
       }
-      if (!consume(')'))
-        error("開きカッコに対応する閇じカッコがありません: %s",
-              get_token(pos)->input);
+      expect(')');
       node = new_node_call(node, argument);
     } else if (consume(TK_INC)) {
       return new_node(ND_INC, node, NULL);
@@ -324,7 +332,6 @@ static Node *logical_and_expression(void) {
 static Node *logical_or_expression(void) {
   Node *node = logical_and_expression();
   while (true) {
-
     if (consume(TK_LOGOR))
       node = new_node(ND_LOGOR, node, logical_and_expression());
     else
@@ -336,8 +343,7 @@ static Node *conditional_expression(void) {
   Node *cond = logical_or_expression();
   if (consume('?')) {
     Node *then_expr = expression();
-    if (!consume(':'))
-      error("`?` に対応する `:` がありません: %s", get_token(pos)->input);
+    expect(':');
     Node *else_expr = conditional_expression();
     return new_node_cond(cond, then_expr, else_expr);
   }
@@ -386,11 +392,9 @@ static Node *statement(void) {
   switch (get_token(pos)->ty) {
   case TK_IF: {
     pos++;
-    if (!consume('('))
-      error("`(` がありません: %s", get_token(pos)->input);
+    expect('(');
     Node *cond = expression();
-    if (!consume(')'))
-      error("`)` がありません: %s", get_token(pos)->input);
+    expect(')');
     Node *then_stmt = statement();
     Node *else_stmt = &null_stmt;
     if (consume(TK_ELSE))
@@ -399,26 +403,20 @@ static Node *statement(void) {
   }
   case TK_WHILE: {
     pos++;
-    if (!consume('('))
-      error("`(` がありません: %s", get_token(pos)->input);
+    expect('(');
     Node *cond = expression();
-    if (!consume(')'))
-      error("`)` がありません: %s", get_token(pos)->input);
+    expect(')');
     Node *body = statement();
     return new_node_while(cond, body);
   }
   case TK_DO: {
     pos++;
     Node *body = statement();
-    if (!consume(TK_WHILE))
-      error("`while` がありません: %s", get_token(pos)->input);
-    if (!consume('('))
-      error("`(` がありません: %s", get_token(pos)->input);
+    expect(TK_WHILE);
+    expect('(');
     Node *cond = expression();
-    if (!consume(')'))
-      error("`)` がありません: %s", get_token(pos)->input);
-    if (!consume(';'))
-      error("`;` がありません: %s", get_token(pos)->input);
+    expect(')');
+    expect(';');
     return new_node_do_while(cond, body);
   }
   case TK_FOR: {
@@ -426,33 +424,27 @@ static Node *statement(void) {
     Node *init = NULL;
     Node *cond = NULL;
     Node *inc = NULL;
-    if (!consume('('))
-      error("`(` がありません: %s", get_token(pos)->input);
+    expect('(');
     if (get_token(pos)->ty != ';')
       init = expression();
-    if (!consume(';'))
-      error("`;` がありません: %s", get_token(pos)->input);
+    expect(';');
     if (get_token(pos)->ty != ';')
       cond = expression();
-    if (!consume(';'))
-      error("`;` がありません: %s", get_token(pos)->input);
+    expect(';');
     if (get_token(pos)->ty != ')')
       inc = expression();
-    if (!consume(')'))
-      error("`)` がありません: %s", get_token(pos)->input);
+    expect(')');
     Node *body = statement();
     return new_node_for(init, cond, inc, body);
   }
   case TK_BREAK: {
     pos++;
-    if (!consume(';'))
-      error("`;` がありません: %s", get_token(pos)->input);
+    expect(';');
     return new_node(ND_BREAK, NULL, NULL);
   }
   case TK_CONTINUE: {
     pos++;
-    if (!consume(';'))
-      error("`;` がありません: %s", get_token(pos)->input);
+    expect(';');
     return new_node(ND_CONTINUE, NULL, NULL);
   }
   case '{': {
@@ -464,17 +456,14 @@ static Node *statement(void) {
   }
   default: {
     Node *expr = expression();
-    if (!consume(';'))
-      error("`;` がありません: %s", get_token(pos)->input);
+    expect(';');
     return new_node_expr(expr);
   }
   }
 }
 
 static Node *compound_statement(void) {
-  if (!consume('{')) {
-    error("`{` がありません: %s", get_token(pos)->input);
-  }
+  expect('{');
 
   Node *node = new_node(ND_COMPOUND, NULL, NULL);
   node->stmts = new_vector();
