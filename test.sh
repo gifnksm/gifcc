@@ -119,8 +119,8 @@ INPUT='xy' try 10 '
   putchar(10);
 '
 try 8 '1 << 2 << 1;'
-try 8 '1 << 2 << 1;'
-try 0 '1 >> 3;'
+# try 8 '1 << 2 << 1;'
+# try 0 '1 >> 3;'
 try 255 '0 - 1 >> 3;'
 try 1 '3 < 5;'
 try 0 '3 > 5;'
@@ -195,5 +195,49 @@ try 3 '5, 4, 3;'
 try 1 '&a == &a;'
 try 1 '&a != 0;'
 try 8 'a = 5; b = &a; *b += 3; a;'
+try 3 '
+switch (3) {
+case 0: exit(0);
+case 3: exit(3);
+default: exit(255);
+}
+'
+try 0 '
+switch (0) {
+case 0: exit(0);
+case 3: exit(3);
+default: exit(255);
+}
+'
+try 255 '
+switch (8) {
+case 0: exit(0);
+case 3: exit(3);
+default: exit(255);
+}
+'
+try 5 '
+c = 0;
+for (i = 0; i < 5; i++) {
+  switch (i) {
+    case 3:
+      c += 1;
+      if (i != 3) abort();
+      break;
+    case 0:
+    case 1:
+      c += 1;
+      if (i != 0 && i != 1) abort();
+      break;
+    case 5:
+      abort();
+    default:
+      c += 1;
+      if (i != 2 && i != 4) abort();
+      break;
+  }
+}
+exit(c);
+'
 
 echo OK

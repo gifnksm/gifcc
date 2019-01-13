@@ -7,7 +7,7 @@ Vector *continue_labels = NULL;
 
 static void gen_expr(Node *node);
 
-static char *make_label(void) {
+char *make_label(void) {
   static int count = 0;
   char buf[256];
   sprintf(buf, ".L%d", count++);
@@ -398,6 +398,35 @@ static void gen_stmt(Node *stmt) {
     printf("%s:\n", else_label);
     gen_stmt(stmt->else_node);
     printf("%s:\n", end_label);
+    break;
+  }
+  case ND_SWITCH: {
+    char *end_label = make_label();
+    gen_expr(stmt->cond);
+    for (int i = 0; i < stmt->cases->len; i++) {
+      Node *case_node = stmt->cases->data[i];
+      gen_expr(case_node->expr);
+      printf("  pop rax\n");
+      printf("  pop rdi\n");
+      printf("  cmp rax, rdi\n");
+      printf("  je %s\n", case_node->label);
+      printf("  push rdi\n");
+    }
+    printf("  pop rdi\n");
+    if (stmt->default_case) {
+      printf("  jmp %s\n", stmt->default_case->label);
+    } else {
+      printf("  jmp %s\n", end_label);
+    }
+    vec_push(break_labels, end_label);
+    gen_stmt(stmt->body);
+    vec_pop(break_labels);
+    printf("%s:", end_label);
+    break;
+  }
+  case ND_CASE:
+  case ND_DEFAULT: {
+    printf("%s:\n", stmt->label);
     break;
   }
   case ND_WHILE: {

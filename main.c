@@ -102,6 +102,15 @@ static void output_token(void) {
     case TK_ELSE:
       printf("%03d [ELSE]\n", pos);
       break;
+    case TK_SWITCH:
+      printf("%03d [SWITCH]\n", pos);
+      break;
+    case TK_CASE:
+      printf("%03d [CASE]\n", pos);
+      break;
+    case TK_DEFAULT:
+      printf("%03d [DEFAULT]\n", pos);
+      break;
     case TK_WHILE:
       printf("%03d [WHILE]\n", pos);
       break;
@@ -251,6 +260,20 @@ static void dump_node(Node *node, int level) {
     dump_node(node->then_node, level + 1);
     dump_node(node->else_node, level + 1);
     printf("%*s)\n", 2 * level, "");
+    break;
+  case ND_SWITCH:
+    printf("%*s(SWITCH\n", 2 * level, "");
+    dump_node(node->cond, level + 1);
+    dump_node(node->body, level + 1);
+    printf("%*s)\n", 2 * level, "");
+    break;
+  case ND_CASE:
+    printf("%*s(CASE\n", 2 * level, "");
+    dump_node(node->expr, level + 1);
+    printf("%*s)\n", 2 * level, "");
+    break;
+  case ND_DEFAULT:
+    printf("%*s(DEFAULT)\n", 2 * level, "");
     break;
   case ND_WHILE:
     printf("%*s(WHILE\n", 2 * level, "");

@@ -37,6 +37,9 @@ enum {
   TK_XOR_ASSIGN,    // `^=`
   TK_IF,            // `if`
   TK_ELSE,          // `else`
+  TK_SWITCH,        // `switch`
+  TK_CASE,          // `case`
+  TK_DEFAULT,       // `default`
   TK_WHILE,         // `while`
   TK_DO,            // `do`
   TK_FOR,           // `for`
@@ -82,6 +85,9 @@ enum {
   ND_EXPR,
   ND_COMPOUND,
   ND_IF,
+  ND_SWITCH,
+  ND_CASE,
+  ND_DEFAULT,
   ND_WHILE,
   ND_DO_WHILE,
   ND_FOR,
@@ -94,8 +100,9 @@ typedef struct Node {
   int ty;           // ノードの型
   struct Node *lhs; // 左辺
   struct Node *rhs; // 右辺
-  int val;          // tyがND_NUMの場合のみ使う
-  char *name;       // tyがND_IDENTの場合のみ使う
+
+  int val;    // tyがND_NUMの場合のみ使う
+  char *name; // tyがND_IDENT, ND_LABELの場合のみ使う
 
   // ND_CALL: <callee>(<argument>...)
   struct Node *callee;
@@ -103,9 +110,10 @@ typedef struct Node {
 
   // ND_COND:     <cond> ? <then_node> : <else_node>
   // ND_IF:       if (<cond>) <then_node> else <else_node>
+  // ND_SWITCH:   switch (<cond>) <body>
   // ND_WHILE:    while (<cond>) <body>
   // ND_DO_WHILE: do <body> while(<cond>);
-  // ND_FOR:    for (<init>; <cond>; <inc>) <body>
+  // ND_FOR:      for (<init>; <cond>; <inc>) <body>
   struct Node *init;
   struct Node *cond;
   struct Node *inc;
@@ -113,7 +121,14 @@ typedef struct Node {
   struct Node *else_node;
   struct Node *body;
 
-  struct Node *expr; // tyがND_EXPRの場合のみ使う
+  // ND_SWITCH
+  Vector *cases;
+  struct Node *default_case;
+
+  // ND_CASE, ND_DEFAULT
+  char *label;
+
+  struct Node *expr; // tyがND_EXPR, ND_CASEの場合のみ使う
 
   Vector *stmts; // tyがND_COMPOUNDの場合のみ使う
 } Node;
@@ -139,4 +154,5 @@ void program(void);
 int get_stack_size(void);
 int get_stack_offset(char *name);
 
+char *make_label(void);
 void gen(Node *node);

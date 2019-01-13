@@ -33,6 +33,7 @@ static Map *stack_map;
 static Node null_stmt = {
     .ty = ND_NULL,
 };
+static Vector *switches = NULL;
 
 static Node *new_node(int ty, Node *lhs, Node *rhs) {
   Node *node = malloc(sizeof(Node));
@@ -95,6 +96,31 @@ static Node *new_node_if(Node *cond, Node *then_node, Node *else_node) {
   return node;
 }
 
+static Node *new_node_switch(Node *cond, Node *body) {
+  Node *node = malloc(sizeof(Node));
+  node->ty = ND_SWITCH;
+  node->cond = cond;
+  node->body = body;
+  node->cases = new_vector();
+  node->default_case = NULL;
+  return node;
+}
+
+static Node *new_node_case(Node *expr) {
+  Node *node = malloc(sizeof(Node));
+  node->ty = ND_CASE;
+  node->expr = expr;
+  node->label = make_label();
+  return node;
+}
+
+static Node *new_node_default(void) {
+  Node *node = malloc(sizeof(Node));
+  node->ty = ND_DEFAULT;
+  node->label = make_label();
+  return node;
+}
+
 static Node *new_node_while(Node *cond, Node *body) {
   Node *node = malloc(sizeof(Node));
   node->ty = ND_WHILE;
@@ -147,6 +173,7 @@ int get_stack_offset(char *name) { return *(int *)map_get(stack_map, name); }
 void program(void) {
   code = new_vector();
   stack_map = new_map();
+  switches = new_vector();
 
   while (get_token(pos)->ty != TK_EOF) {
     vec_push(code, statement());
@@ -421,6 +448,8 @@ static Node *expression(void) {
   return node;
 }
 
+static Node *constant_expression(void) { return conditional_expression(); }
+
 static Node *statement(void) {
   switch (get_token(pos)->ty) {
   case TK_IF: {
@@ -434,6 +463,40 @@ static Node *statement(void) {
       else_stmt = statement();
     }
     return new_node_if(cond, then_stmt, else_stmt);
+  }
+  case TK_SWITCH: {
+    pos++;
+    expect('(');
+    Node *cond = expression();
+    expect(')');
+    Node *node = new_node_switch(cond, NULL);
+    vec_push(switches, node);
+    node->body = statement();
+    vec_pop(switches);
+    return node;
+  }
+  case TK_CASE: {
+    pos++;
+    Node *expr = constant_expression();
+    expect(':');
+    Node *node = new_node_case(expr);
+    if (switches->len <= 0) {
+      error("switch文中でない箇所にcase文があります");
+    }
+    Node *switch_node = switches->data[switches->len - 1];
+    vec_push(switch_node->cases, node);
+    return node;
+  }
+  case TK_DEFAULT: {
+    pos++;
+    expect(':');
+    Node *node = new_node_default();
+    if (switches->len <= 0) {
+      error("switch文中でない箇所にcase文があります");
+    }
+    Node *switch_node = switches->data[switches->len - 1];
+    switch_node->default_case = node;
+    return node;
   }
   case TK_WHILE: {
     pos++;

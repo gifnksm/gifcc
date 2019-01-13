@@ -240,6 +240,12 @@ static Token *new_token_ident(char *input, char *name) {
     token->ty = TK_IF;
   } else if (strcmp(name, "else") == 0) {
     token->ty = TK_ELSE;
+  } else if (strcmp(name, "switch") == 0) {
+    token->ty = TK_SWITCH;
+  } else if (strcmp(name, "case") == 0) {
+    token->ty = TK_CASE;
+  } else if (strcmp(name, "default") == 0) {
+    token->ty = TK_DEFAULT;
   } else if (strcmp(name, "while") == 0) {
     token->ty = TK_WHILE;
   } else if (strcmp(name, "do") == 0) {
