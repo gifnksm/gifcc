@@ -224,7 +224,14 @@ static void dump_node(Node *node, int level) {
     dump_binop_node(node, "[^=]", level);
     break;
   case ND_CALL:
-    dump_binop_node(node, "CALL", level);
+    printf("%*s(CALL\n", 2 * level, "");
+    dump_node(node->callee, level + 1);
+    if (node->argument != NULL) {
+      for (int i = 0; i < node->argument->len; i++) {
+        dump_node(node->argument->data[i], level + 1);
+      }
+    }
+    printf("%*s)\n", 2 * level, "");
     break;
   case ND_EXPR:
     printf("%*s(EXPR\n", 2 * level, "");
