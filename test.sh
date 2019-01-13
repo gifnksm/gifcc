@@ -119,8 +119,8 @@ INPUT='xy' try 10 '
   putchar(10);
 '
 try 8 '1 << 2 << 1;'
-# try 8 '1 << 2 << 1;'
-# try 0 '1 >> 3;'
+# # try 8 '1 << 2 << 1;'
+# # try 0 '1 >> 3;'
 try 255 '0 - 1 >> 3;'
 try 1 '3 < 5;'
 try 0 '3 > 5;'
@@ -238,6 +238,16 @@ for (i = 0; i < 5; i++) {
   }
 }
 exit(c);
+'
+try 7 '
+i = 3;
+s = 0;
+goto INIT;
+for (i = 0; i < 5; i++) {
+  INIT:
+    s += i;
+}
+exit(s);
 '
 
 echo OK

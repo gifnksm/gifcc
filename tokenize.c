@@ -252,6 +252,8 @@ static Token *new_token_ident(char *input, char *name) {
     token->ty = TK_DO;
   } else if (strcmp(name, "for") == 0) {
     token->ty = TK_FOR;
+  } else if (strcmp(name, "goto") == 0) {
+    token->ty = TK_GOTO;
   } else if (strcmp(name, "break") == 0) {
     token->ty = TK_BREAK;
   } else if (strcmp(name, "continue") == 0) {

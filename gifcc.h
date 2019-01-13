@@ -43,6 +43,7 @@ enum {
   TK_WHILE,         // `while`
   TK_DO,            // `do`
   TK_FOR,           // `for`
+  TK_GOTO,          // `goto`
   TK_BREAK,         // `break`
   TK_CONTINUE,      // `continue`
   TK_EOF,           // 入力の終わりを表すトークン
@@ -88,9 +89,11 @@ enum {
   ND_SWITCH,
   ND_CASE,
   ND_DEFAULT,
+  ND_LABEL,
   ND_WHILE,
   ND_DO_WHILE,
   ND_FOR,
+  ND_GOTO,
   ND_BREAK,
   ND_CONTINUE,
   ND_NULL,
@@ -102,7 +105,7 @@ typedef struct Node {
   struct Node *rhs; // 右辺
 
   int val;    // tyがND_NUMの場合のみ使う
-  char *name; // tyがND_IDENT, ND_LABELの場合のみ使う
+  char *name; // tyがND_IDENT, ND_LABEL, ND_GOTOの場合のみ使う
 
   // ND_CALL: <callee>(<argument>...)
   struct Node *callee;
@@ -125,7 +128,7 @@ typedef struct Node {
   Vector *cases;
   struct Node *default_case;
 
-  // ND_CASE, ND_DEFAULT
+  // ND_CASE, ND_DEFAULT, ND_LABEL
   char *label;
 
   struct Node *expr; // tyがND_EXPR, ND_CASEの場合のみ使う
@@ -153,6 +156,7 @@ Node *get_node(int pos);
 void program(void);
 int get_stack_size(void);
 int get_stack_offset(char *name);
+char *get_label(char *name);
 
 char *make_label(void);
 void gen(Node *node);

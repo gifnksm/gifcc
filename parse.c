@@ -34,6 +34,7 @@ static Node null_stmt = {
     .ty = ND_NULL,
 };
 static Vector *switches = NULL;
+static Map *label_map;
 
 static Node *new_node(int ty, Node *lhs, Node *rhs) {
   Node *node = malloc(sizeof(Node));
@@ -121,6 +122,15 @@ static Node *new_node_default(void) {
   return node;
 }
 
+static Node *new_node_label(char *name) {
+  Node *node = malloc(sizeof(Node));
+  node->ty = ND_LABEL;
+  node->name = name;
+  node->label = make_label();
+  map_put(label_map, node->name, node->label);
+  return node;
+}
+
 static Node *new_node_while(Node *cond, Node *body) {
   Node *node = malloc(sizeof(Node));
   node->ty = ND_WHILE;
@@ -147,6 +157,13 @@ static Node *new_node_for(Node *init, Node *cond, Node *inc, Node *body) {
   return node;
 }
 
+static Node *new_node_goto(char *name) {
+  Node *node = malloc(sizeof(Node));
+  node->ty = ND_GOTO;
+  node->name = name;
+  return node;
+}
+
 static bool consume(int ty) {
   if (get_token(pos)->ty != ty) {
     return false;
@@ -155,7 +172,8 @@ static bool consume(int ty) {
   return true;
 }
 
-static void expect(int ty) {
+static Token *expect(int ty) {
+  Token *token = get_token(pos);
   if (!consume(ty)) {
     if (ty <= 255) {
       error("'%c' がありません: %s", ty, get_token(pos)->input);
@@ -164,16 +182,19 @@ static void expect(int ty) {
       error("'while' がありません: %s", get_token(pos)->input);
     }
   }
+  return token;
 }
 
 Node *get_node(int pos) { return code->data[pos]; }
 int get_stack_size(void) { return stack_size; }
 int get_stack_offset(char *name) { return *(int *)map_get(stack_map, name); }
+char *get_label(char *name) { return map_get(label_map, name); }
 
 void program(void) {
   code = new_vector();
   stack_map = new_map();
   switches = new_vector();
+  label_map = new_map();
 
   while (get_token(pos)->ty != TK_EOF) {
     vec_push(code, statement());
@@ -537,6 +558,12 @@ static Node *statement(void) {
     Node *body = statement();
     return new_node_for(init, cond, inc, body);
   }
+  case TK_GOTO: {
+    pos++;
+    char *name = expect(TK_IDENT)->name;
+    expect(';');
+    return new_node_goto(name);
+  }
   case TK_BREAK: {
     pos++;
     expect(';');
@@ -553,6 +580,14 @@ static Node *statement(void) {
   case ';': {
     pos++;
     return &null_stmt;
+  }
+  case TK_IDENT: {
+    if (get_token(pos + 1)->ty == ':') {
+      Node *node = new_node_label(get_token(pos)->name);
+      pos += 2;
+      return node;
+    }
+    // fall through
   }
   default: {
     Node *expr = expression();

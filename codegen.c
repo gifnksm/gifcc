@@ -425,7 +425,8 @@ static void gen_stmt(Node *stmt) {
     break;
   }
   case ND_CASE:
-  case ND_DEFAULT: {
+  case ND_DEFAULT:
+  case ND_LABEL: {
     printf("%s:\n", stmt->label);
     break;
   }
@@ -495,6 +496,14 @@ static void gen_stmt(Node *stmt) {
     }
     printf("  jmp %s\n", cond_label);
     printf("%s:\n", end_label);
+    break;
+  }
+  case ND_GOTO: {
+    char *label = get_label(stmt->name);
+    if (label == NULL) {
+      error("未知のラベルへのgotoです: %s", stmt->name);
+    }
+    printf("  jmp %s\n", label);
     break;
   }
   case ND_BREAK: {

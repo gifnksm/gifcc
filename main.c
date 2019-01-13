@@ -120,6 +120,9 @@ static void output_token(void) {
     case TK_FOR:
       printf("%03d [FOR]\n", pos);
       break;
+    case TK_GOTO:
+      printf("%03d [GOTO]\n", pos);
+      break;
     case TK_BREAK:
       printf("%03d [BREAK]\n", pos);
       break;
@@ -275,6 +278,9 @@ static void dump_node(Node *node, int level) {
   case ND_DEFAULT:
     printf("%*s(DEFAULT)\n", 2 * level, "");
     break;
+  case ND_LABEL:
+    printf("%*s(LABEL %s)\n", 2 * level, "", node->name);
+    break;
   case ND_WHILE:
     printf("%*s(WHILE\n", 2 * level, "");
     dump_node(node->cond, level + 1);
@@ -306,6 +312,9 @@ static void dump_node(Node *node, int level) {
     }
     dump_node(node->body, level + 1);
     printf("%*s)\n", 2 * level, "");
+    break;
+  case ND_GOTO:
+    printf("%*s(GOTO %s)\n", 2 * level, "", node->name);
     break;
   case ND_BREAK:
     printf("%*s(BREAK)\n", 2 * level, "");
