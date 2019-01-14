@@ -1,4 +1,5 @@
 #include "gifcc.h"
+#include <assert.h>
 #include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
@@ -12,6 +13,10 @@ static Token *new_token_ident(char *input, char *name);
 static Token *punctuator(char **input);
 static Token *identifier_or_keyword(char **input);
 static Token *constant(char **input);
+static Token *integer_constant(char **input);
+static Token *hexadecimal_constant(char **input);
+static Token *octal_constant(char **input);
+static Token *decimal_constant(char **input);
 
 // pos番目のtokenを取得する
 Token *get_token(int pos) { return tokens->data[pos]; }
@@ -294,9 +299,102 @@ static Token *constant(char **input) {
   Token *token = NULL;
   char *p = *input;
 
-  if (isdigit(*p)) {
-    token = new_token_num(p, strtol(p, &p, 10));
+  if ((token = integer_constant(&p)) != NULL) {
+    goto SKIP;
   }
+
+SKIP:
+  *input = p;
+  return token;
+}
+
+static Token *integer_constant(char **input) {
+  Token *token = NULL;
+  char *p = *input;
+  if ((token = hexadecimal_constant(&p)) != NULL) {
+    goto SKIP;
+  }
+  if ((token = octal_constant(&p)) != NULL) {
+    goto SKIP;
+  }
+  if ((token = decimal_constant(&p)) != NULL) {
+    goto SKIP;
+  }
+
+SKIP:
+  *input = p;
+  return token;
+}
+
+static Token *hexadecimal_constant(char **input) {
+  Token *token = NULL;
+  char *p = *input;
+  if ((*p != '0') || ((*(p + 1) != 'x') && (*(p + 1)) != 'X')) {
+    return NULL;
+  }
+  p += 2;
+
+  int val = 0;
+
+  char *q = p;
+  for (; isxdigit(*q); q++) {
+    val *= 0x10;
+    if ('0' <= *q && *q <= '9') {
+      val += *q - '0';
+      continue;
+    }
+    if ('a' <= *q && *q <= 'f') {
+      val += (*q - 'a') + 0xa;
+      continue;
+    }
+    assert('A' <= *q && *q <= 'F');
+    val += (*q - 'A') + 0xa;
+  }
+
+  token = new_token_num(p, val);
+  p = q;
+
+  *input = p;
+  return token;
+}
+
+static Token *octal_constant(char **input) {
+  Token *token = NULL;
+  char *p = *input;
+  if (*p != '0') {
+    return NULL;
+  }
+  p += 1;
+
+  int val = 0;
+
+  char *q = p;
+  for (; '0' <= *q && *q <= '7'; q++) {
+    val = val * 010 + (*q - '0');
+  }
+
+  token = new_token_num(p, val);
+  p = q;
+
+  *input = p;
+  return token;
+}
+
+static Token *decimal_constant(char **input) {
+  Token *token = NULL;
+  char *p = *input;
+  if (!isdigit(*p)) {
+    return NULL;
+  }
+  int val = 0;
+
+  char *q = p;
+  for (; isdigit(*q); q++) {
+    val = val * 10 + (*q - '0');
+  }
+
+  token = new_token_num(p, val);
+  p = q;
 
   *input = p;
   return token;

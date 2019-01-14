@@ -249,5 +249,11 @@ for (i = 0; i < 5; i++) {
 }
 exit(s);
 '
+try 255 '0xff;'
+try 16 '0x10;'
+try 255 '0377;'
+try 8 '010;'
+try 255 '255;'
+try 10 '10;'
 
 echo OK
