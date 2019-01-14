@@ -9,6 +9,9 @@ static Vector *tokens = NULL;
 static Token *new_token(int ty, char *input);
 static Token *new_token_num(char *input, int val);
 static Token *new_token_ident(char *input, char *name);
+static Token *punctuator(char **input);
+static Token *identifier_or_keyword(char **input);
+static Token *constant(char **input);
 
 // pos番目のtokenを取得する
 Token *get_token(int pos) { return tokens->data[pos]; }
@@ -23,197 +26,18 @@ void tokenize(char *p) {
       continue;
     }
 
-    switch (*p) {
-    case '=': {
-      if (*(p + 1) == '=') {
-        vec_push(tokens, new_token(TK_EQEQ, p));
-        p += 2;
-        continue;
-      }
-      vec_push(tokens, new_token(*p, p));
-      p++;
-      continue;
+    Token *token = NULL;
+    if ((token = punctuator(&p)) != NULL) {
+      goto SKIP;
     }
-    case '!': {
-      if (*(p + 1) == '=') {
-        vec_push(tokens, new_token(TK_NOTEQ, p));
-        p += 2;
-        continue;
-      }
-      vec_push(tokens, new_token(*p, p));
-      p++;
-      continue;
+    if ((token = identifier_or_keyword(&p)) != NULL) {
+      goto SKIP;
     }
-    case '<': {
-      if (*(p + 1) == '<') {
-        if (*(p + 2) == '=') {
-          vec_push(tokens, new_token(TK_LSHIFT_ASSIGN, p));
-          p += 3;
-          continue;
-        }
-        vec_push(tokens, new_token(TK_LSHIFT, p));
-        p += 2;
-        continue;
-      }
-      if (*(p + 1) == '=') {
-        vec_push(tokens, new_token(TK_LTEQ, p));
-        p += 2;
-        continue;
-      }
-      vec_push(tokens, new_token(*p, p));
-      p++;
-      continue;
+    if ((token = constant(&p)) != NULL) {
+      goto SKIP;
     }
-    case '>': {
-      if (*(p + 1) == '>') {
-        if (*(p + 2) == '=') {
-          vec_push(tokens, new_token(TK_RSHIFT_ASSIGN, p));
-          p += 3;
-          continue;
-        }
-        vec_push(tokens, new_token(TK_RSHIFT, p));
-        p += 2;
-        continue;
-      }
-      if (*(p + 1) == '=') {
-        vec_push(tokens, new_token(TK_GTEQ, p));
-        p += 2;
-        continue;
-      }
-      vec_push(tokens, new_token(*p, p));
-      p++;
-      continue;
-    }
-    case '&': {
-      if (*(p + 1) == '&') {
-        vec_push(tokens, new_token(TK_LOGAND, p));
-        p += 2;
-        continue;
-      }
-      if (*(p + 1) == '=') {
-        vec_push(tokens, new_token(TK_AND_ASSIGN, p));
-        p += 2;
-        continue;
-      }
-      vec_push(tokens, new_token(*p, p));
-      p++;
-      continue;
-    }
-    case '|': {
-      if (*(p + 1) == '|') {
-        vec_push(tokens, new_token(TK_LOGOR, p));
-        p += 2;
-        continue;
-      }
-      if (*(p + 1) == '=') {
-        vec_push(tokens, new_token(TK_OR_ASSIGN, p));
-        p += 2;
-        continue;
-      }
-      vec_push(tokens, new_token(*p, p));
-      p++;
-      continue;
-    }
-    case '^': {
-      if (*(p + 1) == '=') {
-        vec_push(tokens, new_token(TK_XOR_ASSIGN, p));
-        p += 2;
-        continue;
-      }
-      vec_push(tokens, new_token(*p, p));
-      p++;
-      continue;
-    }
-    case '+': {
-      if (*(p + 1) == '+') {
-        vec_push(tokens, new_token(TK_INC, p));
-        p += 2;
-        continue;
-      }
-      if (*(p + 1) == '=') {
-        vec_push(tokens, new_token(TK_ADD_ASSIGN, p));
-        p += 2;
-        continue;
-      }
-      vec_push(tokens, new_token(*p, p));
-      p++;
-      continue;
-    }
-    case '-': {
-      if (*(p + 1) == '-') {
-        vec_push(tokens, new_token(TK_DEC, p));
-        p += 2;
-        continue;
-      }
-      if (*(p + 1) == '=') {
-        vec_push(tokens, new_token(TK_SUB_ASSIGN, p));
-        p += 2;
-        continue;
-      }
-      vec_push(tokens, new_token(*p, p));
-      p++;
-      continue;
-    }
-    case '*': {
-      if (*(p + 1) == '=') {
-        vec_push(tokens, new_token(TK_MUL_ASSIGN, p));
-        p += 2;
-        continue;
-      }
-      vec_push(tokens, new_token(*p, p));
-      p++;
-      continue;
-    }
-    case '/': {
-      if (*(p + 1) == '=') {
-        vec_push(tokens, new_token(TK_DIV_ASSIGN, p));
-        p += 2;
-        continue;
-      }
-      vec_push(tokens, new_token(*p, p));
-      p++;
-      continue;
-    }
-    case '%': {
-      if (*(p + 1) == '=') {
-        vec_push(tokens, new_token(TK_MOD_ASSIGN, p));
-        p += 2;
-        continue;
-      }
-      vec_push(tokens, new_token(*p, p));
-      p++;
-      continue;
-    }
-    case '(':
-    case ')':
-    case ';':
-    case '?':
-    case ':':
-    case '~':
-    case '{':
-    case '}':
-    case ',': {
-      vec_push(tokens, new_token(*p, p));
-      p++;
-      continue;
-    }
-    }
-
-    if (('a' <= *p && *p <= 'z') || ('A' <= *p && *p <= 'Z') || *p == '_') {
-      char *q = p;
-      while (('a' <= *q && *q <= 'z') || ('A' <= *q && *q <= 'Z') ||
-             *q == '_' || ('0' <= *q && *q <= '9')) {
-        q++;
-      }
-      vec_push(tokens, new_token_ident(p, strndup(p, q - p)));
-      p = q;
-      continue;
-    }
-
-    if (isdigit(*p)) {
-      vec_push(tokens, new_token_num(p, strtol(p, &p, 10)));
-      continue;
-    }
+  SKIP:
+    vec_push(tokens, token);
   }
 
   vec_push(tokens, new_token(TK_EOF, p));
@@ -263,5 +87,217 @@ static Token *new_token_ident(char *input, char *name) {
   }
   token->input = input;
   token->name = name;
+  return token;
+}
+
+static Token *punctuator(char **input) {
+  Token *token = NULL;
+  char *p = *input;
+  switch (*p) {
+  case '=': {
+    if (*(p + 1) == '=') {
+      token = new_token(TK_EQEQ, p);
+      p += 2;
+      break;
+    }
+    token = new_token(*p, p);
+    p++;
+    break;
+  }
+  case '!': {
+    if (*(p + 1) == '=') {
+      token = new_token(TK_NOTEQ, p);
+      p += 2;
+      break;
+    }
+    token = new_token(*p, p);
+    p++;
+    break;
+  }
+  case '<': {
+    if (*(p + 1) == '<') {
+      if (*(p + 2) == '=') {
+        token = new_token(TK_LSHIFT_ASSIGN, p);
+        p += 3;
+        break;
+      }
+      token = new_token(TK_LSHIFT, p);
+      p += 2;
+      break;
+    }
+    if (*(p + 1) == '=') {
+      token = new_token(TK_LTEQ, p);
+      p += 2;
+      break;
+    }
+    token = new_token(*p, p);
+    p++;
+    break;
+  }
+  case '>': {
+    if (*(p + 1) == '>') {
+      if (*(p + 2) == '=') {
+        token = new_token(TK_RSHIFT_ASSIGN, p);
+        p += 3;
+        break;
+      }
+      token = new_token(TK_RSHIFT, p);
+      p += 2;
+      break;
+    }
+    if (*(p + 1) == '=') {
+      token = new_token(TK_GTEQ, p);
+      p += 2;
+      break;
+    }
+    token = new_token(*p, p);
+    p++;
+    break;
+  }
+  case '&': {
+    if (*(p + 1) == '&') {
+      token = new_token(TK_LOGAND, p);
+      p += 2;
+      break;
+    }
+    if (*(p + 1) == '=') {
+      token = new_token(TK_AND_ASSIGN, p);
+      p += 2;
+      break;
+    }
+    token = new_token(*p, p);
+    p++;
+    break;
+  }
+  case '|': {
+    if (*(p + 1) == '|') {
+      token = new_token(TK_LOGOR, p);
+      p += 2;
+      break;
+    }
+    if (*(p + 1) == '=') {
+      token = new_token(TK_OR_ASSIGN, p);
+      p += 2;
+      break;
+    }
+    token = new_token(*p, p);
+    p++;
+    break;
+  }
+  case '^': {
+    if (*(p + 1) == '=') {
+      token = new_token(TK_XOR_ASSIGN, p);
+      p += 2;
+      break;
+    }
+    token = new_token(*p, p);
+    p++;
+    break;
+  }
+  case '+': {
+    if (*(p + 1) == '+') {
+      token = new_token(TK_INC, p);
+      p += 2;
+      break;
+    }
+    if (*(p + 1) == '=') {
+      token = new_token(TK_ADD_ASSIGN, p);
+      p += 2;
+      break;
+    }
+    token = new_token(*p, p);
+    p++;
+    break;
+  }
+  case '-': {
+    if (*(p + 1) == '-') {
+      token = new_token(TK_DEC, p);
+      p += 2;
+      break;
+    }
+    if (*(p + 1) == '=') {
+      token = new_token(TK_SUB_ASSIGN, p);
+      p += 2;
+      break;
+    }
+    token = new_token(*p, p);
+    p++;
+    break;
+  }
+  case '*': {
+    if (*(p + 1) == '=') {
+      token = new_token(TK_MUL_ASSIGN, p);
+      p += 2;
+      break;
+    }
+    token = new_token(*p, p);
+    p++;
+    break;
+  }
+  case '/': {
+    if (*(p + 1) == '=') {
+      token = new_token(TK_DIV_ASSIGN, p);
+      p += 2;
+      break;
+    }
+    token = new_token(*p, p);
+    p++;
+    break;
+  }
+  case '%': {
+    if (*(p + 1) == '=') {
+      token = new_token(TK_MOD_ASSIGN, p);
+      p += 2;
+      break;
+    }
+    token = new_token(*p, p);
+    p++;
+    break;
+  }
+  case '(':
+  case ')':
+  case ';':
+  case '?':
+  case ':':
+  case '~':
+  case '{':
+  case '}':
+  case ',': {
+    token = new_token(*p, p);
+    p++;
+    break;
+  }
+  }
+
+  *input = p;
+  return token;
+}
+
+static Token *identifier_or_keyword(char **input) {
+  Token *token = NULL;
+  char *p = *input;
+  if (('a' <= *p && *p <= 'z') || ('A' <= *p && *p <= 'Z') || *p == '_') {
+    char *q = p;
+    while (('a' <= *q && *q <= 'z') || ('A' <= *q && *q <= 'Z') || *q == '_' ||
+           ('0' <= *q && *q <= '9')) {
+      q++;
+    }
+    token = new_token_ident(p, strndup(p, q - p));
+    p = q;
+  }
+
+  *input = p;
+  return token;
+}
+
+static Token *constant(char **input) {
+  Token *token = NULL;
+  char *p = *input;
+
+  if (isdigit(*p)) {
+    token = new_token_num(p, strtol(p, &p, 10));
+  }
+
+  *input = p;
   return token;
 }
