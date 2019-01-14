@@ -17,6 +17,20 @@ static Token *integer_constant(char **input);
 static Token *hexadecimal_constant(char **input);
 static Token *octal_constant(char **input);
 static Token *decimal_constant(char **input);
+static Token *character_constant(char **input);
+static int c_char(char **input);
+
+static inline int hex(int c) {
+  assert(isxdigit(c));
+  if ('0' <= c && c <= '9') {
+    return c - '0';
+  }
+  if ('a' <= c && c <= 'f') {
+    return (c - 'a') + 0xa;
+  }
+  assert('A' <= c && c <= 'F');
+  return (c - 'A') + 0xa;
+}
 
 // pos番目のtokenを取得する
 Token *get_token(int pos) { return tokens->data[pos]; }
@@ -41,6 +55,9 @@ void tokenize(char *p) {
     if ((token = constant(&p)) != NULL) {
       goto SKIP;
     }
+
+    error("トークナイズできません: %s", p);
+
   SKIP:
     vec_push(tokens, token);
   }
@@ -302,6 +319,9 @@ static Token *constant(char **input) {
   if ((token = integer_constant(&p)) != NULL) {
     goto SKIP;
   }
+  if ((token = character_constant(&p)) != NULL) {
+    goto SKIP;
+  }
 
 SKIP:
   *input = p;
@@ -338,17 +358,7 @@ static Token *hexadecimal_constant(char **input) {
 
   char *q = p;
   for (; isxdigit(*q); q++) {
-    val *= 0x10;
-    if ('0' <= *q && *q <= '9') {
-      val += *q - '0';
-      continue;
-    }
-    if ('a' <= *q && *q <= 'f') {
-      val += (*q - 'a') + 0xa;
-      continue;
-    }
-    assert('A' <= *q && *q <= 'F');
-    val += (*q - 'A') + 0xa;
+    val = val * 0x10 + hex(*q);
   }
 
   token = new_token_num(p, val);
@@ -398,4 +408,113 @@ static Token *decimal_constant(char **input) {
 
   *input = p;
   return token;
+}
+
+static Token *character_constant(char **input) {
+  Token *token = NULL;
+  char *p = *input;
+  if (*p != '\'') {
+    return NULL;
+  }
+  p++;
+
+  token = new_token_num(p, c_char(&p));
+
+  if (*p != '\'') {
+    error("'\\'' がありません: %s", *input);
+  }
+  p++;
+
+  *input = p;
+  return token;
+}
+
+static int c_char(char **input) {
+  int val = 0;
+  char *p = *input;
+  if (*p == '\'') {
+    error("空の文字リテラルです: %s", p);
+  }
+  if (*p == '\n' || *p == '\r') {
+    error("改行文字を文字リテラル中に含めることはできません: %s", p);
+  }
+
+  if (*p == '\\') {
+    switch (*(p + 1)) {
+    case '\'':
+    case '\"':
+    case '\?':
+    case '\\': {
+      val = (*(p + 1));
+      p += 2;
+      goto SKIP;
+    }
+    case 'a': {
+      val = '\a';
+      p += 2;
+      goto SKIP;
+    }
+    case 'b': {
+      val = '\b';
+      p += 2;
+      goto SKIP;
+    }
+    case 'f': {
+      val = '\f';
+      p += 2;
+      goto SKIP;
+    }
+    case 'n': {
+      val = '\n';
+      p += 2;
+      goto SKIP;
+    }
+    case 'r': {
+      val = '\r';
+      p += 2;
+      goto SKIP;
+    }
+    case 't': {
+      val = '\t';
+      p += 2;
+      goto SKIP;
+    }
+    case 'v': {
+      val = '\v';
+      p += 2;
+      goto SKIP;
+    }
+
+    case 'x': {
+      char *q = p + 2;
+      for (; isxdigit(*q); q++) {
+        val = val * 0x10 + hex(*q);
+      }
+      if (q == p + 2) {
+        error("空の16進文字リテラルです: %s", p);
+      }
+      p = q;
+      goto SKIP;
+    }
+    }
+
+    char *q = p + 1;
+    for (int i = 0; (i < 3) && ('0' <= *q && *q <= '7'); i++, q++) {
+      val = 010 * val + (*q - '0');
+    }
+    if (q - p >= 2) {
+      p = q;
+      goto SKIP;
+    }
+
+    error("不明なエスケープシーケンスです: %s", p);
+  }
+
+  val = *p;
+  p++;
+  goto SKIP;
+
+SKIP:
+  *input = p;
+  return val;
 }
