@@ -26,6 +26,7 @@ static Expr *assignment_expression(void);
 static Expr *expression(void);
 static Stmt *statement(void);
 static Stmt *compound_statement(void);
+static Function *function_declaration(void);
 
 static int pos = 0;
 static int stack_size = 0;
@@ -188,21 +189,12 @@ static Token *expect(int ty) {
   return token;
 }
 
-Function *program(void) {
-  switches = new_vector();
-
-  stack_size = 0;
-  stack_map = new_map();
-  label_map = new_map();
-  Stmt *body = compound_statement();
-
-  Function *func = malloc(sizeof(Function));
-  func->name = strdup("main");
-  func->stack_size = stack_size;
-  func->stack_map = stack_map;
-  func->label_map = label_map;
-  func->body = body;
-  return func;
+Vector *translation_unit(void) {
+  Vector *func_list = new_vector();
+  while (get_token(pos)->ty != TK_EOF) {
+    vec_push(func_list, function_declaration());
+  }
+  return func_list;
 }
 
 static Expr *primary_expression(void) {
@@ -617,4 +609,31 @@ static Stmt *compound_statement(void) {
     vec_push(stmt->stmts, statement());
   }
   return stmt;
+}
+
+static Function *function_declaration(void) {
+  switches = new_vector();
+
+  stack_size = 0;
+  stack_map = new_map();
+  label_map = new_map();
+
+  expect(TK_INT);
+  Token *name = expect(TK_IDENT);
+  expect('(');
+  if (get_token(pos)->ty != ')') {
+    expect(TK_VOID);
+  }
+  expect(')');
+
+  Stmt *body = compound_statement();
+
+  Function *func = malloc(sizeof(Function));
+  func->name = name->name;
+  func->stack_size = stack_size;
+  func->stack_map = stack_map;
+  func->label_map = label_map;
+  func->body = body;
+
+  return func;
 }

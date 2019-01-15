@@ -35,6 +35,8 @@ enum {
   TK_AND_ASSIGN,    // `&=`
   TK_OR_ASSIGN,     // `|=`
   TK_XOR_ASSIGN,    // `^=`
+  TK_VOID,          // `void`
+  TK_INT,           // `int`
   TK_IF,            // `if`
   TK_ELSE,          // `else`
   TK_SWITCH,        // `switch`
@@ -177,7 +179,7 @@ void runtest(void);
 Token *get_token(int pos);
 void tokenize(char *p);
 
-Function *program(void);
+Vector *translation_unit(void);
 
 char *make_label(void);
 void gen(Function *func);

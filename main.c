@@ -96,6 +96,12 @@ static void output_token(void) {
     case TK_XOR_ASSIGN:
       printf("%03d [^=]\n", pos);
       break;
+    case TK_VOID:
+      printf("%03d [VOID]\n", pos);
+      break;
+    case TK_INT:
+      printf("%03d [INT]\n", pos);
+      break;
     case TK_IF:
       printf("%03d [IF]\n", pos);
       break;
@@ -412,13 +418,18 @@ int main(int argc, char **argv) {
     return 0;
   }
 
-  Function *func = program();
+  Vector *func_list = translation_unit();
   if (output_mode == OUTPUT_AST) {
-    output_ast(func);
-    return 0;
+    for (int i = 0; i < func_list->len; i++) {
+      output_ast(func_list->data[i]);
+      return 0;
+    }
   }
 
   printf(".intel_syntax noprefix\n");
-  gen(func);
+
+  for (int i = 0; i < func_list->len; i++) {
+    gen(func_list->data[i]);
+  }
   return 0;
 }

@@ -82,7 +82,11 @@ static Token *new_token_num(char *input, int val) {
 
 static Token *new_token_ident(char *input, char *name) {
   Token *token = malloc(sizeof(Token));
-  if (strcmp(name, "if") == 0) {
+  if (strcmp(name, "void") == 0) {
+    token->ty = TK_VOID;
+  } else if (strcmp(name, "int") == 0) {
+    token->ty = TK_INT;
+  } else if (strcmp(name, "if") == 0) {
     token->ty = TK_IF;
   } else if (strcmp(name, "else") == 0) {
     token->ty = TK_ELSE;
