@@ -129,6 +129,9 @@ static void output_token(void) {
     case TK_CONTINUE:
       printf("%03d [CONTINUE]\n", pos);
       break;
+    case TK_RETURN:
+      printf("%03d [RETURN]\n", pos);
+      break;
     default:
       error("未知のトークンです: %d\n", token->ty);
     }
@@ -328,6 +331,11 @@ static void dump_stmt(Stmt *stmt, int level) {
     break;
   case ST_CONTINUE:
     printf("%*s(CONTINUE)\n", 2 * level, "");
+    break;
+  case ST_RETURN:
+    printf("%*s(RETURN\n", 2 * level, "");
+    dump_expr(stmt->expr, level + 1);
+    printf("%*s)\n", 2 * level, "");
     break;
   case ST_NULL:
     printf("%*s(NULL)\n", 2 * level, "");

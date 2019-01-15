@@ -46,6 +46,7 @@ enum {
   TK_GOTO,          // `goto`
   TK_BREAK,         // `break`
   TK_CONTINUE,      // `continue`
+  TK_RETURN,        // `return`
   TK_EOF,           // 入力の終わりを表すトークン
 };
 
@@ -98,6 +99,7 @@ enum {
   ST_GOTO,
   ST_BREAK,
   ST_CONTINUE,
+  ST_RETURN,
   ST_NULL,
 };
 
@@ -141,7 +143,10 @@ typedef struct Stmt {
   // ST_CASE, ST_DEFAULT, ST_LABEL
   char *label;
 
-  struct Expr *expr; // tyがST_EXPR, ST_CASEの場合のみ使う
+  // ST_EXPR:   <expr>;
+  // ST_CASE:   case <expr>:
+  // ST_RETURN: return <expr>:
+  struct Expr *expr;
 
   Vector *stmts; // tyがST_COMPOUNDの場合のみ使う
 } Stmt;

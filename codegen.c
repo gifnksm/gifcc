@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 
+static char *epilogue_label = NULL;
 static Function *func_ctxt = NULL;
 static Vector *break_labels = NULL;
 static Vector *continue_labels = NULL;
@@ -522,13 +523,23 @@ static void gen_stmt(Stmt *stmt) {
            (char *)continue_labels->data[continue_labels->len - 1]);
     break;
   }
+  case ST_RETURN: {
+    if (stmt->expr != NULL) {
+      gen_expr(stmt->expr);
+      printf("  pop rax\n");
+    }
+    printf("  jmp %s\n", epilogue_label);
+    break;
+  }
   default: { error("未知のノード種別です: %d", stmt->ty); }
   }
 }
 
 void gen(Function *func) {
+  epilogue_label = make_label();
   func_ctxt = func;
   break_labels = new_vector();
   continue_labels = new_vector();
   gen_stmt(func->body);
+  printf("%s:\n", epilogue_label);
 }

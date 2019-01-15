@@ -161,6 +161,12 @@ static Stmt *new_stmt_goto(char *name) {
   return stmt;
 }
 
+static Stmt *new_stmt_return(Expr *expr) {
+  Stmt *stmt = new_stmt(ST_RETURN);
+  stmt->expr = expr;
+  return stmt;
+}
+
 static bool consume(int ty) {
   if (get_token(pos)->ty != ty) {
     return false;
@@ -569,6 +575,15 @@ static Stmt *statement(void) {
     pos++;
     expect(';');
     return new_stmt(ST_CONTINUE);
+  }
+  case TK_RETURN: {
+    pos++;
+    Expr *expr = NULL;
+    if (get_token(pos)->ty != ';') {
+      expr = expression();
+    }
+    expect(';');
+    return new_stmt_return(expr);
   }
   case '{': {
     return compound_statement();

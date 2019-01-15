@@ -104,6 +104,8 @@ static Token *new_token_ident(char *input, char *name) {
     token->ty = TK_BREAK;
   } else if (strcmp(name, "continue") == 0) {
     token->ty = TK_CONTINUE;
+  } else if (strcmp(name, "return") == 0) {
+    token->ty = TK_RETURN;
   } else {
     token->ty = TK_IDENT;
   }
