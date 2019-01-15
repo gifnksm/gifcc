@@ -146,6 +146,14 @@ typedef struct Stmt {
   Vector *stmts; // tyがST_COMPOUNDの場合のみ使う
 } Stmt;
 
+typedef struct Function {
+  char *name;
+  int stack_size;
+  Map *stack_map;
+  Map *label_map;
+  Stmt *body;
+} Function;
+
 #define error(fmt, ...) error_raw(__FILE__, __LINE__, fmt, ##__VA_ARGS__)
 
 __attribute__((noreturn, format(printf, 3, 4))) void
@@ -164,11 +172,15 @@ void runtest(void);
 Token *get_token(int pos);
 void tokenize(char *p);
 
-Stmt *get_stmt(int pos);
-void program(void);
-int get_stack_size(void);
-int get_stack_offset(char *name);
-char *get_label(char *name);
+Function *program(void);
 
 char *make_label(void);
-void gen(Stmt *stmt);
+void gen(Function *func);
+
+static inline int get_stack_offset(Function *func, char *name) {
+  return *(int *)map_get(func->stack_map, name);
+}
+
+static inline char *get_label(Function *func, char *name) {
+  return map_get(func->label_map, name);
+}

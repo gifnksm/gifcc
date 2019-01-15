@@ -3,6 +3,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <string.h>
 
 // expression
 static Expr *primary_expression(void);
@@ -27,7 +28,6 @@ static Stmt *statement(void);
 static Stmt *compound_statement(void);
 
 static int pos = 0;
-static Vector *code;
 static int stack_size = 0;
 static Map *stack_map;
 static Stmt null_stmt = {
@@ -182,22 +182,21 @@ static Token *expect(int ty) {
   return token;
 }
 
-Stmt *get_stmt(int pos) { return code->data[pos]; }
-int get_stack_size(void) { return stack_size; }
-int get_stack_offset(char *name) { return *(int *)map_get(stack_map, name); }
-char *get_label(char *name) { return map_get(label_map, name); }
-
-void program(void) {
-  code = new_vector();
-  stack_map = new_map();
+Function *program(void) {
   switches = new_vector();
+
+  stack_size = 0;
+  stack_map = new_map();
   label_map = new_map();
+  Stmt *body = compound_statement();
 
-  while (get_token(pos)->ty != TK_EOF) {
-    vec_push(code, statement());
-  }
-
-  vec_push(code, NULL);
+  Function *func = malloc(sizeof(Function));
+  func->name = strdup("main");
+  func->stack_size = stack_size;
+  func->stack_map = stack_map;
+  func->label_map = label_map;
+  func->body = body;
+  return func;
 }
 
 static Expr *primary_expression(void) {

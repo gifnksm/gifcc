@@ -337,15 +337,11 @@ static void dump_stmt(Stmt *stmt, int level) {
   }
 }
 
-static void output_ast(void) {
-  for (int pos = 0; true; pos++) {
-    Stmt *stmt = get_stmt(pos);
-    if (stmt == NULL) {
-      break;
-    }
-
-    dump_stmt(stmt, 0);
-  }
+static void output_ast(Function *func) {
+  int level = 0;
+  printf("%*s(FUNCTION %s\n", 2 * level, "", func->name);
+  dump_stmt(func->body, level + 1);
+  printf("%*s)\n", 2 * level, "");
 }
 
 enum {
@@ -408,27 +404,25 @@ int main(int argc, char **argv) {
     return 0;
   }
 
-  program();
+  Function *func = program();
   if (output_mode == OUTPUT_AST) {
-    output_ast();
+    output_ast(func);
     return 0;
   }
 
   // アセンブリの前半部分を出力
   printf(".intel_syntax noprefix\n");
-  printf(".global main\n");
-  printf("main:\n");
+  printf(".global %s\n", func->name);
+  printf("%s:\n", func->name);
 
   // プロローグ
   // スタックサイズ分の領域を確保する
   printf("  push rbp\n");
   printf("  mov rbp, rsp\n");
-  printf("  sub rsp, %d\n", align(get_stack_size(), 16));
+  printf("  sub rsp, %d\n", align(func->stack_size, 16));
 
   // 先頭の式から順にコード生成
-  for (int i = 0; get_stmt(i); i++) {
-    gen(get_stmt(i));
-  }
+  gen(func);
 
   // エピローグ
   // 最後の式の結果がRAXに残っているのでそれが返り値になる

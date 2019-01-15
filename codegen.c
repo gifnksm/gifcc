@@ -2,8 +2,9 @@
 #include <stdio.h>
 #include <string.h>
 
-Vector *break_labels = NULL;
-Vector *continue_labels = NULL;
+static Function *func_ctxt = NULL;
+static Vector *break_labels = NULL;
+static Vector *continue_labels = NULL;
 
 static void gen_expr(Expr *expr);
 
@@ -17,7 +18,7 @@ char *make_label(void) {
 static void gen_lval(Expr *expr) {
   if (expr->ty == EX_IDENT) {
     printf("  mov rax, rbp\n");
-    printf("  sub rax, %d\n", get_stack_offset(expr->name) + 8);
+    printf("  sub rax, %d\n", get_stack_offset(func_ctxt, expr->name) + 8);
     printf("  push rax\n");
     return;
   }
@@ -499,7 +500,7 @@ static void gen_stmt(Stmt *stmt) {
     break;
   }
   case ST_GOTO: {
-    char *label = get_label(stmt->name);
+    char *label = get_label(func_ctxt, stmt->name);
     if (label == NULL) {
       error("未知のラベルへのgotoです: %s", stmt->name);
     }
@@ -525,8 +526,9 @@ static void gen_stmt(Stmt *stmt) {
   }
 }
 
-void gen(Stmt *stmt) {
+void gen(Function *func) {
+  func_ctxt = func;
   break_labels = new_vector();
   continue_labels = new_vector();
-  gen_stmt(stmt);
+  gen_stmt(func->body);
 }
