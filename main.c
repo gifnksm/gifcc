@@ -418,24 +418,7 @@ int main(int argc, char **argv) {
     return 0;
   }
 
-  // アセンブリの前半部分を出力
   printf(".intel_syntax noprefix\n");
-  printf(".global %s\n", func->name);
-  printf("%s:\n", func->name);
-
-  // プロローグ
-  // スタックサイズ分の領域を確保する
-  printf("  push rbp\n");
-  printf("  mov rbp, rsp\n");
-  printf("  sub rsp, %d\n", align(func->stack_size, 16));
-
-  // 先頭の式から順にコード生成
   gen(func);
-
-  // エピローグ
-  // 最後の式の結果がRAXに残っているのでそれが返り値になる
-  printf("  mov rsp, rbp\n");
-  printf("  pop rbp\n");
-  printf("  ret\n");
   return 0;
 }

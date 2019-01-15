@@ -540,6 +540,22 @@ void gen(Function *func) {
   func_ctxt = func;
   break_labels = new_vector();
   continue_labels = new_vector();
+
+  printf(".global %s\n", func->name);
+  printf("%s:\n", func->name);
+
+  // プロローグ
+  // スタックサイズ分の領域を確保する
+  printf("  push rbp\n");
+  printf("  mov rbp, rsp\n");
+  printf("  sub rsp, %d\n", align(func->stack_size, 16));
+
   gen_stmt(func->body);
+
+  // エピローグ
+  // 最後の式の結果がRAXに残っているのでそれが返り値になる
   printf("%s:\n", epilogue_label);
+  printf("  mov rsp, rbp\n");
+  printf("  pop rbp\n");
+  printf("  ret\n");
 }
