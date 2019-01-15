@@ -158,6 +158,7 @@ typedef struct Function {
   int stack_size;
   Map *stack_map;
   Map *label_map;
+  Vector *params;
   Stmt *body;
 } Function;
 

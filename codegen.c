@@ -67,10 +67,10 @@ static void gen_expr(Expr *expr) {
           printf("  pop rcx\n");
           break;
         case 4:
-          printf("  pop r8d\n");
+          printf("  pop r8\n");
           break;
         case 5:
-          printf("  pop r9d\n");
+          printf("  pop r9\n");
           break;
         // 6番目以降の引数はスタック経由で渡すため、pushされたままにする
         default:
@@ -549,6 +549,40 @@ void gen(Function *func) {
   printf("  push rbp\n");
   printf("  mov rbp, rsp\n");
   printf("  sub rsp, %d\n", align(func->stack_size, 16));
+
+  // 引数をスタックへコピー
+  for (int i = 0; i < func->params->len; i++) {
+    printf("  mov rax, rbp\n");
+    printf("  sub rax, %d\n",
+           get_stack_offset(func, func->params->data[i]) + 8);
+    switch (i) {
+    case 0:
+      printf("  mov [rax], rdi\n");
+      break;
+    case 1:
+      printf("  mov [rax], rsi\n");
+      break;
+    case 2:
+      printf("  mov [rax], rdx\n");
+      break;
+    case 3:
+      printf("  mov [rax], rcx\n");
+      break;
+    case 4:
+      printf("  mov [rax], r8\n");
+      break;
+    case 5:
+      printf("  mov [rax], r9\n");
+      break;
+      // 6番目以降の引数はスタック経由で渡すため、スタックからコピーする
+    default:
+      printf("  mov r10, rbp\n");
+      printf("  add r10, %d\n", (i - 6) * 8 + 16);
+      printf("  mov r11, [r10]\n");
+      printf("  mov [rax], r11\n");
+      break;
+    }
+  }
 
   gen_stmt(func->body);
 

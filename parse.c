@@ -37,6 +37,19 @@ static Stmt null_stmt = {
 static Vector *switches = NULL;
 static Map *label_map;
 
+static bool register_stack(char *name) {
+  if (map_get(stack_map, name)) {
+    return false;
+  }
+
+  int *offset = malloc(sizeof(int));
+  *offset = stack_size;
+  map_put(stack_map, name, offset);
+  stack_size += 8;
+
+  return true;
+}
+
 static Expr *new_expr(int ty) {
   Expr *expr = malloc(sizeof(Expr));
   expr->ty = ty;
@@ -59,12 +72,7 @@ static Expr *new_expr_num(int val) {
 static Expr *new_expr_ident(char *name) {
   Expr *expr = new_expr(EX_IDENT);
   expr->name = name;
-  if (!map_get(stack_map, name)) {
-    int *offset = malloc(sizeof(int));
-    *offset = stack_size;
-    map_put(stack_map, name, offset);
-    stack_size += 8;
-  }
+  (void)register_stack(name);
   return expr;
 }
 
@@ -618,11 +626,24 @@ static Function *function_declaration(void) {
   stack_map = new_map();
   label_map = new_map();
 
+  Vector *params = new_vector();
+
   expect(TK_INT);
   Token *name = expect(TK_IDENT);
   expect('(');
-  if (get_token(pos)->ty != ')') {
-    expect(TK_VOID);
+  if (get_token(pos)->ty != ')' && !consume(TK_VOID)) {
+    while (true) {
+      expect(TK_INT);
+      Token *arg = expect(TK_IDENT);
+      if (!register_stack(arg->name)) {
+        error("同じ名前の引数が複数個あります: %s\n", arg->name);
+      }
+      vec_push(params, arg->name);
+      if (get_token(pos)->ty == ')') {
+        break;
+      }
+      expect(',');
+    }
   }
   expect(')');
 
@@ -633,6 +654,7 @@ static Function *function_declaration(void) {
   func->stack_size = stack_size;
   func->stack_map = stack_map;
   func->label_map = label_map;
+  func->params = params;
   func->body = body;
 
   return func;

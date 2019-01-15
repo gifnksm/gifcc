@@ -319,5 +319,81 @@ int main(void) {
   return a * 10 + b;
 }
 '
+try 20 '
+int double(int n) {
+  return 2 * n;
+}
+int main(void) {
+  return double(3) + double(7);
+}
+'
+try 10 '
+int add(int a, int b) {
+  return a + b;
+}
+int sub(int a, int b) {
+  return a - b;
+}
+int main(void) {
+  return add(3, 5) + sub(5, 3);
+}
+'
+try 0 '
+int fib(int n) {
+  return
+    (n <= 0)
+    ? 0
+    : (n == 1)
+    ? 1
+    : fib(n - 2) + fib(n - 1);
+}
+
+int main(void) {
+  (fib( 0) ==   0) || abort();
+  (fib( 1) ==   1) || abort();
+  (fib( 2) ==   1) || abort();
+  (fib( 3) ==   2) || abort();
+  (fib( 4) ==   3) || abort();
+  (fib( 5) ==   5) || abort();
+  (fib( 6) ==   8) || abort();
+  (fib( 7) ==  13) || abort();
+  (fib( 8) ==  21) || abort();
+  (fib( 9) ==  34) || abort();
+  (fib(10) ==  55) || abort();
+  (fib(11) ==  89) || abort();
+  (fib(12) == 144) || abort();
+  return 0;
+}
+'
+
+try 21 '
+int add6(int a, int b, int c, int d, int e, int f) {
+  return a + b + c + d + e + f;
+}
+int digits6(int a, int b, int c, int d, int e, int f) {
+  return ((((((a * 10) + b) * 10 + c) * 10 + d) * 10 + e) * 10 + f);
+}
+int main(void) {
+  if (digits6(1, 2, 3, 4, 5, 6) != 123456) {
+    abort();
+  }
+  return add6(1, 2, 3, 4, 5, 6);
+}
+'
+
+try 45 '
+int add10(int a, int b, int c, int d, int e, int f, int g, int h, int i, int j) {
+  return a + b + c + d + e + f + g + h + i + j;
+}
+int digits10(int a, int b, int c, int d, int e, int f, int g, int h, int i, int j) {
+  return ((((((((((a * 10) + b) * 10 + c) * 10 + d) * 10 + e) * 10 + f) * 10 + g) * 10 + h) * 10 + i) * 10 + j);
+}
+int main(void) {
+  if (digits10(1, 2, 3, 4, 5, 6, 7, 8, 9, 0) != 1234567890) {
+    abort();
+  }
+  return add10(1, 2, 3, 4, 5, 6, 7, 8, 9, 0);
+}
+'
 
 echo OK
