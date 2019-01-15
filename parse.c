@@ -5,163 +5,160 @@
 #include <stdlib.h>
 
 // expression
-static Node *primary_expression(void);
-static Node *postfix_expression(void);
+static Expr *primary_expression(void);
+static Expr *postfix_expression(void);
 static Vector *argument_expression_list(void);
-static Node *unary_expression(void);
-static Node *cast_expression(void);
-static Node *multiplicative_expression(void);
-static Node *additive_expression(void);
-static Node *shift_expression(void);
-static Node *relational_expression(void);
-static Node *equality_expression(void);
-static Node *and_expression(void);
-static Node *exclusive_or_expression(void);
-static Node *inclusive_or_expression(void);
-static Node *logical_and_expression(void);
-static Node *logical_or_expression(void);
-static Node *conditional_expression(void);
-static Node *assignment_expression(void);
-static Node *expression(void);
-static Node *statement(void);
-static Node *compound_statement(void);
+static Expr *unary_expression(void);
+static Expr *cast_expression(void);
+static Expr *multiplicative_expression(void);
+static Expr *additive_expression(void);
+static Expr *shift_expression(void);
+static Expr *relational_expression(void);
+static Expr *equality_expression(void);
+static Expr *and_expression(void);
+static Expr *exclusive_or_expression(void);
+static Expr *inclusive_or_expression(void);
+static Expr *logical_and_expression(void);
+static Expr *logical_or_expression(void);
+static Expr *conditional_expression(void);
+static Expr *assignment_expression(void);
+static Expr *expression(void);
+static Stmt *statement(void);
+static Stmt *compound_statement(void);
 
 static int pos = 0;
 static Vector *code;
 static int stack_size = 0;
 static Map *stack_map;
-static Node null_stmt = {
-    .ty = ND_NULL,
+static Stmt null_stmt = {
+    .ty = ST_NULL,
 };
 static Vector *switches = NULL;
 static Map *label_map;
 
-static Node *new_node(int ty, Node *lhs, Node *rhs) {
-  Node *node = malloc(sizeof(Node));
-  node->ty = ty;
-  node->lhs = lhs;
-  node->rhs = rhs;
-  return node;
+static Expr *new_expr(int ty) {
+  Expr *expr = malloc(sizeof(Expr));
+  expr->ty = ty;
+  return expr;
 }
 
-static Node *new_node_num(int val) {
-  Node *node = malloc(sizeof(Node));
-  node->ty = ND_NUM;
-  node->val = val;
-  return node;
+static Expr *new_expr_binop(int ty, Expr *lhs, Expr *rhs) {
+  Expr *expr = new_expr(ty);
+  expr->lhs = lhs;
+  expr->rhs = rhs;
+  return expr;
 }
 
-static Node *new_node_ident(char *name) {
-  Node *node = malloc(sizeof(Node));
-  node->ty = ND_IDENT;
-  node->name = name;
+static Expr *new_expr_num(int val) {
+  Expr *expr = new_expr(EX_NUM);
+  expr->val = val;
+  return expr;
+}
+
+static Expr *new_expr_ident(char *name) {
+  Expr *expr = new_expr(EX_IDENT);
+  expr->name = name;
   if (!map_get(stack_map, name)) {
     int *offset = malloc(sizeof(int));
     *offset = stack_size;
     map_put(stack_map, name, offset);
     stack_size += 8;
   }
-  return node;
+  return expr;
 }
 
-static Node *new_node_call(Node *callee, Vector *argument) {
-  Node *node = malloc(sizeof(Node));
-  node->ty = ND_CALL;
-  node->callee = callee;
-  node->argument = argument;
-  return node;
+static Expr *new_expr_call(Expr *callee, Vector *argument) {
+  Expr *expr = new_expr(EX_CALL);
+  expr->callee = callee;
+  expr->argument = argument;
+  return expr;
 }
 
-static Node *new_node_cond(Node *cond, Node *then_expr, Node *else_expr) {
-  Node *node = malloc(sizeof(Node));
-  node->ty = ND_COND;
-  node->cond = cond;
-  node->then_node = then_expr;
-  node->else_node = else_expr;
-  return node;
+static Expr *new_expr_cond(Expr *cond, Expr *then_expr, Expr *else_expr) {
+  Expr *expr = new_expr(EX_COND);
+  expr->cond = cond;
+  expr->lhs = then_expr;
+  expr->rhs = else_expr;
+  return expr;
 }
 
-static Node *new_node_expr(Node *expr) {
-  Node *node = malloc(sizeof(Node));
-  node->ty = ND_EXPR;
-  node->expr = expr;
-  return node;
+static Stmt *new_stmt(int ty) {
+  Stmt *stmt = malloc(sizeof(Stmt));
+  stmt->ty = ty;
+  return stmt;
 }
 
-static Node *new_node_if(Node *cond, Node *then_node, Node *else_node) {
-  Node *node = malloc(sizeof(Node));
-  node->ty = ND_IF;
-  node->cond = cond;
-  node->then_node = then_node;
-  node->else_node = else_node;
-  return node;
+static Stmt *new_stmt_expr(Expr *expr) {
+  Stmt *stmt = new_stmt(ST_EXPR);
+  stmt->expr = expr;
+  return stmt;
 }
 
-static Node *new_node_switch(Node *cond, Node *body) {
-  Node *node = malloc(sizeof(Node));
-  node->ty = ND_SWITCH;
-  node->cond = cond;
-  node->body = body;
-  node->cases = new_vector();
-  node->default_case = NULL;
-  return node;
+static Stmt *new_stmt_if(Expr *cond, Stmt *then_stmt, Stmt *else_stmt) {
+  Stmt *stmt = new_stmt(ST_IF);
+  stmt->cond = cond;
+  stmt->then_stmt = then_stmt;
+  stmt->else_stmt = else_stmt;
+  return stmt;
 }
 
-static Node *new_node_case(Node *expr) {
-  Node *node = malloc(sizeof(Node));
-  node->ty = ND_CASE;
-  node->expr = expr;
-  node->label = make_label();
-  return node;
+static Stmt *new_stmt_switch(Expr *cond, Stmt *body) {
+  Stmt *stmt = new_stmt(ST_SWITCH);
+  stmt->cond = cond;
+  stmt->body = body;
+  stmt->cases = new_vector();
+  stmt->default_case = NULL;
+  return stmt;
 }
 
-static Node *new_node_default(void) {
-  Node *node = malloc(sizeof(Node));
-  node->ty = ND_DEFAULT;
-  node->label = make_label();
-  return node;
+static Stmt *new_stmt_case(Expr *expr) {
+  Stmt *stmt = new_stmt(ST_CASE);
+  stmt->expr = expr;
+  stmt->label = make_label();
+  return stmt;
 }
 
-static Node *new_node_label(char *name) {
-  Node *node = malloc(sizeof(Node));
-  node->ty = ND_LABEL;
-  node->name = name;
-  node->label = make_label();
-  map_put(label_map, node->name, node->label);
-  return node;
+static Stmt *new_stmt_default(void) {
+  Stmt *stmt = new_stmt(ST_DEFAULT);
+  stmt->label = make_label();
+  return stmt;
 }
 
-static Node *new_node_while(Node *cond, Node *body) {
-  Node *node = malloc(sizeof(Node));
-  node->ty = ND_WHILE;
-  node->cond = cond;
-  node->body = body;
-  return node;
+static Stmt *new_stmt_label(char *name) {
+  Stmt *stmt = new_stmt(ST_LABEL);
+  stmt->name = name;
+  stmt->label = make_label();
+  map_put(label_map, stmt->name, stmt->label);
+  return stmt;
 }
 
-static Node *new_node_do_while(Node *cond, Node *body) {
-  Node *node = malloc(sizeof(Node));
-  node->ty = ND_DO_WHILE;
-  node->cond = cond;
-  node->body = body;
-  return node;
+static Stmt *new_stmt_while(Expr *cond, Stmt *body) {
+  Stmt *stmt = new_stmt(ST_WHILE);
+  stmt->cond = cond;
+  stmt->body = body;
+  return stmt;
 }
 
-static Node *new_node_for(Node *init, Node *cond, Node *inc, Node *body) {
-  Node *node = malloc(sizeof(Node));
-  node->ty = ND_FOR;
-  node->init = init;
-  node->cond = cond;
-  node->inc = inc;
-  node->body = body;
-  return node;
+static Stmt *new_stmt_do_while(Expr *cond, Stmt *body) {
+  Stmt *stmt = new_stmt(ST_DO_WHILE);
+  stmt->cond = cond;
+  stmt->body = body;
+  return stmt;
 }
 
-static Node *new_node_goto(char *name) {
-  Node *node = malloc(sizeof(Node));
-  node->ty = ND_GOTO;
-  node->name = name;
-  return node;
+static Stmt *new_stmt_for(Expr *init, Expr *cond, Expr *inc, Stmt *body) {
+  Stmt *stmt = new_stmt(ST_FOR);
+  stmt->init = init;
+  stmt->cond = cond;
+  stmt->inc = inc;
+  stmt->body = body;
+  return stmt;
+}
+
+static Stmt *new_stmt_goto(char *name) {
+  Stmt *stmt = new_stmt(ST_GOTO);
+  stmt->name = name;
+  return stmt;
 }
 
 static bool consume(int ty) {
@@ -185,7 +182,7 @@ static Token *expect(int ty) {
   return token;
 }
 
-Node *get_node(int pos) { return code->data[pos]; }
+Stmt *get_stmt(int pos) { return code->data[pos]; }
 int get_stack_size(void) { return stack_size; }
 int get_stack_offset(char *name) { return *(int *)map_get(stack_map, name); }
 char *get_label(char *name) { return map_get(label_map, name); }
@@ -203,23 +200,23 @@ void program(void) {
   vec_push(code, NULL);
 }
 
-static Node *primary_expression(void) {
+static Expr *primary_expression(void) {
   if (get_token(pos)->ty == TK_NUM) {
-    return new_node_num(get_token(pos++)->val);
+    return new_expr_num(get_token(pos++)->val);
   }
   if (get_token(pos)->ty == TK_IDENT) {
-    return new_node_ident(get_token(pos++)->name);
+    return new_expr_ident(get_token(pos++)->name);
   }
   if (consume('(')) {
-    Node *node = expression();
+    Expr *expr = expression();
     expect(')');
-    return node;
+    return expr;
   }
   error("数値でも開きカッコでもないトークンです: %s", get_token(pos)->input);
 }
 
-static Node *postfix_expression(void) {
-  Node *node = primary_expression();
+static Expr *postfix_expression(void) {
+  Expr *expr = primary_expression();
   while (true) {
     if (consume('(')) {
       Vector *argument = NULL;
@@ -227,13 +224,13 @@ static Node *postfix_expression(void) {
         argument = argument_expression_list();
       }
       expect(')');
-      node = new_node_call(node, argument);
+      expr = new_expr_call(expr, argument);
     } else if (consume(TK_INC)) {
-      return new_node(ND_INC, node, NULL);
+      return new_expr_binop(EX_INC, expr, NULL);
     } else if (consume(TK_DEC)) {
-      return new_node(ND_DEC, node, NULL);
+      return new_expr_binop(EX_DEC, expr, NULL);
     } else {
-      return node;
+      return expr;
     }
   }
 }
@@ -249,299 +246,299 @@ static Vector *argument_expression_list(void) {
   return argument;
 }
 
-static Node *unary_expression(void) {
+static Expr *unary_expression(void) {
   if (consume('&')) {
-    return new_node('&', NULL, cast_expression());
+    return new_expr_binop('&', NULL, cast_expression());
   }
   if (consume('*')) {
-    return new_node('*', NULL, cast_expression());
+    return new_expr_binop('*', NULL, cast_expression());
   }
   if (consume('+')) {
-    return new_node('+', NULL, cast_expression());
+    return new_expr_binop('+', NULL, cast_expression());
   }
   if (consume('-')) {
-    return new_node('-', NULL, cast_expression());
+    return new_expr_binop('-', NULL, cast_expression());
   }
   if (consume('~')) {
-    return new_node('~', NULL, cast_expression());
+    return new_expr_binop('~', NULL, cast_expression());
   }
   if (consume('!')) {
-    return new_node('!', NULL, cast_expression());
+    return new_expr_binop('!', NULL, cast_expression());
   }
   if (consume(TK_INC)) {
-    return new_node(ND_INC, NULL, cast_expression());
+    return new_expr_binop(EX_INC, NULL, cast_expression());
   }
   if (consume(TK_DEC)) {
-    return new_node(ND_DEC, NULL, cast_expression());
+    return new_expr_binop(EX_DEC, NULL, cast_expression());
   }
   return postfix_expression();
 }
 
-static Node *cast_expression(void) { return unary_expression(); }
+static Expr *cast_expression(void) { return unary_expression(); }
 
-static Node *multiplicative_expression(void) {
-  Node *node = cast_expression();
+static Expr *multiplicative_expression(void) {
+  Expr *expr = cast_expression();
   while (true) {
     if (consume('*')) {
-      node = new_node('*', node, cast_expression());
+      expr = new_expr_binop('*', expr, cast_expression());
     } else if (consume('/')) {
-      node = new_node('/', node, cast_expression());
+      expr = new_expr_binop('/', expr, cast_expression());
     } else if (consume('%')) {
-      node = new_node('%', node, cast_expression());
+      expr = new_expr_binop('%', expr, cast_expression());
     } else {
-      return node;
+      return expr;
     }
   }
 }
 
-static Node *additive_expression(void) {
-  Node *node = multiplicative_expression();
+static Expr *additive_expression(void) {
+  Expr *expr = multiplicative_expression();
   while (true) {
     if (consume('+')) {
-      node = new_node('+', node, multiplicative_expression());
+      expr = new_expr_binop('+', expr, multiplicative_expression());
     } else if (consume('-')) {
-      node = new_node('-', node, multiplicative_expression());
+      expr = new_expr_binop('-', expr, multiplicative_expression());
     } else {
-      return node;
+      return expr;
     }
   }
 }
 
-static Node *shift_expression(void) {
-  Node *node = additive_expression();
+static Expr *shift_expression(void) {
+  Expr *expr = additive_expression();
   while (true) {
     if (consume(TK_LSHIFT)) {
-      node = new_node(ND_LSHIFT, node, additive_expression());
+      expr = new_expr_binop(EX_LSHIFT, expr, additive_expression());
     } else if (consume(TK_RSHIFT)) {
-      node = new_node(ND_RSHIFT, node, additive_expression());
+      expr = new_expr_binop(EX_RSHIFT, expr, additive_expression());
     } else {
-      return node;
+      return expr;
     }
   }
-  return node;
+  return expr;
 }
 
-static Node *relational_expression(void) {
-  Node *node = shift_expression();
+static Expr *relational_expression(void) {
+  Expr *expr = shift_expression();
   while (true) {
     if (consume('<')) {
-      node = new_node('<', node, shift_expression());
+      expr = new_expr_binop('<', expr, shift_expression());
     } else if (consume('>')) {
-      node = new_node('>', node, shift_expression());
+      expr = new_expr_binop('>', expr, shift_expression());
     } else if (consume(TK_LTEQ)) {
-      node = new_node(ND_LTEQ, node, shift_expression());
+      expr = new_expr_binop(EX_LTEQ, expr, shift_expression());
     } else if (consume(TK_GTEQ)) {
-      node = new_node(ND_GTEQ, node, shift_expression());
+      expr = new_expr_binop(EX_GTEQ, expr, shift_expression());
     } else {
-      return node;
+      return expr;
     }
   }
-  return node;
+  return expr;
 }
 
-static Node *equality_expression(void) {
-  Node *node = relational_expression();
+static Expr *equality_expression(void) {
+  Expr *expr = relational_expression();
   while (true) {
     if (consume(TK_EQEQ)) {
-      node = new_node(ND_EQEQ, node, relational_expression());
+      expr = new_expr_binop(EX_EQEQ, expr, relational_expression());
     } else if (consume(TK_NOTEQ)) {
-      node = new_node(ND_NOTEQ, node, relational_expression());
+      expr = new_expr_binop(EX_NOTEQ, expr, relational_expression());
     } else {
-      return node;
+      return expr;
     }
   }
 }
 
-static Node *and_expression(void) {
-  Node *node = equality_expression();
+static Expr *and_expression(void) {
+  Expr *expr = equality_expression();
   while (true) {
     if (consume('&')) {
-      node = new_node('&', node, equality_expression());
+      expr = new_expr_binop('&', expr, equality_expression());
     } else {
-      return node;
+      return expr;
     }
   }
-  return node;
+  return expr;
 }
 
-static Node *exclusive_or_expression(void) {
-  Node *node = and_expression();
+static Expr *exclusive_or_expression(void) {
+  Expr *expr = and_expression();
   while (true) {
     if (consume('^')) {
-      node = new_node('^', node, and_expression());
+      expr = new_expr_binop('^', expr, and_expression());
     } else {
-      return node;
+      return expr;
     }
   }
-  return node;
+  return expr;
 }
-static Node *inclusive_or_expression(void) {
-  Node *node = exclusive_or_expression();
+static Expr *inclusive_or_expression(void) {
+  Expr *expr = exclusive_or_expression();
   while (true) {
     if (consume('|')) {
-      node = new_node('|', node, exclusive_or_expression());
+      expr = new_expr_binop('|', expr, exclusive_or_expression());
     } else {
-      return node;
+      return expr;
     }
   }
-  return node;
+  return expr;
 }
-static Node *logical_and_expression(void) {
-  Node *node = inclusive_or_expression();
+static Expr *logical_and_expression(void) {
+  Expr *expr = inclusive_or_expression();
   while (true) {
     if (consume(TK_LOGAND)) {
-      node = new_node(ND_LOGAND, node, inclusive_or_expression());
+      expr = new_expr_binop(EX_LOGAND, expr, inclusive_or_expression());
     } else {
-      return node;
+      return expr;
     }
   }
-  return node;
+  return expr;
 }
-static Node *logical_or_expression(void) {
-  Node *node = logical_and_expression();
+static Expr *logical_or_expression(void) {
+  Expr *expr = logical_and_expression();
   while (true) {
     if (consume(TK_LOGOR)) {
-      node = new_node(ND_LOGOR, node, logical_and_expression());
+      expr = new_expr_binop(EX_LOGOR, expr, logical_and_expression());
     } else {
-      return node;
+      return expr;
     }
   }
-  return node;
+  return expr;
 }
-static Node *conditional_expression(void) {
-  Node *cond = logical_or_expression();
+static Expr *conditional_expression(void) {
+  Expr *cond = logical_or_expression();
   if (consume('?')) {
-    Node *then_expr = expression();
+    Expr *then_expr = expression();
     expect(':');
-    Node *else_expr = conditional_expression();
-    return new_node_cond(cond, then_expr, else_expr);
+    Expr *else_expr = conditional_expression();
+    return new_expr_cond(cond, then_expr, else_expr);
   }
   return cond;
 }
 
-static Node *assignment_expression(void) {
-  Node *lhs = conditional_expression();
+static Expr *assignment_expression(void) {
+  Expr *lhs = conditional_expression();
   if (consume('=')) {
-    return new_node('=', lhs, assignment_expression());
+    return new_expr_binop('=', lhs, assignment_expression());
   }
   if (consume(TK_MUL_ASSIGN)) {
-    return new_node(ND_MUL_ASSIGN, lhs, assignment_expression());
+    return new_expr_binop(EX_MUL_ASSIGN, lhs, assignment_expression());
   }
   if (consume(TK_DIV_ASSIGN)) {
-    return new_node(ND_DIV_ASSIGN, lhs, assignment_expression());
+    return new_expr_binop(EX_DIV_ASSIGN, lhs, assignment_expression());
   }
   if (consume(TK_MOD_ASSIGN)) {
-    return new_node(ND_MOD_ASSIGN, lhs, assignment_expression());
+    return new_expr_binop(EX_MOD_ASSIGN, lhs, assignment_expression());
   }
   if (consume(TK_ADD_ASSIGN)) {
-    return new_node(ND_ADD_ASSIGN, lhs, assignment_expression());
+    return new_expr_binop(EX_ADD_ASSIGN, lhs, assignment_expression());
   }
   if (consume(TK_SUB_ASSIGN)) {
-    return new_node(ND_SUB_ASSIGN, lhs, assignment_expression());
+    return new_expr_binop(EX_SUB_ASSIGN, lhs, assignment_expression());
   }
   if (consume(TK_LSHIFT_ASSIGN)) {
-    return new_node(ND_LSHIFT_ASSIGN, lhs, assignment_expression());
+    return new_expr_binop(EX_LSHIFT_ASSIGN, lhs, assignment_expression());
   }
   if (consume(TK_RSHIFT_ASSIGN)) {
-    return new_node(ND_RSHIFT_ASSIGN, lhs, assignment_expression());
+    return new_expr_binop(EX_RSHIFT_ASSIGN, lhs, assignment_expression());
   }
   if (consume(TK_AND_ASSIGN)) {
-    return new_node(ND_AND_ASSIGN, lhs, assignment_expression());
+    return new_expr_binop(EX_AND_ASSIGN, lhs, assignment_expression());
   }
   if (consume(TK_OR_ASSIGN)) {
-    return new_node(ND_OR_ASSIGN, lhs, assignment_expression());
+    return new_expr_binop(EX_OR_ASSIGN, lhs, assignment_expression());
   }
   if (consume(TK_XOR_ASSIGN)) {
-    return new_node(ND_XOR_ASSIGN, lhs, assignment_expression());
+    return new_expr_binop(EX_XOR_ASSIGN, lhs, assignment_expression());
   }
   return lhs;
 }
 
-static Node *expression(void) {
-  Node *node = assignment_expression();
+static Expr *expression(void) {
+  Expr *expr = assignment_expression();
   while (true) {
     if (consume(',')) {
-      node = new_node(',', node, assignment_expression());
+      expr = new_expr_binop(',', expr, assignment_expression());
     } else {
-      return node;
+      return expr;
     }
   }
-  return node;
+  return expr;
 }
 
-static Node *constant_expression(void) { return conditional_expression(); }
+static Expr *constant_expression(void) { return conditional_expression(); }
 
-static Node *statement(void) {
+static Stmt *statement(void) {
   switch (get_token(pos)->ty) {
   case TK_IF: {
     pos++;
     expect('(');
-    Node *cond = expression();
+    Expr *cond = expression();
     expect(')');
-    Node *then_stmt = statement();
-    Node *else_stmt = &null_stmt;
+    Stmt *then_stmt = statement();
+    Stmt *else_stmt = &null_stmt;
     if (consume(TK_ELSE)) {
       else_stmt = statement();
     }
-    return new_node_if(cond, then_stmt, else_stmt);
+    return new_stmt_if(cond, then_stmt, else_stmt);
   }
   case TK_SWITCH: {
     pos++;
     expect('(');
-    Node *cond = expression();
+    Expr *cond = expression();
     expect(')');
-    Node *node = new_node_switch(cond, NULL);
-    vec_push(switches, node);
-    node->body = statement();
+    Stmt *stmt = new_stmt_switch(cond, NULL);
+    vec_push(switches, stmt);
+    stmt->body = statement();
     vec_pop(switches);
-    return node;
+    return stmt;
   }
   case TK_CASE: {
     pos++;
-    Node *expr = constant_expression();
+    Expr *expr = constant_expression();
     expect(':');
-    Node *node = new_node_case(expr);
+    Stmt *stmt = new_stmt_case(expr);
     if (switches->len <= 0) {
       error("switch文中でない箇所にcase文があります");
     }
-    Node *switch_node = switches->data[switches->len - 1];
-    vec_push(switch_node->cases, node);
-    return node;
+    Stmt *switch_stmt = switches->data[switches->len - 1];
+    vec_push(switch_stmt->cases, stmt);
+    return stmt;
   }
   case TK_DEFAULT: {
     pos++;
     expect(':');
-    Node *node = new_node_default();
+    Stmt *stmt = new_stmt_default();
     if (switches->len <= 0) {
       error("switch文中でない箇所にcase文があります");
     }
-    Node *switch_node = switches->data[switches->len - 1];
-    switch_node->default_case = node;
-    return node;
+    Stmt *switch_expr = switches->data[switches->len - 1];
+    switch_expr->default_case = stmt;
+    return stmt;
   }
   case TK_WHILE: {
     pos++;
     expect('(');
-    Node *cond = expression();
+    Expr *cond = expression();
     expect(')');
-    Node *body = statement();
-    return new_node_while(cond, body);
+    Stmt *body = statement();
+    return new_stmt_while(cond, body);
   }
   case TK_DO: {
     pos++;
-    Node *body = statement();
+    Stmt *body = statement();
     expect(TK_WHILE);
     expect('(');
-    Node *cond = expression();
+    Expr *cond = expression();
     expect(')');
     expect(';');
-    return new_node_do_while(cond, body);
+    return new_stmt_do_while(cond, body);
   }
   case TK_FOR: {
     pos++;
-    Node *init = NULL;
-    Node *cond = NULL;
-    Node *inc = NULL;
+    Expr *init = NULL;
+    Expr *cond = NULL;
+    Expr *inc = NULL;
     expect('(');
     if (get_token(pos)->ty != ';') {
       init = expression();
@@ -555,24 +552,24 @@ static Node *statement(void) {
       inc = expression();
     }
     expect(')');
-    Node *body = statement();
-    return new_node_for(init, cond, inc, body);
+    Stmt *body = statement();
+    return new_stmt_for(init, cond, inc, body);
   }
   case TK_GOTO: {
     pos++;
     char *name = expect(TK_IDENT)->name;
     expect(';');
-    return new_node_goto(name);
+    return new_stmt_goto(name);
   }
   case TK_BREAK: {
     pos++;
     expect(';');
-    return new_node(ND_BREAK, NULL, NULL);
+    return new_stmt(ST_BREAK);
   }
   case TK_CONTINUE: {
     pos++;
     expect(';');
-    return new_node(ND_CONTINUE, NULL, NULL);
+    return new_stmt(ST_CONTINUE);
   }
   case '{': {
     return compound_statement();
@@ -583,27 +580,27 @@ static Node *statement(void) {
   }
   case TK_IDENT: {
     if (get_token(pos + 1)->ty == ':') {
-      Node *node = new_node_label(get_token(pos)->name);
+      Stmt *stmt = new_stmt_label(get_token(pos)->name);
       pos += 2;
-      return node;
+      return stmt;
     }
     // fall through
   }
   default: {
-    Node *expr = expression();
+    Expr *expr = expression();
     expect(';');
-    return new_node_expr(expr);
+    return new_stmt_expr(expr);
   }
   }
 }
 
-static Node *compound_statement(void) {
+static Stmt *compound_statement(void) {
   expect('{');
 
-  Node *node = new_node(ND_COMPOUND, NULL, NULL);
-  node->stmts = new_vector();
+  Stmt *stmt = new_stmt(ST_COMPOUND);
+  stmt->stmts = new_vector();
   while (!consume('}')) {
-    vec_push(node->stmts, statement());
+    vec_push(stmt->stmts, statement());
   }
-  return node;
+  return stmt;
 }

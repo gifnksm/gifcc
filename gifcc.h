@@ -58,83 +58,93 @@ typedef struct {
 } Token;
 
 enum {
-  ND_NUM = 256, // 整数のノードの型
-  ND_IDENT,
-  ND_EQEQ,
-  ND_NOTEQ,
-  ND_LTEQ,
-  ND_GTEQ,
-  ND_LSHIFT,
-  ND_RSHIFT,
-  ND_LOGAND,
-  ND_LOGOR,
-  ND_COND,
-  ND_INC,
-  ND_DEC,
-  ND_MUL_ASSIGN,
-  ND_DIV_ASSIGN,
-  ND_MOD_ASSIGN,
-  ND_ADD_ASSIGN,
-  ND_SUB_ASSIGN,
-  ND_LSHIFT_ASSIGN,
-  ND_RSHIFT_ASSIGN,
-  ND_AND_ASSIGN,
-  ND_OR_ASSIGN,
-  ND_XOR_ASSIGN,
-  ND_CALL,
-  // statement
-  ND_EXPR,
-  ND_COMPOUND,
-  ND_IF,
-  ND_SWITCH,
-  ND_CASE,
-  ND_DEFAULT,
-  ND_LABEL,
-  ND_WHILE,
-  ND_DO_WHILE,
-  ND_FOR,
-  ND_GOTO,
-  ND_BREAK,
-  ND_CONTINUE,
-  ND_NULL,
+  EX_NUM = 256, // 整数のノードの型
+  EX_IDENT,
+  EX_EQEQ,
+  EX_NOTEQ,
+  EX_LTEQ,
+  EX_GTEQ,
+  EX_LSHIFT,
+  EX_RSHIFT,
+  EX_LOGAND,
+  EX_LOGOR,
+  EX_COND,
+  EX_INC,
+  EX_DEC,
+  EX_MUL_ASSIGN,
+  EX_DIV_ASSIGN,
+  EX_MOD_ASSIGN,
+  EX_ADD_ASSIGN,
+  EX_SUB_ASSIGN,
+  EX_LSHIFT_ASSIGN,
+  EX_RSHIFT_ASSIGN,
+  EX_AND_ASSIGN,
+  EX_OR_ASSIGN,
+  EX_XOR_ASSIGN,
+  EX_CALL,
 };
 
-typedef struct Node {
-  int ty;           // ノードの型
-  struct Node *lhs; // 左辺
-  struct Node *rhs; // 右辺
+enum {
+  ST_EXPR,
+  ST_COMPOUND,
+  ST_IF,
+  ST_SWITCH,
+  ST_CASE,
+  ST_DEFAULT,
+  ST_LABEL,
+  ST_WHILE,
+  ST_DO_WHILE,
+  ST_FOR,
+  ST_GOTO,
+  ST_BREAK,
+  ST_CONTINUE,
+  ST_NULL,
+};
 
-  int val;    // tyがND_NUMの場合のみ使う
-  char *name; // tyがND_IDENT, ND_LABEL, ND_GOTOの場合のみ使う
+typedef struct Expr {
+  int ty; // ノードの型
 
-  // ND_CALL: <callee>(<argument>...)
-  struct Node *callee;
+  struct Expr *lhs;  // 左辺
+  struct Expr *rhs;  // 右辺
+  struct Expr *cond; // 条件式 (tyがEX_CONDの場合のみ使う)
+
+  int val;    // tyがEX_NUMの場合のみ使う
+  char *name; // tyがEX_IDENTの場合のみ使う
+
+  // EX_CALL: <callee>(<argument>...)
+  struct Expr *callee;
   Vector *argument;
+} Expr;
 
-  // ND_COND:     <cond> ? <then_node> : <else_node>
-  // ND_IF:       if (<cond>) <then_node> else <else_node>
-  // ND_SWITCH:   switch (<cond>) <body>
-  // ND_WHILE:    while (<cond>) <body>
-  // ND_DO_WHILE: do <body> while(<cond>);
-  // ND_FOR:      for (<init>; <cond>; <inc>) <body>
-  struct Node *init;
-  struct Node *cond;
-  struct Node *inc;
-  struct Node *then_node;
-  struct Node *else_node;
-  struct Node *body;
+typedef struct Stmt {
+  int ty;
 
-  // ND_SWITCH
+  // ST_LABEL, ST_GOTO
+  char *name;
+
+  // ST_IF:       if (<cond>) <then_stmt> else <else_stmt>
+  // ST_SWITCH:   switch (<cond>) <body>
+  // ST_WHILE:    while (<cond>) <body>
+  // ST_DO_WHILE: do <body> while(<cond>);
+  // ST_FOR:      for (<init>; <cond>; <inc>) <body>
+  struct Expr *init;
+  struct Expr *cond;
+  struct Expr *inc;
+  struct Stmt *then_stmt;
+  struct Stmt *else_stmt;
+  struct Stmt *body;
+
+  // ST_SWITCH
   Vector *cases;
-  struct Node *default_case;
+  struct Stmt *default_case;
 
-  // ND_CASE, ND_DEFAULT, ND_LABEL
+  // ST_CASE, ST_DEFAULT, ST_LABEL
   char *label;
 
-  struct Node *expr; // tyがND_EXPR, ND_CASEの場合のみ使う
+  struct Expr *expr; // tyがST_EXPR, ST_CASEの場合のみ使う
 
-  Vector *stmts; // tyがND_COMPOUNDの場合のみ使う
-} Node;
+  Vector *stmts; // tyがST_COMPOUNDの場合のみ使う
+} Stmt;
 
 #define error(fmt, ...) error_raw(__FILE__, __LINE__, fmt, ##__VA_ARGS__)
 
@@ -154,11 +164,11 @@ void runtest(void);
 Token *get_token(int pos);
 void tokenize(char *p);
 
-Node *get_node(int pos);
+Stmt *get_stmt(int pos);
 void program(void);
 int get_stack_size(void);
 int get_stack_offset(char *name);
 char *get_label(char *name);
 
 char *make_label(void);
-void gen(Node *node);
+void gen(Stmt *stmt);

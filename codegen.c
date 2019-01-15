@@ -5,7 +5,7 @@
 Vector *break_labels = NULL;
 Vector *continue_labels = NULL;
 
-static void gen_expr(Node *node);
+static void gen_expr(Expr *expr);
 
 char *make_label(void) {
   static int count = 0;
@@ -14,37 +14,37 @@ char *make_label(void) {
   return strdup(buf);
 }
 
-static void gen_lval(Node *node) {
-  if (node->ty == ND_IDENT) {
+static void gen_lval(Expr *expr) {
+  if (expr->ty == EX_IDENT) {
     printf("  mov rax, rbp\n");
-    printf("  sub rax, %d\n", get_stack_offset(node->name) + 8);
+    printf("  sub rax, %d\n", get_stack_offset(expr->name) + 8);
     printf("  push rax\n");
     return;
   }
-  if (node->ty == '*' && node->lhs == NULL) {
-    gen_expr(node->rhs);
+  if (expr->ty == '*' && expr->lhs == NULL) {
+    gen_expr(expr->rhs);
     return;
   }
   error("左辺値が変数ではありません");
 }
 
-static void gen_expr(Node *node) {
-  if (node->ty == ND_NUM) {
-    printf("  push %d\n", node->val);
+static void gen_expr(Expr *expr) {
+  if (expr->ty == EX_NUM) {
+    printf("  push %d\n", expr->val);
     return;
   }
 
-  if (node->ty == ND_IDENT) {
-    gen_lval(node);
+  if (expr->ty == EX_IDENT) {
+    gen_lval(expr);
     printf("  pop rax\n");
     printf("  mov rax, [rax]\n");
     printf("  push rax\n");
     return;
   }
 
-  if (node->ty == ND_CALL) {
-    Vector *arg = node->argument;
-    if (node->callee->ty != ND_IDENT) {
+  if (expr->ty == EX_CALL) {
+    Vector *arg = expr->argument;
+    if (expr->callee->ty != EX_IDENT) {
       error("識別子以外を関数として呼び出そうとしました");
     }
     if (arg && arg->len > 0) {
@@ -76,64 +76,64 @@ static void gen_expr(Node *node) {
         }
       }
     }
-    printf("  call %s\n", node->callee->name);
+    printf("  call %s\n", expr->callee->name);
     printf("  push rax\n");
     return;
   }
 
-  if (node->ty == '=') {
-    gen_lval(node->lhs);
-    gen_expr(node->rhs);
+  if (expr->ty == '=') {
+    gen_lval(expr->lhs);
+    gen_expr(expr->rhs);
     printf("  pop rdi\n");
     printf("  pop rax\n");
     printf("  mov [rax], rdi\n");
     printf("  push rdi\n");
     return;
   }
-  if (node->ty == ND_MUL_ASSIGN || node->ty == ND_DIV_ASSIGN ||
-      node->ty == ND_MOD_ASSIGN || node->ty == ND_ADD_ASSIGN ||
-      node->ty == ND_SUB_ASSIGN || node->ty == ND_LSHIFT_ASSIGN ||
-      node->ty == ND_RSHIFT_ASSIGN || node->ty == ND_AND_ASSIGN ||
-      node->ty == ND_OR_ASSIGN || node->ty == ND_XOR_ASSIGN) {
-    gen_lval(node->lhs);
-    gen_expr(node->rhs);
+  if (expr->ty == EX_MUL_ASSIGN || expr->ty == EX_DIV_ASSIGN ||
+      expr->ty == EX_MOD_ASSIGN || expr->ty == EX_ADD_ASSIGN ||
+      expr->ty == EX_SUB_ASSIGN || expr->ty == EX_LSHIFT_ASSIGN ||
+      expr->ty == EX_RSHIFT_ASSIGN || expr->ty == EX_AND_ASSIGN ||
+      expr->ty == EX_OR_ASSIGN || expr->ty == EX_XOR_ASSIGN) {
+    gen_lval(expr->lhs);
+    gen_expr(expr->rhs);
     printf("  pop rdi\n");
     printf("  pop rsi\n");
     printf("  mov rax, [rsi]\n");
-    switch (node->ty) {
-    case ND_MUL_ASSIGN:
+    switch (expr->ty) {
+    case EX_MUL_ASSIGN:
       printf("  mul rdi\n");
       break;
-    case ND_DIV_ASSIGN:
+    case EX_DIV_ASSIGN:
       printf("  mov rdx, 0\n");
       printf("  div rdi\n");
       break;
-    case ND_MOD_ASSIGN:
+    case EX_MOD_ASSIGN:
       printf("  mov rdx, 0\n");
       printf("  div rdi\n");
       printf("  mov rax, rdx\n");
       break;
-    case ND_ADD_ASSIGN:
+    case EX_ADD_ASSIGN:
       printf("  add rax, rdi\n");
       break;
-    case ND_SUB_ASSIGN:
+    case EX_SUB_ASSIGN:
       printf("  sub rax, rdi\n");
       break;
-    case ND_LSHIFT_ASSIGN:
+    case EX_LSHIFT_ASSIGN:
       printf("  mov rcx, rdi\n");
       printf("  shl rax, cl\n");
       break;
-    case ND_RSHIFT_ASSIGN:
+    case EX_RSHIFT_ASSIGN:
       printf("  mov rcx, rdi\n");
       printf("  sar rax, cl\n");
       break;
-    case ND_AND_ASSIGN:
+    case EX_AND_ASSIGN:
       printf("  and rax, rdi\n");
       break;
-    case ND_OR_ASSIGN:
+    case EX_OR_ASSIGN:
       printf("  or rax, rdi\n");
       break;
-    case ND_XOR_ASSIGN:
+    case EX_XOR_ASSIGN:
       printf("  xor rax, rdi\n");
       break;
     }
@@ -141,14 +141,14 @@ static void gen_expr(Node *node) {
     printf("  push rax\n");
     return;
   }
-  if (node->ty == ND_LOGAND) {
+  if (expr->ty == EX_LOGAND) {
     char *false_label = make_label();
     char *end_label = make_label();
-    gen_expr(node->lhs);
+    gen_expr(expr->lhs);
     printf("  pop rax\n");
     printf("  cmp rax, 0\n");
     printf("  je %s\n", false_label);
-    gen_expr(node->rhs);
+    gen_expr(expr->rhs);
     printf("  pop rax\n");
     printf("  cmp rax, 0\n");
     printf("  je %s\n", false_label);
@@ -160,14 +160,14 @@ static void gen_expr(Node *node) {
     return;
   }
 
-  if (node->ty == ND_LOGOR) {
+  if (expr->ty == EX_LOGOR) {
     char *true_label = make_label();
     char *end_label = make_label();
-    gen_expr(node->lhs);
+    gen_expr(expr->lhs);
     printf("  pop rax\n");
     printf("  cmp rax, 0\n");
     printf("  jne %s\n", true_label);
-    gen_expr(node->rhs);
+    gen_expr(expr->rhs);
     printf("  pop rax\n");
     printf("  cmp rax, 0\n");
     printf("  jne %s\n", true_label);
@@ -179,58 +179,58 @@ static void gen_expr(Node *node) {
     return;
   }
 
-  if (node->ty == ND_COND) {
+  if (expr->ty == EX_COND) {
     char *else_label = make_label();
     char *end_label = make_label();
-    gen_expr(node->cond);
+    gen_expr(expr->cond);
     printf("  pop rax\n");
     printf("  cmp rax, 0\n");
     printf("  je %s\n", else_label);
-    gen_expr(node->then_node);
+    gen_expr(expr->lhs);
     printf("  jmp %s\n", end_label);
     printf("%s:\n", else_label);
-    gen_expr(node->else_node);
+    gen_expr(expr->rhs);
     printf("%s:\n", end_label);
     return;
   }
 
-  if (node->ty == '&' && node->lhs == NULL) {
+  if (expr->ty == '&' && expr->lhs == NULL) {
     // 単項の `&`
-    gen_lval(node->rhs);
+    gen_lval(expr->rhs);
     return;
   }
-  if (node->ty == '*' && node->lhs == NULL) {
+  if (expr->ty == '*' && expr->lhs == NULL) {
     // 単項の `*`
-    gen_expr(node->rhs);
+    gen_expr(expr->rhs);
     printf("  pop rax\n");
     printf("  mov rax, [rax]");
     printf("  push rax\n");
     return;
   }
-  if (node->ty == '+' && node->lhs == NULL) {
+  if (expr->ty == '+' && expr->lhs == NULL) {
     // 単項の `+`
-    gen_expr(node->rhs);
+    gen_expr(expr->rhs);
     return;
   }
-  if (node->ty == '-' && node->lhs == NULL) {
+  if (expr->ty == '-' && expr->lhs == NULL) {
     // 単項の `-`
-    gen_expr(node->rhs);
+    gen_expr(expr->rhs);
     printf("  pop rax\n");
     printf("  neg rax\n");
     printf("  push rax\n");
     return;
   }
-  if (node->ty == '~') {
+  if (expr->ty == '~') {
     // `~`
-    gen_expr(node->rhs);
+    gen_expr(expr->rhs);
     printf("  pop rax\n");
     printf("  not rax\n");
     printf("  push rax\n");
     return;
   }
-  if (node->ty == '!') {
+  if (expr->ty == '!') {
     // `!`
-    gen_expr(node->rhs);
+    gen_expr(expr->rhs);
     printf("  pop rax\n");
     printf("  cmp rax, 0\n");
     printf("  sete al\n");
@@ -238,10 +238,10 @@ static void gen_expr(Node *node) {
     printf("  push rax\n");
     return;
   }
-  if (node->ty == ND_INC) {
-    if (node->lhs == NULL) {
+  if (expr->ty == EX_INC) {
+    if (expr->lhs == NULL) {
       // 前置の `++`
-      gen_lval(node->rhs);
+      gen_lval(expr->rhs);
       printf("  pop rax\n");
       printf("  mov rdi, [rax]\n");
       printf("  add rdi, 1\n");
@@ -250,7 +250,7 @@ static void gen_expr(Node *node) {
       return;
     }
     // 後置の `++`
-    gen_lval(node->lhs);
+    gen_lval(expr->lhs);
     printf("  pop rax\n");
     printf("  mov rdi, [rax]\n");
     printf("  push rdi\n");
@@ -259,10 +259,10 @@ static void gen_expr(Node *node) {
     return;
   }
 
-  if (node->ty == ND_DEC) {
-    if (node->lhs == NULL) {
+  if (expr->ty == EX_DEC) {
+    if (expr->lhs == NULL) {
       // 前置の `--`
-      gen_lval(node->rhs);
+      gen_lval(expr->rhs);
       printf("  pop rax\n");
       printf("  mov rdi, [rax]\n");
       printf("  sub rdi, 1\n");
@@ -271,7 +271,7 @@ static void gen_expr(Node *node) {
       return;
     }
     // 後置の `--`
-    gen_lval(node->lhs);
+    gen_lval(expr->lhs);
     printf("  pop rax\n");
     printf("  mov rdi, [rax]\n");
     printf("  push rdi\n");
@@ -281,17 +281,17 @@ static void gen_expr(Node *node) {
   }
 
   // 二項演算子
-  if (node->lhs == NULL || node->rhs == NULL) {
-    error("lhs, rhsのいずれかまたは両方が空です: %p %p", node->lhs, node->rhs);
+  if (expr->lhs == NULL || expr->rhs == NULL) {
+    error("lhs, rhsのいずれかまたは両方が空です: %p %p", expr->lhs, expr->rhs);
   }
 
-  gen_expr(node->lhs);
-  gen_expr(node->rhs);
+  gen_expr(expr->lhs);
+  gen_expr(expr->rhs);
 
   printf("  pop rdi\n");
   printf("  pop rax\n");
 
-  switch (node->ty) {
+  switch (expr->ty) {
   case '+':
     printf("  add rax, rdi\n");
     break;
@@ -310,12 +310,12 @@ static void gen_expr(Node *node) {
     printf("  div rdi\n");
     printf("  mov rax, rdx\n");
     break;
-  case ND_EQEQ:
+  case EX_EQEQ:
     printf("  cmp rax, rdi\n");
     printf("  sete al\n");
     printf("  movzb rax, al\n");
     break;
-  case ND_NOTEQ:
+  case EX_NOTEQ:
     printf("  cmp rax, rdi\n");
     printf("  setne al\n");
     printf("  movzb rax, al\n");
@@ -330,21 +330,21 @@ static void gen_expr(Node *node) {
     printf("  setg al\n");
     printf("  movzb rax, al\n");
     break;
-  case ND_LTEQ:
+  case EX_LTEQ:
     printf("  cmp rax, rdi\n");
     printf("  setle al\n");
     printf("  movzb rax, al\n");
     break;
-  case ND_GTEQ:
+  case EX_GTEQ:
     printf("  cmp rax, rdi\n");
     printf("  setge al\n");
     printf("  movzb rax, al\n");
     break;
-  case ND_LSHIFT:
+  case EX_LSHIFT:
     printf("  mov rcx, rdi\n");
     printf("  shl rax, cl\n");
     break;
-  case ND_RSHIFT:
+  case EX_RSHIFT:
     printf("  mov rcx, rdi\n");
     printf("  sar rax, cl\n");
     break;
@@ -361,18 +361,18 @@ static void gen_expr(Node *node) {
     printf("  mov rax, rdi\n");
     break;
   default:
-    error("未知のノード種別です: %d", node->ty);
+    error("未知のノード種別です: %d", expr->ty);
   }
 
   printf("  push rax\n");
 }
 
-static void gen_stmt(Node *stmt) {
+static void gen_stmt(Stmt *stmt) {
   switch (stmt->ty) {
-  case ND_NULL: {
+  case ST_NULL: {
     return;
   }
-  case ND_EXPR: {
+  case ST_EXPR: {
     gen_expr(stmt->expr);
 
     // 式の評価結果としてスタックに一つの値が残っている
@@ -380,36 +380,36 @@ static void gen_stmt(Node *stmt) {
     printf("  pop rax\n");
     break;
   }
-  case ND_COMPOUND: {
+  case ST_COMPOUND: {
     for (int i = 0; i < stmt->stmts->len; i++) {
       gen_stmt(stmt->stmts->data[i]);
     }
     break;
   }
-  case ND_IF: {
+  case ST_IF: {
     char *else_label = make_label();
     char *end_label = make_label();
     gen_expr(stmt->cond);
     printf("  pop rax\n");
     printf("  cmp rax, 0\n");
     printf("  je %s\n", else_label);
-    gen_stmt(stmt->then_node);
+    gen_stmt(stmt->then_stmt);
     printf("  jmp %s\n", end_label);
     printf("%s:\n", else_label);
-    gen_stmt(stmt->else_node);
+    gen_stmt(stmt->else_stmt);
     printf("%s:\n", end_label);
     break;
   }
-  case ND_SWITCH: {
+  case ST_SWITCH: {
     char *end_label = make_label();
     gen_expr(stmt->cond);
     for (int i = 0; i < stmt->cases->len; i++) {
-      Node *case_node = stmt->cases->data[i];
-      gen_expr(case_node->expr);
+      Stmt *case_expr = stmt->cases->data[i];
+      gen_expr(case_expr->expr);
       printf("  pop rax\n");
       printf("  pop rdi\n");
       printf("  cmp rax, rdi\n");
-      printf("  je %s\n", case_node->label);
+      printf("  je %s\n", case_expr->label);
       printf("  push rdi\n");
     }
     printf("  pop rdi\n");
@@ -424,13 +424,13 @@ static void gen_stmt(Node *stmt) {
     printf("%s:", end_label);
     break;
   }
-  case ND_CASE:
-  case ND_DEFAULT:
-  case ND_LABEL: {
+  case ST_CASE:
+  case ST_DEFAULT:
+  case ST_LABEL: {
     printf("%s:\n", stmt->label);
     break;
   }
-  case ND_WHILE: {
+  case ST_WHILE: {
     char *cond_label = make_label();
     char *end_label = make_label();
     printf("%s:\n", cond_label);
@@ -449,7 +449,7 @@ static void gen_stmt(Node *stmt) {
     printf("%s:\n", end_label);
     break;
   }
-  case ND_DO_WHILE: {
+  case ST_DO_WHILE: {
     char *loop_label = make_label();
     char *cond_label = make_label();
     char *end_label = make_label();
@@ -469,7 +469,7 @@ static void gen_stmt(Node *stmt) {
     printf("%s:\n", end_label);
     break;
   }
-  case ND_FOR: {
+  case ST_FOR: {
     char *cond_label = make_label();
     char *inc_label = make_label();
     char *end_label = make_label();
@@ -498,7 +498,7 @@ static void gen_stmt(Node *stmt) {
     printf("%s:\n", end_label);
     break;
   }
-  case ND_GOTO: {
+  case ST_GOTO: {
     char *label = get_label(stmt->name);
     if (label == NULL) {
       error("未知のラベルへのgotoです: %s", stmt->name);
@@ -506,14 +506,14 @@ static void gen_stmt(Node *stmt) {
     printf("  jmp %s\n", label);
     break;
   }
-  case ND_BREAK: {
+  case ST_BREAK: {
     if (break_labels->len <= 0) {
       error("ループでもswitch文中でもない箇所にbreakがあります");
     }
     printf("  jmp %s\n", (char *)break_labels->data[break_labels->len - 1]);
     break;
   }
-  case ND_CONTINUE: {
+  case ST_CONTINUE: {
     if (continue_labels->len <= 0) {
       error("ループ中でない箇所にcontinueがあります");
     }
@@ -525,8 +525,8 @@ static void gen_stmt(Node *stmt) {
   }
 }
 
-void gen(Node *node) {
+void gen(Stmt *stmt) {
   break_labels = new_vector();
   continue_labels = new_vector();
-  gen_stmt(node);
+  gen_stmt(stmt);
 }

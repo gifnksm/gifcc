@@ -139,205 +139,212 @@ static void output_token(void) {
   }
 }
 
-static void dump_node(Node *node, int level);
-static void dump_binop_node(Node *node, char *label, int level) {
+static void dump_expr(Expr *expr, int level);
+static void dump_binop_expr(Expr *expr, char *label, int level) {
   printf("%*s(%s\n", 2 * level, "", label);
-  if (node->lhs != NULL) {
-    dump_node(node->lhs, level + 1);
+  if (expr->lhs != NULL) {
+    dump_expr(expr->lhs, level + 1);
   } else {
     printf("%*s(NULL)\n", 2 * (level + 1), "");
   }
-  if (node->rhs != NULL) {
-    dump_node(node->rhs, level + 1);
+  if (expr->rhs != NULL) {
+    dump_expr(expr->rhs, level + 1);
   } else {
     printf("%*s(NULL)\n", 2 * (level + 1), "");
   }
   printf("%*s)\n", 2 * level, "");
 }
 
-static void dump_node(Node *node, int level) {
-  if (node->ty <= 255) {
-    dump_binop_node(node, (char[]){'[', node->ty, ']', '\0'}, level);
+static void dump_expr(Expr *expr, int level) {
+  if (expr->ty <= 255) {
+    dump_binop_expr(expr, (char[]){'[', expr->ty, ']', '\0'}, level);
     return;
   }
 
-  switch (node->ty) {
-  case ND_NUM:
-    printf("%*s(NUM %d)\n", 2 * level, "", node->val);
+  switch (expr->ty) {
+  case EX_NUM:
+    printf("%*s(NUM %d)\n", 2 * level, "", expr->val);
     break;
-  case ND_IDENT:
-    printf("%*s(IDENT %s)\n", 2 * level, "", node->name);
+  case EX_IDENT:
+    printf("%*s(IDENT %s)\n", 2 * level, "", expr->name);
     break;
-  case ND_EQEQ:
-    dump_binop_node(node, "[==]", level);
+  case EX_EQEQ:
+    dump_binop_expr(expr, "[==]", level);
     break;
-  case ND_NOTEQ:
-    dump_binop_node(node, "[!=]", level);
+  case EX_NOTEQ:
+    dump_binop_expr(expr, "[!=]", level);
     break;
-  case ND_LTEQ:
-    dump_binop_node(node, "[<=]", level);
+  case EX_LTEQ:
+    dump_binop_expr(expr, "[<=]", level);
     break;
-  case ND_GTEQ:
-    dump_binop_node(node, "[>=]", level);
+  case EX_GTEQ:
+    dump_binop_expr(expr, "[>=]", level);
     break;
-  case ND_LSHIFT:
-    dump_binop_node(node, "[<<]", level);
+  case EX_LSHIFT:
+    dump_binop_expr(expr, "[<<]", level);
     break;
-  case ND_RSHIFT:
-    dump_binop_node(node, "[>>]", level);
+  case EX_RSHIFT:
+    dump_binop_expr(expr, "[>>]", level);
     break;
-  case ND_LOGAND:
-    dump_binop_node(node, "[&&]", level);
+  case EX_LOGAND:
+    dump_binop_expr(expr, "[&&]", level);
     break;
-  case ND_LOGOR:
-    dump_binop_node(node, "[||]", level);
+  case EX_LOGOR:
+    dump_binop_expr(expr, "[||]", level);
     break;
-  case ND_COND:
+  case EX_COND:
     printf("%*s(COND\n", 2 * level, "");
-    dump_node(node->cond, level + 1);
-    dump_node(node->then_node, level + 1);
-    dump_node(node->else_node, level + 1);
+    dump_expr(expr->cond, level + 1);
+    dump_expr(expr->lhs, level + 1);
+    dump_expr(expr->rhs, level + 1);
     printf("%*s)\n", 2 * level, "");
     break;
-  case ND_INC:
-    dump_binop_node(node, "[++]", level);
+  case EX_INC:
+    dump_binop_expr(expr, "[++]", level);
     break;
-  case ND_DEC:
-    dump_binop_node(node, "[--]", level);
+  case EX_DEC:
+    dump_binop_expr(expr, "[--]", level);
     break;
-  case ND_MUL_ASSIGN:
-    dump_binop_node(node, "[*=]", level);
+  case EX_MUL_ASSIGN:
+    dump_binop_expr(expr, "[*=]", level);
     break;
-  case ND_DIV_ASSIGN:
-    dump_binop_node(node, "[/=]", level);
+  case EX_DIV_ASSIGN:
+    dump_binop_expr(expr, "[/=]", level);
     break;
-  case ND_MOD_ASSIGN:
-    dump_binop_node(node, "[%%=]", level);
+  case EX_MOD_ASSIGN:
+    dump_binop_expr(expr, "[%%=]", level);
     break;
-  case ND_ADD_ASSIGN:
-    dump_binop_node(node, "[+=]", level);
+  case EX_ADD_ASSIGN:
+    dump_binop_expr(expr, "[+=]", level);
     break;
-  case ND_SUB_ASSIGN:
-    dump_binop_node(node, "[-=]", level);
+  case EX_SUB_ASSIGN:
+    dump_binop_expr(expr, "[-=]", level);
     break;
-  case ND_LSHIFT_ASSIGN:
-    dump_binop_node(node, "[<<=]", level);
+  case EX_LSHIFT_ASSIGN:
+    dump_binop_expr(expr, "[<<=]", level);
     break;
-  case ND_RSHIFT_ASSIGN:
-    dump_binop_node(node, "[>>=]", level);
+  case EX_RSHIFT_ASSIGN:
+    dump_binop_expr(expr, "[>>=]", level);
     break;
-  case ND_AND_ASSIGN:
-    dump_binop_node(node, "[^=]", level);
+  case EX_AND_ASSIGN:
+    dump_binop_expr(expr, "[^=]", level);
     break;
-  case ND_OR_ASSIGN:
-    dump_binop_node(node, "[|=]", level);
+  case EX_OR_ASSIGN:
+    dump_binop_expr(expr, "[|=]", level);
     break;
-  case ND_XOR_ASSIGN:
-    dump_binop_node(node, "[^=]", level);
+  case EX_XOR_ASSIGN:
+    dump_binop_expr(expr, "[^=]", level);
     break;
-  case ND_CALL:
+  case EX_CALL:
     printf("%*s(CALL\n", 2 * level, "");
-    dump_node(node->callee, level + 1);
-    if (node->argument != NULL) {
-      for (int i = 0; i < node->argument->len; i++) {
-        dump_node(node->argument->data[i], level + 1);
+    dump_expr(expr->callee, level + 1);
+    if (expr->argument != NULL) {
+      for (int i = 0; i < expr->argument->len; i++) {
+        dump_expr(expr->argument->data[i], level + 1);
       }
     }
     printf("%*s)\n", 2 * level, "");
     break;
-  case ND_EXPR:
+  default:
+    error("未知のノードです: %d\n", expr->ty);
+  }
+}
+
+static void dump_stmt(Stmt *stmt, int level) {
+  switch (stmt->ty) {
+  case ST_EXPR:
     printf("%*s(EXPR\n", 2 * level, "");
-    dump_node(node->expr, level + 1);
+    dump_expr(stmt->expr, level + 1);
     printf("%*s)\n", 2 * level, "");
     break;
-  case ND_COMPOUND:
+  case ST_COMPOUND:
     printf("%*s(COMPOUND\n", 2 * level, "");
-    for (int i = 0; i < node->stmts->len; i++) {
-      dump_node(node->stmts->data[i], level + 1);
+    for (int i = 0; i < stmt->stmts->len; i++) {
+      dump_stmt(stmt->stmts->data[i], level + 1);
     }
     printf("%*s)\n", 2 * level, "");
     break;
-  case ND_IF:
+  case ST_IF:
     printf("%*s(IF\n", 2 * level, "");
-    dump_node(node->cond, level + 1);
-    dump_node(node->then_node, level + 1);
-    dump_node(node->else_node, level + 1);
+    dump_expr(stmt->cond, level + 1);
+    dump_stmt(stmt->then_stmt, level + 1);
+    dump_stmt(stmt->else_stmt, level + 1);
     printf("%*s)\n", 2 * level, "");
     break;
-  case ND_SWITCH:
+  case ST_SWITCH:
     printf("%*s(SWITCH\n", 2 * level, "");
-    dump_node(node->cond, level + 1);
-    dump_node(node->body, level + 1);
+    dump_expr(stmt->cond, level + 1);
+    dump_stmt(stmt->body, level + 1);
     printf("%*s)\n", 2 * level, "");
     break;
-  case ND_CASE:
+  case ST_CASE:
     printf("%*s(CASE\n", 2 * level, "");
-    dump_node(node->expr, level + 1);
+    dump_expr(stmt->expr, level + 1);
     printf("%*s)\n", 2 * level, "");
     break;
-  case ND_DEFAULT:
+  case ST_DEFAULT:
     printf("%*s(DEFAULT)\n", 2 * level, "");
     break;
-  case ND_LABEL:
-    printf("%*s(LABEL %s)\n", 2 * level, "", node->name);
+  case ST_LABEL:
+    printf("%*s(LABEL %s)\n", 2 * level, "", stmt->name);
     break;
-  case ND_WHILE:
+  case ST_WHILE:
     printf("%*s(WHILE\n", 2 * level, "");
-    dump_node(node->cond, level + 1);
-    dump_node(node->body, level + 1);
+    dump_expr(stmt->cond, level + 1);
+    dump_stmt(stmt->body, level + 1);
     printf("%*s)\n", 2 * level, "");
     break;
-  case ND_DO_WHILE:
+  case ST_DO_WHILE:
     printf("%*s(DO_WHILE\n", 2 * level, "");
-    dump_node(node->cond, level + 1);
-    dump_node(node->body, level + 1);
+    dump_expr(stmt->cond, level + 1);
+    dump_stmt(stmt->body, level + 1);
     printf("%*s)\n", 2 * level, "");
     break;
-  case ND_FOR:
+  case ST_FOR:
     printf("%*s(FOR\n", 2 * level, "");
-    if (node->init != NULL) {
-      dump_node(node->init, level + 1);
+    if (stmt->init != NULL) {
+      dump_expr(stmt->init, level + 1);
     } else {
       printf("%*s(NULL)\n", 2 * (level + 1), "");
     }
-    if (node->cond != NULL) {
-      dump_node(node->cond, level + 1);
+    if (stmt->cond != NULL) {
+      dump_expr(stmt->cond, level + 1);
     } else {
       printf("%*s(NULL)\n", 2 * (level + 1), "");
     }
-    if (node->inc != NULL) {
-      dump_node(node->inc, level + 1);
+    if (stmt->inc != NULL) {
+      dump_expr(stmt->inc, level + 1);
     } else {
       printf("%*s(NULL)\n", 2 * (level + 1), "");
     }
-    dump_node(node->body, level + 1);
+    dump_stmt(stmt->body, level + 1);
     printf("%*s)\n", 2 * level, "");
     break;
-  case ND_GOTO:
-    printf("%*s(GOTO %s)\n", 2 * level, "", node->name);
+  case ST_GOTO:
+    printf("%*s(GOTO %s)\n", 2 * level, "", stmt->name);
     break;
-  case ND_BREAK:
+  case ST_BREAK:
     printf("%*s(BREAK)\n", 2 * level, "");
     break;
-  case ND_CONTINUE:
+  case ST_CONTINUE:
     printf("%*s(CONTINUE)\n", 2 * level, "");
     break;
-  case ND_NULL:
+  case ST_NULL:
     printf("%*s(NULL)\n", 2 * level, "");
     break;
   default:
-    error("未知のノードです: %d\n", node->ty);
+    error("未知のノードです: %d\n", stmt->ty);
   }
 }
 
 static void output_ast(void) {
   for (int pos = 0; true; pos++) {
-    Node *node = get_node(pos);
-    if (node == NULL) {
+    Stmt *stmt = get_stmt(pos);
+    if (stmt == NULL) {
       break;
     }
 
-    dump_node(node, 0);
+    dump_stmt(stmt, 0);
   }
 }
 
@@ -419,8 +426,8 @@ int main(int argc, char **argv) {
   printf("  sub rsp, %d\n", align(get_stack_size(), 16));
 
   // 先頭の式から順にコード生成
-  for (int i = 0; get_node(i); i++) {
-    gen(get_node(i));
+  for (int i = 0; get_stmt(i); i++) {
+    gen(get_stmt(i));
   }
 
   // エピローグ
