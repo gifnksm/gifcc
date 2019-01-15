@@ -141,6 +141,8 @@ typedef struct Node {
 __attribute__((noreturn, format(printf, 3, 4))) void
 error_raw(const char *file, int line, char *fmt, ...);
 
+static inline int align(int n, int s) { return ((n + (s - 1)) / s) * s; }
+
 Vector *new_vector(void);
 void vec_push(Vector *vec, void *elem);
 void *vec_pop(Vector *vec);
