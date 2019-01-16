@@ -1,5 +1,7 @@
 #pragma once
 
+#include <stdlib.h>
+
 typedef struct {
   void **data;
   int capacity;
@@ -186,7 +188,11 @@ char *make_label(void);
 void gen(Function *func);
 
 static inline int get_stack_offset(Function *func, char *name) {
-  return *(int *)map_get(func->stack_map, name);
+  int *offset = map_get(func->stack_map, name);
+  if (offset == NULL) {
+    error("変数が定義されていません: %s", name);
+  }
+  return *offset;
 }
 
 static inline char *get_label(Function *func, char *name) {

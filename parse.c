@@ -24,6 +24,8 @@ static Expr *logical_or_expression(void);
 static Expr *conditional_expression(void);
 static Expr *assignment_expression(void);
 static Expr *expression(void);
+static Expr *constant_expression(void);
+static void declaration(void);
 static Stmt *statement(void);
 static Stmt *compound_statement(void);
 static Function *function_declaration(void);
@@ -72,7 +74,6 @@ static Expr *new_expr_num(int val) {
 static Expr *new_expr_ident(char *name) {
   Expr *expr = new_expr(EX_IDENT);
   expr->name = name;
-  (void)register_stack(name);
   return expr;
 }
 
@@ -473,6 +474,16 @@ static Expr *expression(void) {
 
 static Expr *constant_expression(void) { return conditional_expression(); }
 
+static void declaration(void) {
+  expect(TK_INT);
+  Token *ident = expect(TK_IDENT);
+  expect(';');
+
+  if (!register_stack(ident->name)) {
+    error("同じ名前の変数が複数回宣言されました: %s", ident->name);
+  }
+}
+
 static Stmt *statement(void) {
   switch (get_token(pos)->ty) {
   case TK_IF: {
@@ -614,6 +625,10 @@ static Stmt *compound_statement(void) {
   Stmt *stmt = new_stmt(ST_COMPOUND);
   stmt->stmts = new_vector();
   while (!consume('}')) {
+    if (get_token(pos)->ty == TK_INT) {
+      declaration();
+      continue;
+    }
     vec_push(stmt->stmts, statement());
   }
   return stmt;

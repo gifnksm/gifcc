@@ -50,20 +50,25 @@ try 41 'int main(void) { return 12 + 34 - 5 ;}'
 try 47 'int main(void) {return 5 + 6 * 7;}'
 try 15 'int main(void) {return 5 * (9 - 6);}'
 try 4 'int main(void) {return (3 + 5) / 2;}'
-try 4 'int main(void) {a = b = 2; return a + b;}'
+try 4 'int main(void) {int a; int b; a = b = 2; return a + b;}'
 try 14 '
 int main(void) {
+  int a;
+  int b;
   a = 3;
   b = 5 * 6 - 8;
   return a + b / 2;
 }
 '
-try 10 'int main(void) {b = (a = 5); return a + b;}'
+try 10 'int main(void) {int a; int b; b = (a = 5); return a + b;}'
 try 1 'int main(void) {return 10 + 2 == 3 * 4;}'
 try 10 'int main(void) {return 10 + (2 != 1 * 2);}'
 try 12 'int main(void) {return 10 + ((2 != 1) * 2);}'
 try 0 '
 int main(void) {
+  int a;
+  int b;
+  int c;
   a = 3;
   b = 5;
   return c = a == b;
@@ -71,6 +76,9 @@ int main(void) {
 '
 try 0 '
 int main(void) {
+  int a;
+  int b;
+  int c;
   a = 3;
   b = 5;
   return c = a == b;
@@ -78,6 +86,32 @@ int main(void) {
 '
 try 26 '
 int main(void) {
+  int a;
+  int b;
+  int c;
+  int d;
+  int e;
+  int f;
+  int g;
+  int h;
+  int i;
+  int j;
+  int k;
+  int l;
+  int m;
+  int n;
+  int o;
+  int p;
+  int q;
+  int r;
+  int s;
+  int t;
+  int u;
+  int v;
+  int w;
+  int x;
+  int y;
+  int z;
   a = b = c = d = e = f = g = h = i = j = k = l = m = n = o = p = q = r = s = t = u = v = w = x = y = z = 1;
   return a + b + c + d + e + f + g + h + i + j + k + l + m + n + o + p + q + r + s + t + u + v + w + x + y + z;
 }
@@ -91,12 +125,18 @@ int main(void) {
 '
 try 6 '
 int main(void) {
+  int a;
+  int c;
+  int d;
   a=1;c=2;d=3;
   return a+c+d;
 }
 '
 try 6 '
 int main(void) {
+  int a;
+  int ab;
+  int abc;
   a = 1;
   ab = 2;
   abc = 3;
@@ -105,6 +145,8 @@ int main(void) {
 '
 try 124 '
 int main(void) {
+  int _;
+  int a_;
   _ = 123;
   a_ = 1;
   return _ + a_;
@@ -134,6 +176,8 @@ int main(void) {
 '
 INPUT='xy' try 10 '
 int main(void) {
+  int a;
+  int c;
   a = getchar();
   putchar(a);
   putchar(getchar());
@@ -167,58 +211,58 @@ try 0 'int main(void) {return 0 || 0;}'
 try 12 'int main(void) {return 1 ? 12 : 34;}'
 try 34 'int main(void) {return 0 ? 12 : 34;}'
 try 3 'int main(void) {return 8 % 5;}'
-try 103 'int main(void) {a = +3; return 100 + a;}'
-try 97 'int main(void) {a = -3; return 100 + a;}'
+try 103 'int main(void) {int a; a = +3; return 100 + a;}'
+try 97 'int main(void) {int a; a = -3; return 100 + a;}'
 try 252 'int main(void) {return ~3;}'
-try 3 'int main(void) {a = 2; return ++a;}'
-try 33 'int main(void) {a = 2; b = ++a; return 10 * a + b;}'
-try 1 'int main(void) {a = 2; return --a;}'
-try 11 'int main(void) {a = 2; b = --a; return 10 * a + b;}'
-try 2 'int main(void) {a = 2; return a++;}'
-try 32 'int main(void) {a = 2; b = a++; return 10 * a + b;}'
-try 2 'int main(void) {a = 2; return a--;}'
-try 12 'int main(void) {a = 2; b = a--; return 10 * a + b;}'
+try 3 'int main(void) {int a; a = 2; return ++a;}'
+try 33 'int main(void) {int a; int b; a = 2; b = ++a; return 10 * a + b;}'
+try 1 'int main(void) {int a; a = 2; return --a;}'
+try 11 'int main(void) {int a; int b; a = 2; b = --a; return 10 * a + b;}'
+try 2 'int main(void) {int a; a = 2; return a++;}'
+try 32 'int main(void) {int a; int b; a = 2; b = a++; return 10 * a + b;}'
+try 2 'int main(void) {int a; a = 2; return a--;}'
+try 12 'int main(void) {int a; int b; a = 2; b = a--; return 10 * a + b;}'
 try 3 'int main(void) {1;;2;;;; return 3;}'
-try 8 'int main(void) {{ a = 1; b = 1; return a + b + 6; }}'
-try 8 'int main(void) {a = b = 1; if (1) { a = 5; b = 3; } return a + b;}'
-try 2 'int main(void) {a = b = 1; if (0) { a = 5; b = 3; } return a + b;}'
-try 8 'int main(void) {a = b = 1; if (1) { a = 5; b = 3; } else { a = 3; b = 2; } return  a + b;}'
-try 5 'int main(void) {a = b = 1; if (0) { a = 5; b = 3; } else { a = 3; b = 2; } return a + b;}'
-try 8 'int main(void) {a = b = 1; if (1) a = 5; b = 3; return a + b;}'
-try 4 'int main(void) {a = b = 1; if (0) a = 5; b = 3; return a + b;}'
-try 7 'int main(void) {a = b = 1; if (1) a = 5; else a = 3; b = 2; return a + b;}'
-try 5 'int main(void) {a = b = 1; if (0) a = 5; else a = 3; b = 2; return a + b;}'
-try 5 'int main(void) {a = 0; while (a < 5) { a++; } return a;}'
-try 10 'int main(void) {a = b = 0; while (a < 5) { b = b + 2; a++; } return b;}'
-try 10 'int main(void) {c = 97; while (c <= 122) { putchar(c); c++; }; return putchar(10); }'
-try 10 'int main(void) {a = 0; do a = 10; while (0); return a;}'
-try 10 'int main(void) {a = 0; do a++; while (a < 10); return a;}'
-try 55 'int main(void) {s = 0; for (a = 1; a <= 10; a++) s = s + a; return s;}'
-try 55 'int main(void) {a = 1; s = 0; for (; a <= 10; a++) s = s + a; return s;}'
-try 55 'int main(void) {a = 1; s = 0; for (; a <= 10;) { s = s + a; a++; } return s;}'
-try 45 'int main(void) {a = 0; s = 0; while (1) { a++; if (a >= 10) break; s = s + a; } return s;}'
-try 45 'int main(void) {a = 0; s = 0; do { a++; if (a >= 10) break; s = s + a; } while (1); return s;}'
-try 45 'int main(void) {a = 0; s = 0; for (;;) { a++; if (a >= 10) break; s = s + a; } return s;}'
-try 30 'int main(void) {a = 0; s = 0; while (a < 10) { a++; if (a % 2) continue; s = s + a; } return s;}'
-try 30 'int main(void) {a = 0; s = 0; do { a++; if (a % 2) continue; s = s + a; } while (a < 10); return s;}'
-try 30 'int main(void) {a = 0; s = 0; for (a = 1; a <= 10; a++) { if (a % 2) continue; s = s + a; } return s;}'
+try 8 'int main(void) {int a; int b; a = 1; b = 1; return a + b + 6;}'
+try 8 'int main(void) {int a; int b; a = b = 1; if (1) { a = 5; b = 3; } return a + b;}'
+try 2 'int main(void) {int a; int b; a = b = 1; if (0) { a = 5; b = 3; } return a + b;}'
+try 8 'int main(void) {int a; int b; a = b = 1; if (1) { a = 5; b = 3; } else { a = 3; b = 2; } return  a + b;}'
+try 5 'int main(void) {int a; int b; a = b = 1; if (0) { a = 5; b = 3; } else { a = 3; b = 2; } return a + b;}'
+try 8 'int main(void) {int a; int b; a = b = 1; if (1) a = 5; b = 3; return a + b;}'
+try 4 'int main(void) {int a; int b; a = b = 1; if (0) a = 5; b = 3; return a + b;}'
+try 7 'int main(void) {int a; int b; a = b = 1; if (1) a = 5; else a = 3; b = 2; return a + b;}'
+try 5 'int main(void) {int a; int b; a = b = 1; if (0) a = 5; else a = 3; b = 2; return a + b;}'
+try 5 'int main(void) {int a; a = 0; while (a < 5) { a++; } return a;}'
+try 10 'int main(void) {int a; int b; a = b = 0; while (a < 5) { b = b + 2; a++; } return b;}'
+try 10 'int main(void) {int c; c = 97; while (c <= 122) { putchar(c); c++; }; return putchar(10); }'
+try 10 'int main(void) {int a; a = 0; do a = 10; while (0); return a;}'
+try 10 'int main(void) {int a; a = 0; do a++; while (a < 10); return a;}'
+try 55 'int main(void) {int a; int s; s = 0; for (a = 1; a <= 10; a++) s = s + a; return s;}'
+try 55 'int main(void) {int a; int s; a = 1; s = 0; for (; a <= 10; a++) s = s + a; return s;}'
+try 55 'int main(void) {int a; int s; a = 1; s = 0; for (; a <= 10;) { s = s + a; a++; } return s;}'
+try 45 'int main(void) {int a; int s; a = 0; s = 0; while (1) { a++; if (a >= 10) break; s = s + a; } return s;}'
+try 45 'int main(void) {int a; int s; a = 0; s = 0; do { a++; if (a >= 10) break; s = s + a; } while (1); return s;}'
+try 45 'int main(void) {int a; int s; a = 0; s = 0; for (;;) { a++; if (a >= 10) break; s = s + a; } return s;}'
+try 30 'int main(void) {int a; int s; a = 0; s = 0; while (a < 10) { a++; if (a % 2) continue; s = s + a; } return s;}'
+try 30 'int main(void) {int a; int s; a = 0; s = 0; do { a++; if (a % 2) continue; s = s + a; } while (a < 10); return s;}'
+try 30 'int main(void) {int a; int s; a = 0; s = 0; for (a = 1; a <= 10; a++) { if (a % 2) continue; s = s + a; } return s;}'
 try 0 'int main(void) {return !1;}'
 try 0 'int main(void) {return !3;}'
 try 1 'int main(void) {return !0;}'
-try 12 'int main(void) {a = 4; a *= 3; return a;}'
-try 1 'int main(void) {a = 5; a /= 3; return a;}'
-try 2 'int main(void) {a = 5; a %= 3; return a;}'
-try 7 'int main(void) {a = 4; a += 3; return a;}'
-try 1 'int main(void) {a = 4; a -= 3; return a;}'
-try 32 'int main(void) {a = 4; a <<= 3; return a;}'
-try 4 'int main(void) {a = 32; a >>= 3; return a;}'
-try 1 'int main(void) {a = 5; a &= 3; return a;}'
-try 7 'int main(void) {a = 5; a |= 3; return a;}'
-try 6 'int main(void) {a = 5; a ^= 3; return a;}'
+try 12 'int main(void) {int a; a = 4; a *= 3; return a;}'
+try 1 'int main(void) {int a; a = 5; a /= 3; return a;}'
+try 2 'int main(void) {int a; a = 5; a %= 3; return a;}'
+try 7 'int main(void) {int a; a = 4; a += 3; return a;}'
+try 1 'int main(void) {int a; a = 4; a -= 3; return a;}'
+try 32 'int main(void) {int a; a = 4; a <<= 3; return a;}'
+try 4 'int main(void) {int a; a = 32; a >>= 3; return a;}'
+try 1 'int main(void) {int a; a = 5; a &= 3; return a;}'
+try 7 'int main(void) {int a; a = 5; a |= 3; return a;}'
+try 6 'int main(void) {int a; a = 5; a ^= 3; return a;}'
 try 3 'int main(void) {return 5, 4, 3;}'
-try 1 'int main(void) {return &a == &a;}'
-try 1 'int main(void) {return &a != 0;}'
-try 8 'int main(void) {a = 5; b = &a; *b += 3; return a;}'
+try 1 'int main(void) {int a; return &a == &a;}'
+try 1 'int main(void) {int a; return &a != 0;}'
+try 8 'int main(void) {int a; int b; a = 5; b = &a; *b += 3; return a;}'
 try 3 '
 int main(void) {
   switch (3) {
@@ -251,6 +295,8 @@ int main(void) {
 '
 try 5 '
 int main(void) {
+  int c;
+  int i;
   c = 0;
   for (i = 0; i < 5; i++) {
     switch (i) {
@@ -277,6 +323,8 @@ int main(void) {
 '
 try 7 '
 int main(void) {
+  int i;
+  int s;
   i = 3;
   s = 0;
   goto INIT;
@@ -314,6 +362,8 @@ int add(void) {
   return ret3() + ret8();
 }
 int main(void) {
+  int a;
+  int b;
   a = add();
   b = ret3();
   return a * 10 + b;
