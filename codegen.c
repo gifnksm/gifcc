@@ -18,8 +18,12 @@ char *make_label(void) {
 
 static void gen_lval(Expr *expr) {
   if (expr->ty == EX_IDENT) {
+    StackVar *var = get_stack_variable(func_ctxt, expr->name);
+    if (var == NULL) {
+      error("変数が定義されていません: %s", expr->name);
+    }
     printf("  mov rax, rbp\n");
-    printf("  sub rax, %d\n", get_stack_offset(func_ctxt, expr->name) + 8);
+    printf("  sub rax, %d\n", var->offset + 8);
     printf("  push rax\n");
     return;
   }
@@ -552,9 +556,13 @@ void gen(Function *func) {
 
   // 引数をスタックへコピー
   for (int i = 0; i < func->params->len; i++) {
+    char *name = func->params->data[i];
+    StackVar *var = get_stack_variable(func, name);
+    if (var == NULL) {
+      error("変数が定義されていません: %s", name);
+    }
     printf("  mov rax, rbp\n");
-    printf("  sub rax, %d\n",
-           get_stack_offset(func, func->params->data[i]) + 8);
+    printf("  sub rax, %d\n", var->offset + 8);
     switch (i) {
     case 0:
       printf("  mov [rax], rdi\n");

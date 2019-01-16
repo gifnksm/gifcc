@@ -1,7 +1,5 @@
 #pragma once
 
-#include <stdlib.h>
-
 typedef struct {
   void **data;
   int capacity;
@@ -107,6 +105,10 @@ enum {
   ST_NULL,
 };
 
+typedef struct StackVar {
+  int offset;
+} StackVar;
+
 typedef struct Expr {
   int ty; // ノードの型
 
@@ -187,12 +189,8 @@ Vector *translation_unit(void);
 char *make_label(void);
 void gen(Function *func);
 
-static inline int get_stack_offset(Function *func, char *name) {
-  int *offset = map_get(func->stack_map, name);
-  if (offset == NULL) {
-    error("変数が定義されていません: %s", name);
-  }
-  return *offset;
+static inline StackVar *get_stack_variable(Function *func, char *name) {
+  return map_get(func->stack_map, name);
 }
 
 static inline char *get_label(Function *func, char *name) {

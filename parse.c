@@ -44,9 +44,9 @@ static bool register_stack(char *name) {
     return false;
   }
 
-  int *offset = malloc(sizeof(int));
-  *offset = stack_size;
-  map_put(stack_map, name, offset);
+  StackVar *var = malloc(sizeof(StackVar));
+  var->offset = stack_size;
+  map_put(stack_map, name, var);
   stack_size += 8;
 
   return true;
