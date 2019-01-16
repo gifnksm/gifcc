@@ -262,7 +262,7 @@ try 6 'int main(void) {int a; a = 5; a ^= 3; return a;}'
 try 3 'int main(void) {return 5, 4, 3;}'
 try 1 'int main(void) {int a; return &a == &a;}'
 try 1 'int main(void) {int a; return &a != 0;}'
-try 8 'int main(void) {int a; int b; a = 5; b = &a; *b += 3; return a;}'
+try 8 'int main(void) {int a; int *b; a = 5; b = &a; *b += 3; return a;}'
 try 3 '
 int main(void) {
   switch (3) {

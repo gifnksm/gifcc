@@ -116,7 +116,8 @@ typedef struct StackVar {
 } StackVar;
 
 typedef struct Expr {
-  int ty; // ノードの型
+  int ty;         // ノードの型
+  Type *val_type; // 値の型
 
   struct Expr *lhs;  // 左辺
   struct Expr *rhs;  // 右辺

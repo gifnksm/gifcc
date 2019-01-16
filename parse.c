@@ -55,40 +55,203 @@ static bool register_stack(char *name, Type *type) {
   return true;
 }
 
-static Expr *new_expr(int ty) {
+static StackVar *get_stack(char *name) { return map_get(stack_map, name); }
+
+static bool is_sametype(Type *ty1, Type *ty2) {
+  if (ty1->ty != ty2->ty) {
+    return false;
+  }
+  if (ty1->ty == TY_PTR) {
+    return is_sametype(ty1->ptrof, ty2->ptrof);
+  }
+  return true;
+}
+
+static bool is_integer_type(Type *ty) { return ty->ty == TY_INT; }
+static bool is_arith_type(Type *ty) { return is_integer_type(ty); }
+static bool is_ptr_type(Type *ty) { return ty->ty == TY_PTR; }
+static Type *integer_promoted(Type *ty) { return ty; }
+static Type *arith_converted(Type *ty1, Type *ty2) {
+  if (!is_arith_type(ty1) || !is_arith_type(ty2)) {
+    return NULL;
+  }
+  return ty1;
+}
+
+static void __attribute__((noreturn))
+binop_type_error(int ty, Expr *lhs, Expr *rhs) {
+  error("不正な型の値に対する演算です: 演算=%d, 左辺=%d, 右辺=%d", ty,
+        lhs->val_type->ty, rhs->val_type->ty);
+}
+
+static Type *new_type(int ty) {
+  Type *type = malloc(sizeof(Type));
+  type->ty = ty;
+  return type;
+}
+
+static Type *new_type_ptr(Type *base_type) {
+  Type *ptrtype = malloc(sizeof(Type));
+  ptrtype->ty = TY_PTR;
+  ptrtype->ptrof = base_type;
+  base_type = ptrtype;
+  return ptrtype;
+}
+
+static Expr *new_expr(int ty, Type *val_type) {
   Expr *expr = malloc(sizeof(Expr));
   expr->ty = ty;
+  expr->val_type = val_type;
+  return expr;
+}
+
+static Expr *new_expr_postfix(int ty, Expr *operand) {
+  Expr *expr = new_expr(ty, operand->val_type);
+  expr->lhs = operand;
+  expr->rhs = NULL;
+  return expr;
+}
+
+static Expr *new_expr_unary(int ty, Expr *operand) {
+  Type *val_type;
+  if (ty == '&') {
+    val_type = new_type_ptr(operand->val_type);
+  } else if (ty == '*') {
+    if (operand->val_type->ty != TY_PTR) {
+      error("ポインタ型でない値に対するデリファレンスです");
+    }
+    val_type = operand->val_type->ptrof;
+  } else {
+    val_type = operand->val_type;
+  }
+  Expr *expr = new_expr(ty, val_type);
+  expr->lhs = NULL;
+  expr->rhs = operand;
   return expr;
 }
 
 static Expr *new_expr_binop(int ty, Expr *lhs, Expr *rhs) {
-  Expr *expr = new_expr(ty);
+  Type *val_type;
+  switch (ty) {
+  // multiplicative
+  case '*':
+  case '/':
+  case '%':
+    val_type = arith_converted(lhs->val_type, rhs->val_type);
+    if (val_type == NULL) {
+      binop_type_error(ty, lhs, rhs);
+    }
+    break;
+  // additive
+  case '+':
+  case '-':
+    if (is_ptr_type(lhs->val_type)) {
+      if (is_ptr_type(rhs->val_type) || !is_integer_type(rhs->val_type)) {
+        binop_type_error(ty, lhs, rhs);
+      }
+      val_type = lhs->val_type;
+    } else if (is_ptr_type(rhs->val_type)) {
+      if (!is_integer_type(lhs->val_type)) {
+        binop_type_error(ty, lhs, rhs);
+      }
+      val_type = rhs->val_type;
+    } else {
+      val_type = arith_converted(lhs->val_type, rhs->val_type);
+      if (val_type == NULL) {
+        binop_type_error(ty, lhs, rhs);
+      }
+    }
+    break;
+  // shift
+  case EX_LSHIFT:
+  case EX_RSHIFT:
+    if (!is_integer_type(lhs->val_type) || !is_integer_type(rhs->val_type)) {
+      binop_type_error(ty, lhs, rhs);
+    }
+    val_type = integer_promoted(lhs->val_type);
+    if (val_type == NULL) {
+      binop_type_error(ty, lhs, rhs);
+    }
+    break;
+
+  case '<':
+  case '>':
+  case EX_LTEQ:
+  case EX_GTEQ:
+  case EX_EQEQ:
+  case EX_NOTEQ:
+    val_type = new_type(TY_INT);
+    break;
+  // and
+  case '&':
+  case '^':
+  case '|':
+    if (!is_integer_type(lhs->val_type) || !is_integer_type(rhs->val_type)) {
+      binop_type_error(ty, lhs, rhs);
+    }
+    val_type = arith_converted(lhs->val_type, rhs->val_type);
+    break;
+  case EX_LOGAND:
+  case EX_LOGOR:
+    val_type = new_type(TY_INT);
+    break;
+  case '=':
+    val_type = lhs->val_type;
+    break;
+  case EX_MUL_ASSIGN:
+  case EX_DIV_ASSIGN:
+  case EX_MOD_ASSIGN:
+  case EX_ADD_ASSIGN:
+  case EX_SUB_ASSIGN:
+  case EX_LSHIFT_ASSIGN:
+  case EX_RSHIFT_ASSIGN:
+  case EX_AND_ASSIGN:
+  case EX_OR_ASSIGN:
+  case EX_XOR_ASSIGN:
+    val_type = lhs->val_type;
+    break;
+  case ',':
+    val_type = lhs->val_type;
+    break;
+  default:
+    assert(false);
+  }
+
+  Expr *expr = new_expr(ty, val_type);
   expr->lhs = lhs;
   expr->rhs = rhs;
   return expr;
 }
 
 static Expr *new_expr_num(int val) {
-  Expr *expr = new_expr(EX_NUM);
+  Expr *expr = new_expr(EX_NUM, new_type(TY_INT));
   expr->val = val;
   return expr;
 }
 
 static Expr *new_expr_ident(char *name) {
-  Expr *expr = new_expr(EX_IDENT);
+  StackVar *var = get_stack(name);
+  // 未知の識別子はint型として扱う
+  Type *type = var != NULL ? var->type : new_type(TY_INT);
+  Expr *expr = new_expr(EX_IDENT, type);
   expr->name = name;
   return expr;
 }
 
 static Expr *new_expr_call(Expr *callee, Vector *argument) {
-  Expr *expr = new_expr(EX_CALL);
+  // TODO: 関数の戻り値はintを仮定する
+  Expr *expr = new_expr(EX_CALL, new_type(TY_INT));
   expr->callee = callee;
   expr->argument = argument;
   return expr;
 }
 
 static Expr *new_expr_cond(Expr *cond, Expr *then_expr, Expr *else_expr) {
-  Expr *expr = new_expr(EX_COND);
+  if (!is_sametype(then_expr->val_type, else_expr->val_type)) {
+    error("条件演算子の両辺の型が異なります: %d, %d", then_expr->val_type->ty,
+          else_expr->val_type->ty);
+  }
+  Expr *expr = new_expr(EX_COND, then_expr->val_type);
   expr->cond = cond;
   expr->lhs = then_expr;
   expr->rhs = else_expr;
@@ -235,9 +398,9 @@ static Expr *postfix_expression(void) {
       expect(')');
       expr = new_expr_call(expr, argument);
     } else if (consume(TK_INC)) {
-      return new_expr_binop(EX_INC, expr, NULL);
+      return new_expr_postfix(EX_INC, expr);
     } else if (consume(TK_DEC)) {
-      return new_expr_binop(EX_DEC, expr, NULL);
+      return new_expr_postfix(EX_DEC, expr);
     } else {
       return expr;
     }
@@ -257,28 +420,28 @@ static Vector *argument_expression_list(void) {
 
 static Expr *unary_expression(void) {
   if (consume('&')) {
-    return new_expr_binop('&', NULL, cast_expression());
+    return new_expr_unary('&', cast_expression());
   }
   if (consume('*')) {
-    return new_expr_binop('*', NULL, cast_expression());
+    return new_expr_unary('*', cast_expression());
   }
   if (consume('+')) {
-    return new_expr_binop('+', NULL, cast_expression());
+    return new_expr_unary('+', cast_expression());
   }
   if (consume('-')) {
-    return new_expr_binop('-', NULL, cast_expression());
+    return new_expr_unary('-', cast_expression());
   }
   if (consume('~')) {
-    return new_expr_binop('~', NULL, cast_expression());
+    return new_expr_unary('~', cast_expression());
   }
   if (consume('!')) {
-    return new_expr_binop('!', NULL, cast_expression());
+    return new_expr_unary('!', cast_expression());
   }
   if (consume(TK_INC)) {
-    return new_expr_binop(EX_INC, NULL, cast_expression());
+    return new_expr_unary(EX_INC, cast_expression());
   }
   if (consume(TK_DEC)) {
-    return new_expr_binop(EX_DEC, NULL, cast_expression());
+    return new_expr_unary(EX_DEC, cast_expression());
   }
   return postfix_expression();
 }
@@ -491,17 +654,12 @@ static void declaration(void) {
 
 static Type *type_specifier(void) {
   expect(TK_INT);
-  Type *type = malloc(sizeof(Type));
-  type->ty = TY_INT;
-  return type;
+  return new_type(TY_INT);
 }
 
 static void declarator(Type *base_type, char **name, Type **type) {
   while (consume('*')) {
-    Type *ptrtype = malloc(sizeof(Type));
-    ptrtype->ty = TY_PTR;
-    ptrtype->ptrof = base_type;
-    base_type = ptrtype;
+    base_type = new_type_ptr(base_type);
   }
   *name = expect(TK_IDENT)->name;
   *type = base_type;
