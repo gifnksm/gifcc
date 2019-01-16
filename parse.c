@@ -26,6 +26,8 @@ static Expr *assignment_expression(void);
 static Expr *expression(void);
 static Expr *constant_expression(void);
 static void declaration(void);
+static Type *type_specifier(void);
+static void declarator(Type *base_type, char **name, Type **type);
 static Stmt *statement(void);
 static Stmt *compound_statement(void);
 static Function *function_declaration(void);
@@ -39,13 +41,14 @@ static Stmt null_stmt = {
 static Vector *switches = NULL;
 static Map *label_map;
 
-static bool register_stack(char *name) {
+static bool register_stack(char *name, Type *type) {
   if (map_get(stack_map, name)) {
     return false;
   }
 
   StackVar *var = malloc(sizeof(StackVar));
   var->offset = stack_size;
+  var->type = type;
   map_put(stack_map, name, var);
   stack_size += 8;
 
@@ -475,13 +478,27 @@ static Expr *expression(void) {
 static Expr *constant_expression(void) { return conditional_expression(); }
 
 static void declaration(void) {
-  expect(TK_INT);
-  Token *ident = expect(TK_IDENT);
+  Type *base_type = type_specifier();
+  char *name;
+  Type *type;
+  declarator(base_type, &name, &type);
   expect(';');
 
-  if (!register_stack(ident->name)) {
-    error("同じ名前の変数が複数回宣言されました: %s", ident->name);
+  if (!register_stack(name, type)) {
+    error("同じ名前の変数が複数回宣言されました: %s", name);
   }
+}
+
+static Type *type_specifier(void) {
+  expect(TK_INT);
+  Type *type = malloc(sizeof(Type));
+  type->ty = TY_INT;
+  return type;
+}
+
+static void declarator(Type *base_type, char **name, Type **type) {
+  *name = expect(TK_IDENT)->name;
+  *type = base_type;
 }
 
 static Stmt *statement(void) {
@@ -648,12 +665,14 @@ static Function *function_declaration(void) {
   expect('(');
   if (get_token(pos)->ty != ')' && !consume(TK_VOID)) {
     while (true) {
-      expect(TK_INT);
-      Token *arg = expect(TK_IDENT);
-      if (!register_stack(arg->name)) {
-        error("同じ名前の引数が複数個あります: %s\n", arg->name);
+      Type *base_type = type_specifier();
+      char *name;
+      Type *type;
+      declarator(base_type, &name, &type);
+      if (!register_stack(name, type)) {
+        error("同じ名前の引数が複数個あります: %s\n", name);
       }
-      vec_push(params, arg->name);
+      vec_push(params, name);
       if (get_token(pos)->ty == ')') {
         break;
       }

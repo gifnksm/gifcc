@@ -105,8 +105,13 @@ enum {
   ST_NULL,
 };
 
+typedef struct Type {
+  enum { TY_INT } ty;
+} Type;
+
 typedef struct StackVar {
   int offset;
+  Type *type;
 } StackVar;
 
 typedef struct Expr {
