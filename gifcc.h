@@ -106,7 +106,8 @@ enum {
 };
 
 typedef struct Type {
-  enum { TY_INT } ty;
+  enum { TY_INT, TY_PTR } ty;
+  struct Type *ptrof;
 } Type;
 
 typedef struct StackVar {

@@ -497,6 +497,12 @@ static Type *type_specifier(void) {
 }
 
 static void declarator(Type *base_type, char **name, Type **type) {
+  while (consume('*')) {
+    Type *ptrtype = malloc(sizeof(Type));
+    ptrtype->ty = TY_PTR;
+    ptrtype->ptrof = base_type;
+    base_type = ptrtype;
+  }
   *name = expect(TK_IDENT)->name;
   *type = base_type;
 }

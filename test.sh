@@ -446,4 +446,14 @@ int main(void) {
 }
 '
 
+try 0 '
+int main(void) {
+  int a;
+  int *b;
+  int **c;
+  int ***d;
+  return 0;
+}
+'
+
 echo OK
