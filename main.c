@@ -189,6 +189,26 @@ static void dump_binop_expr(Expr *expr, char *label, int level) {
   printf(")\n");
 }
 
+static void dump_binop_expr_incdec(Expr *expr, char *label, int level) {
+  dump_indent(level);
+  dump_type(expr->val_type);
+  printf("(%s %d\n", label, expr->val);
+  if (expr->lhs != NULL) {
+    dump_expr(expr->lhs, level + 1);
+  } else {
+    dump_indent(level + 1);
+    printf("<void>(NULL)\n");
+  }
+  if (expr->rhs != NULL) {
+    dump_expr(expr->rhs, level + 1);
+  } else {
+    dump_indent(level + 1);
+    printf("<void>(NULL)\n");
+  }
+  dump_indent(level);
+  printf(")\n");
+}
+
 static void dump_expr(Expr *expr, int level) {
   if (expr->ty <= 255) {
     dump_binop_expr(expr, (char[]){'[', expr->ty, ']', '\0'}, level);
@@ -241,10 +261,10 @@ static void dump_expr(Expr *expr, int level) {
     printf(")\n");
     break;
   case EX_INC:
-    dump_binop_expr(expr, "[++]", level);
+    dump_binop_expr_incdec(expr, "[++]", level);
     break;
   case EX_DEC:
-    dump_binop_expr(expr, "[--]", level);
+    dump_binop_expr_incdec(expr, "[--]", level);
     break;
   case EX_MUL_ASSIGN:
     dump_binop_expr(expr, "[*=]", level);

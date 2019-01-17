@@ -455,5 +455,67 @@ int main(void) {
   return 0;
 }
 '
+try 0 '
+int main(void) {
+  int *p;
+  int *q;
+  int i;
+  p = 30;
+  q = 10;
+  i = p + 3;
+  if (i != 42) {
+    abort();
+  }
+  i = 3 + p;
+  if (i != 42) {
+    abort();
+  }
+  p += 3;
+  if (p != 42) {
+    abort();
+  }
+  i = 3;
+  i += p;
+  if (i != 54) {
+    abort();
+  }
+  i = p - 3;
+  if (i != 30) {
+    abort();
+  }
+  i = p - q;
+  if (i != 8) {
+    abort();
+  }
+  p -= q;
+  if (p != 8) {
+    abort();
+  }
+  return 0;
+}
+'
+try 0 '
+int main(void) {
+  int *p;
+  p = 8;
+  p++;
+  if (p != 12) {
+    abort();
+  }
+  ++p;
+  if (p != 16) {
+    abort();
+  }
+  p--;
+  if (p != 12) {
+    abort();
+  }
+  --p;
+  if (p != 8) {
+    abort();
+  }
+  return 0;
+}
+'
 
 echo OK

@@ -250,7 +250,7 @@ static void gen_expr(Expr *expr) {
       gen_lval(expr->rhs);
       printf("  pop rax\n");
       printf("  mov rdi, [rax]\n");
-      printf("  add rdi, 1\n");
+      printf("  add rdi, %d\n", expr->val);
       printf("  mov [rax], rdi\n");
       printf("  push rdi\n");
       return;
@@ -260,7 +260,7 @@ static void gen_expr(Expr *expr) {
     printf("  pop rax\n");
     printf("  mov rdi, [rax]\n");
     printf("  push rdi\n");
-    printf("  add rdi, 1\n");
+    printf("  add rdi, %d\n", expr->val);
     printf("  mov [rax], rdi\n");
     return;
   }
@@ -271,7 +271,7 @@ static void gen_expr(Expr *expr) {
       gen_lval(expr->rhs);
       printf("  pop rax\n");
       printf("  mov rdi, [rax]\n");
-      printf("  sub rdi, 1\n");
+      printf("  sub rdi, %d\n", expr->val);
       printf("  mov [rax], rdi\n");
       printf("  push rdi\n");
       return;
@@ -281,7 +281,7 @@ static void gen_expr(Expr *expr) {
     printf("  pop rax\n");
     printf("  mov rdi, [rax]\n");
     printf("  push rdi\n");
-    printf("  sub rdi, 1\n");
+    printf("  sub rdi, %d\n", expr->val);
     printf("  mov [rax], rdi\n");
     return;
   }

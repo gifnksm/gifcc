@@ -78,6 +78,18 @@ static Type *arith_converted(Type *ty1, Type *ty2) {
   return ty1;
 }
 
+static int get_val_size(Type *ty) {
+  switch (ty->ty) {
+  case TY_INT:
+    return 4;
+  case TY_PTR:
+    return 8;
+  default:
+    assert(false);
+    break;
+  }
+}
+
 static void __attribute__((noreturn))
 binop_type_error(int ty, Expr *lhs, Expr *rhs) {
   error("不正な型の値に対する演算です: 演算=%d, 左辺=%d, 右辺=%d", ty,
@@ -102,6 +114,29 @@ static Expr *new_expr(int ty, Type *val_type) {
   Expr *expr = malloc(sizeof(Expr));
   expr->ty = ty;
   expr->val_type = val_type;
+  return expr;
+}
+
+static Expr *new_expr_num(int val) {
+  Expr *expr = new_expr(EX_NUM, new_type(TY_INT));
+  expr->val = val;
+  return expr;
+}
+
+static Expr *new_expr_ident(char *name) {
+  StackVar *var = get_stack(name);
+  // 未知の識別子はint型として扱う
+  Type *type = var != NULL ? var->type : new_type(TY_INT);
+  Expr *expr = new_expr(EX_IDENT, type);
+  expr->name = name;
+  return expr;
+}
+
+static Expr *new_expr_call(Expr *callee, Vector *argument) {
+  // TODO: 関数の戻り値はintを仮定する
+  Expr *expr = new_expr(EX_CALL, new_type(TY_INT));
+  expr->callee = callee;
+  expr->argument = argument;
   return expr;
 }
 
@@ -144,22 +179,59 @@ static Expr *new_expr_binop(int ty, Expr *lhs, Expr *rhs) {
     break;
   // additive
   case '+':
-  case '-':
     if (is_ptr_type(lhs->val_type)) {
       if (is_ptr_type(rhs->val_type) || !is_integer_type(rhs->val_type)) {
         binop_type_error(ty, lhs, rhs);
       }
+      rhs = new_expr_binop('*', rhs,
+                           new_expr_num(get_val_size(lhs->val_type->ptrof)));
       val_type = lhs->val_type;
-    } else if (is_ptr_type(rhs->val_type)) {
+      break;
+    }
+
+    if (is_ptr_type(rhs->val_type)) {
       if (!is_integer_type(lhs->val_type)) {
         binop_type_error(ty, lhs, rhs);
       }
+      lhs = new_expr_binop('*', lhs,
+                           new_expr_num(get_val_size(rhs->val_type->ptrof)));
       val_type = rhs->val_type;
-    } else {
-      val_type = arith_converted(lhs->val_type, rhs->val_type);
-      if (val_type == NULL) {
-        binop_type_error(ty, lhs, rhs);
+      break;
+    }
+
+    val_type = arith_converted(lhs->val_type, rhs->val_type);
+    if (val_type == NULL) {
+      binop_type_error(ty, lhs, rhs);
+    }
+    break;
+  case '-':
+    if (is_ptr_type(lhs->val_type)) {
+      if (is_ptr_type(rhs->val_type)) {
+        if (!is_sametype(lhs->val_type, rhs->val_type)) {
+          binop_type_error(ty, lhs, rhs);
+        }
+        Expr *sub = new_expr('-', new_type(TY_INT));
+        sub->lhs = lhs;
+        sub->rhs = rhs;
+        return new_expr_binop('/', sub,
+                              new_expr_num(get_val_size(lhs->val_type->ptrof)));
       }
+      if (is_integer_type(rhs->val_type)) {
+        rhs = new_expr_binop('*', rhs,
+                             new_expr_num(get_val_size(lhs->val_type->ptrof)));
+        val_type = lhs->val_type;
+        break;
+      }
+      binop_type_error(ty, lhs, rhs);
+    }
+
+    if (is_ptr_type(rhs->val_type)) {
+      binop_type_error(ty, lhs, rhs);
+    }
+
+    val_type = arith_converted(lhs->val_type, rhs->val_type);
+    if (val_type == NULL) {
+      binop_type_error(ty, lhs, rhs);
     }
     break;
   // shift
@@ -198,11 +270,21 @@ static Expr *new_expr_binop(int ty, Expr *lhs, Expr *rhs) {
   case '=':
     val_type = lhs->val_type;
     break;
+  case EX_ADD_ASSIGN:
+    if (is_ptr_type(lhs->val_type) || is_ptr_type(rhs->val_type)) {
+      return new_expr_binop('=', lhs, new_expr_binop('+', lhs, rhs));
+    }
+    val_type = lhs->val_type;
+    break;
+  case EX_SUB_ASSIGN:
+    if (is_ptr_type(lhs->val_type) || is_ptr_type(rhs->val_type)) {
+      return new_expr_binop('=', lhs, new_expr_binop('-', lhs, rhs));
+    }
+    val_type = lhs->val_type;
+    break;
   case EX_MUL_ASSIGN:
   case EX_DIV_ASSIGN:
   case EX_MOD_ASSIGN:
-  case EX_ADD_ASSIGN:
-  case EX_SUB_ASSIGN:
   case EX_LSHIFT_ASSIGN:
   case EX_RSHIFT_ASSIGN:
   case EX_AND_ASSIGN:
@@ -220,29 +302,6 @@ static Expr *new_expr_binop(int ty, Expr *lhs, Expr *rhs) {
   Expr *expr = new_expr(ty, val_type);
   expr->lhs = lhs;
   expr->rhs = rhs;
-  return expr;
-}
-
-static Expr *new_expr_num(int val) {
-  Expr *expr = new_expr(EX_NUM, new_type(TY_INT));
-  expr->val = val;
-  return expr;
-}
-
-static Expr *new_expr_ident(char *name) {
-  StackVar *var = get_stack(name);
-  // 未知の識別子はint型として扱う
-  Type *type = var != NULL ? var->type : new_type(TY_INT);
-  Expr *expr = new_expr(EX_IDENT, type);
-  expr->name = name;
-  return expr;
-}
-
-static Expr *new_expr_call(Expr *callee, Vector *argument) {
-  // TODO: 関数の戻り値はintを仮定する
-  Expr *expr = new_expr(EX_CALL, new_type(TY_INT));
-  expr->callee = callee;
-  expr->argument = argument;
   return expr;
 }
 
@@ -398,9 +457,23 @@ static Expr *postfix_expression(void) {
       expect(')');
       expr = new_expr_call(expr, argument);
     } else if (consume(TK_INC)) {
-      return new_expr_postfix(EX_INC, expr);
+      int val;
+      if (is_ptr_type(expr->val_type)) {
+        val = get_val_size(expr->val_type->ptrof);
+      } else {
+        val = 1;
+      }
+      expr = new_expr_postfix(EX_INC, expr);
+      expr->val = val;
     } else if (consume(TK_DEC)) {
-      return new_expr_postfix(EX_DEC, expr);
+      int val;
+      if (is_ptr_type(expr->val_type)) {
+        val = get_val_size(expr->val_type->ptrof);
+      } else {
+        val = 1;
+      }
+      expr = new_expr_postfix(EX_DEC, expr);
+      expr->val = val;
     } else {
       return expr;
     }
@@ -438,10 +511,28 @@ static Expr *unary_expression(void) {
     return new_expr_unary('!', cast_expression());
   }
   if (consume(TK_INC)) {
-    return new_expr_unary(EX_INC, cast_expression());
+    Expr *expr = cast_expression();
+    int val;
+    if (is_ptr_type(expr->val_type)) {
+      val = get_val_size(expr->val_type->ptrof);
+    } else {
+      val = 1;
+    }
+    expr = new_expr_unary(EX_INC, expr);
+    expr->val = val;
+    return expr;
   }
   if (consume(TK_DEC)) {
-    return new_expr_unary(EX_DEC, cast_expression());
+    Expr *expr = cast_expression();
+    int val;
+    if (is_ptr_type(expr->val_type)) {
+      val = get_val_size(expr->val_type->ptrof);
+    } else {
+      val = 1;
+    }
+    expr = new_expr_unary(EX_DEC, expr);
+    expr->val = val;
+    return expr;
   }
   return postfix_expression();
 }
