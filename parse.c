@@ -38,6 +38,7 @@ static Expr *constant_expression(FuncCtxt *fctxt);
 // declaration
 static void declaration(FuncCtxt *fctxt);
 static Type *type_specifier(FuncCtxt *fctxt);
+static Type *type_name(FuncCtxt *fctxt);
 static void declarator(FuncCtxt *fctxt, Type *base_type, char **name,
                        Type **type);
 
@@ -110,6 +111,13 @@ static Type *arith_converted(Type *ty1, Type *ty2) {
   return ty1;
 }
 
+static bool token_is_typename(Token *token) {
+  if (token->ty == TK_INT) {
+    return true;
+  }
+  return false;
+}
+
 static int get_val_size(Type *ty) {
   switch (ty->ty) {
   case TY_INT:
@@ -176,6 +184,12 @@ static Expr *new_expr_postfix(int ty, Expr *operand) {
   Expr *expr = new_expr(ty, operand->val_type);
   expr->lhs = operand;
   expr->rhs = NULL;
+  return expr;
+}
+
+static Expr *new_expr_cast(Type *val_type, Expr *operand) {
+  Expr *expr = new_expr(EX_CAST, val_type);
+  expr->expr = operand;
   return expr;
 }
 
@@ -542,6 +556,13 @@ static Expr *unary_expression(FuncCtxt *fctxt) {
 }
 
 static Expr *cast_expression(FuncCtxt *fctxt) {
+  if (token_peek(fctxt->tokenizer)->ty == '(' &&
+      token_is_typename(token_peek_ahead(fctxt->tokenizer, 1))) {
+    token_succ(fctxt->tokenizer);
+    Type *val_type = type_name(fctxt);
+    token_expect(fctxt->tokenizer, ')');
+    return new_expr_cast(val_type, cast_expression(fctxt));
+  }
   return unary_expression(fctxt);
 }
 
@@ -754,6 +775,14 @@ static void declaration(FuncCtxt *fctxt) {
 static Type *type_specifier(FuncCtxt *fctxt) {
   token_expect(fctxt->tokenizer, TK_INT);
   return new_type(TY_INT);
+}
+
+static Type *type_name(FuncCtxt *fctxt) {
+  Type *type = type_specifier(fctxt);
+  while (token_consume(fctxt->tokenizer, '*')) {
+    type = new_type_ptr(type);
+  }
+  return type;
 }
 
 static void declarator(FuncCtxt *fctxt, Type *base_type, char **name,

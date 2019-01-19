@@ -517,5 +517,35 @@ int main(void) {
   return 0;
 }
 '
+try 15 '
+int main(void) {
+  int *p;
+  int i;
+  p = 10;
+  i = 5;
+  i += (int)p;
+  return i;
+}
+'
+try 30 '
+int main(void) {
+  int p;
+  int i;
+  p = 10;
+  i = 5;
+  i += (int *)p;
+  return i;
+}
+'
+try 50 '
+int main(void) {
+  int p;
+  int i;
+  p = 10;
+  i = 5;
+  i += (int **)p;
+  return i;
+}
+'
 
 echo OK

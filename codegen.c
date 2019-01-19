@@ -87,6 +87,11 @@ static void gen_expr(Expr *expr) {
     return;
   }
 
+  if (expr->ty == EX_CAST) {
+    gen_expr(expr->expr);
+    return;
+  }
+
   if (expr->ty == '=') {
     gen_lval(expr->lhs);
     gen_expr(expr->rhs);

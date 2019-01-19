@@ -85,6 +85,7 @@ enum {
   EX_OR_ASSIGN,
   EX_XOR_ASSIGN,
   EX_CALL,
+  EX_CAST,
 };
 
 enum {
@@ -129,6 +130,9 @@ typedef struct Expr {
   // EX_CALL: <callee>(<argument>...)
   struct Expr *callee;
   Vector *argument;
+
+  // EX_CAST: (<val_type>)<expr>
+  struct Expr *expr;
 } Expr;
 
 typedef struct Stmt {

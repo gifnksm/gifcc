@@ -309,6 +309,14 @@ static void dump_expr(Expr *expr, int level) {
     dump_indent(level);
     printf(")\n");
     break;
+  case EX_CAST:
+    dump_indent(level);
+    dump_type(expr->val_type);
+    printf("(CAST\n");
+    dump_expr(expr->expr, level + 1);
+    dump_indent(level);
+    printf(")\n");
+    break;
   default:
     error("未知のノードです: %d\n", expr->ty);
   }
