@@ -188,10 +188,9 @@ void map_put(Map *map, char *key, void *val);
 void *map_get(Map *map, char *key);
 void runtest(void);
 
-Token *get_token(int pos);
-void tokenize(char *p);
+Token *read_token(char **p);
 
-Vector *translation_unit(void);
+Vector *parse(char *input);
 
 char *make_label(void);
 void gen(Function *func);

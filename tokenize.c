@@ -1,11 +1,9 @@
 #include "gifcc.h"
 #include <assert.h>
 #include <ctype.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
-
-// トークナイズした結果のトークン列はこのベクタに保存する
-static Vector *tokens = NULL;
 
 static Token *new_token(int ty, char *input);
 static Token *new_token_num(char *input, int val);
@@ -32,37 +30,29 @@ static inline int hex(int c) {
   return (c - 'A') + 0xa;
 }
 
-// pos番目のtokenを取得する
-Token *get_token(int pos) { return tokens->data[pos]; }
-
-// pが指している文字列をトークンに分割してtokensに保存する
-void tokenize(char *p) {
-  tokens = new_vector();
-  while (*p) {
+Token *read_token(char **p) {
+  while (**p != '\0') {
     // 空白文字をスキップ
-    if (isspace(*p)) {
-      p++;
+    if (isspace(**p)) {
+      (*p)++;
       continue;
     }
 
     Token *token = NULL;
-    if ((token = punctuator(&p)) != NULL) {
-      goto SKIP;
+    if ((token = punctuator(p)) != NULL) {
+      return token;
     }
-    if ((token = identifier_or_keyword(&p)) != NULL) {
-      goto SKIP;
+    if ((token = identifier_or_keyword(p)) != NULL) {
+      return token;
     }
-    if ((token = constant(&p)) != NULL) {
-      goto SKIP;
+    if ((token = constant(p)) != NULL) {
+      return token;
     }
 
-    error("トークナイズできません: %s", p);
-
-  SKIP:
-    vec_push(tokens, token);
+    error("トークナイズできません: %s", *p);
   }
 
-  vec_push(tokens, new_token(TK_EOF, p));
+  return new_token(TK_EOF, *p);
 }
 
 static Token *new_token(int ty, char *input) {

@@ -17,10 +17,9 @@ void error_raw(const char *file, int line, char *fmt, ...) {
   exit(1);
 }
 
-static void output_token(void) {
-  for (int pos = 0; true; pos++) {
-    Token *token = get_token(pos);
-
+static void output_token(char *input) {
+  for (int pos = 0;; pos++) {
+    Token *token = read_token(&input);
     if (token->ty <= 255) {
       printf("%03d [%c]\n", pos, token->ty);
       continue;
@@ -494,15 +493,13 @@ int main(int argc, char **argv) {
 
   char *input = argv[optind];
 
-  // トークナイズしてパースする
-  // 結果はcodeに保存される
-  tokenize(input);
   if (output_mode == OUTPUT_TOKEN) {
-    output_token();
+    output_token(input);
     return 0;
   }
 
-  Vector *func_list = translation_unit();
+  Vector *func_list = parse(input);
+
   if (output_mode == OUTPUT_AST) {
     for (int i = 0; i < func_list->len; i++) {
       output_ast(func_list->data[i]);
