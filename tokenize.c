@@ -6,11 +6,13 @@
 #include <string.h>
 
 struct Tokenizer {
-  int pos;
-  Vector *token_list;
+  char *input;
+  Token *current;
+  Token *next;
+  bool read_eof;
 };
 
-static Token *read_token(char **p);
+static Token *read_token(char **p, bool *read_eof);
 static Token *new_token(int ty, char *input);
 static Token *new_token_num(char *input, int val);
 static Token *new_token_ident(char *input, char *name);
@@ -26,30 +28,28 @@ static int c_char(char **input);
 
 Tokenizer *new_tokenizer(char *input) {
   Tokenizer *tokenizer = malloc(sizeof(Tokenizer));
-  tokenizer->token_list = new_vector();
-  while (true) {
-    Token *token = read_token(&input);
-    vec_push(tokenizer->token_list, token);
-    if (token->ty == TK_EOF) {
-      break;
-    }
-  }
+  tokenizer->input = input;
+  tokenizer->read_eof = false;
+  tokenizer->current = read_token(&tokenizer->input, &tokenizer->read_eof);
+  tokenizer->next = read_token(&tokenizer->input, &tokenizer->read_eof);
   return tokenizer;
 }
 
-void token_succ(Tokenizer *tokenizer) { tokenizer->pos++; }
-
-Token *token_peek(Tokenizer *tokenizer) {
-  return tokenizer->token_list->data[tokenizer->pos];
+void token_succ(Tokenizer *tokenizer) {
+  tokenizer->current = tokenizer->next;
+  tokenizer->next = read_token(&tokenizer->input, &tokenizer->read_eof);
 }
 
+Token *token_peek(Tokenizer *tokenizer) { return tokenizer->current; }
+
 Token *token_peek_ahead(Tokenizer *tokenizer, int n) {
-  return tokenizer->token_list->data[tokenizer->pos + n];
+  assert(n == 1);
+  return tokenizer->next;
 }
 
 Token *token_pop(Tokenizer *tokenizer) {
-  Token *token = tokenizer->token_list->data[tokenizer->pos];
-  tokenizer->pos++;
+  Token *token = tokenizer->current;
+  token_succ(tokenizer);
   return token;
 }
 
@@ -85,7 +85,7 @@ static inline int hex(int c) {
   return (c - 'A') + 0xa;
 }
 
-static Token *read_token(char **p) {
+static Token *read_token(char **p, bool *read_eof) {
   while (**p != '\0') {
     // 空白文字をスキップ
     if (isspace(**p)) {
@@ -107,7 +107,11 @@ static Token *read_token(char **p) {
     error("トークナイズできません: %s", *p);
   }
 
-  return new_token(TK_EOF, *p);
+  if (!*read_eof) {
+    *read_eof = true;
+    return new_token(TK_EOF, *p);
+  }
+  return NULL;
 }
 
 static Token *new_token(int ty, char *input) {
