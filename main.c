@@ -17,7 +17,7 @@ void error_raw(const char *file, int line, char *fmt, ...) {
   exit(1);
 }
 
-static void output_token(char *input) {
+static void output_token(const char *input) {
   Tokenizer *tokenizer = new_tokenizer(input);
   for (int pos = 0;; pos++) {
     Token *token = token_pop(tokenizer);
@@ -492,7 +492,7 @@ int main(int argc, char **argv) {
     error("引数の個数が正しくありません");
   }
 
-  char *input = argv[optind];
+  const char *input = argv[optind];
 
   if (output_mode == OUTPUT_TOKEN) {
     output_token(input);

@@ -53,7 +53,7 @@ static Stmt null_stmt = {
     .ty = ST_NULL,
 };
 
-Vector *parse(char *input) {
+Vector *parse(const char *input) {
   Tokenizer *tokenizer = new_tokenizer(input);
   return translation_unit(tokenizer);
 }

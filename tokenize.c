@@ -6,27 +6,27 @@
 #include <string.h>
 
 struct Tokenizer {
-  char *input;
+  const char *input;
   Token *current;
   Token *next;
   bool read_eof;
 };
 
-static Token *read_token(char **p, bool *read_eof);
-static Token *new_token(int ty, char *input);
-static Token *new_token_num(char *input, int val);
-static Token *new_token_ident(char *input, char *name);
-static Token *punctuator(char **input);
-static Token *identifier_or_keyword(char **input);
-static Token *constant(char **input);
-static Token *integer_constant(char **input);
-static Token *hexadecimal_constant(char **input);
-static Token *octal_constant(char **input);
-static Token *decimal_constant(char **input);
-static Token *character_constant(char **input);
-static int c_char(char **input);
+static Token *read_token(const char **p, bool *read_eof);
+static Token *new_token(int ty, const char *input);
+static Token *new_token_num(const char *input, int val);
+static Token *new_token_ident(const char *input, char *name);
+static Token *punctuator(const char **input);
+static Token *identifier_or_keyword(const char **input);
+static Token *constant(const char **input);
+static Token *integer_constant(const char **input);
+static Token *hexadecimal_constant(const char **input);
+static Token *octal_constant(const char **input);
+static Token *decimal_constant(const char **input);
+static Token *character_constant(const char **input);
+static int c_char(const char **input);
 
-Tokenizer *new_tokenizer(char *input) {
+Tokenizer *new_tokenizer(const char *input) {
   Tokenizer *tokenizer = malloc(sizeof(Tokenizer));
   tokenizer->input = input;
   tokenizer->read_eof = false;
@@ -85,7 +85,7 @@ static inline int hex(int c) {
   return (c - 'A') + 0xa;
 }
 
-static Token *read_token(char **p, bool *read_eof) {
+static Token *read_token(const char **p, bool *read_eof) {
   while (**p != '\0') {
     // 空白文字をスキップ
     if (isspace(**p)) {
@@ -114,14 +114,14 @@ static Token *read_token(char **p, bool *read_eof) {
   return NULL;
 }
 
-static Token *new_token(int ty, char *input) {
+static Token *new_token(int ty, const char *input) {
   Token *token = malloc(sizeof(Token));
   token->ty = ty;
   token->input = input;
   return token;
 }
 
-static Token *new_token_num(char *input, int val) {
+static Token *new_token_num(const char *input, int val) {
   Token *token = malloc(sizeof(Token));
   token->ty = TK_NUM;
   token->input = input;
@@ -129,7 +129,7 @@ static Token *new_token_num(char *input, int val) {
   return token;
 }
 
-static Token *new_token_ident(char *input, char *name) {
+static Token *new_token_ident(const char *input, char *name) {
   Token *token = malloc(sizeof(Token));
   if (strcmp(name, "void") == 0) {
     token->ty = TK_VOID;
@@ -167,9 +167,9 @@ static Token *new_token_ident(char *input, char *name) {
   return token;
 }
 
-static Token *punctuator(char **input) {
+static Token *punctuator(const char **input) {
   Token *token = NULL;
-  char *p = *input;
+  const char *p = *input;
   switch (*p) {
   case '=': {
     if (*(p + 1) == '=') {
@@ -350,11 +350,11 @@ static Token *punctuator(char **input) {
   return token;
 }
 
-static Token *identifier_or_keyword(char **input) {
+static Token *identifier_or_keyword(const char **input) {
   Token *token = NULL;
-  char *p = *input;
+  const char *p = *input;
   if (('a' <= *p && *p <= 'z') || ('A' <= *p && *p <= 'Z') || *p == '_') {
-    char *q = p;
+    const char *q = p;
     while (('a' <= *q && *q <= 'z') || ('A' <= *q && *q <= 'Z') || *q == '_' ||
            ('0' <= *q && *q <= '9')) {
       q++;
@@ -367,9 +367,9 @@ static Token *identifier_or_keyword(char **input) {
   return token;
 }
 
-static Token *constant(char **input) {
+static Token *constant(const char **input) {
   Token *token = NULL;
-  char *p = *input;
+  const char *p = *input;
 
   if ((token = integer_constant(&p)) != NULL) {
     goto SKIP;
@@ -383,9 +383,9 @@ SKIP:
   return token;
 }
 
-static Token *integer_constant(char **input) {
+static Token *integer_constant(const char **input) {
   Token *token = NULL;
-  char *p = *input;
+  const char *p = *input;
   if ((token = hexadecimal_constant(&p)) != NULL) {
     goto SKIP;
   }
@@ -401,9 +401,9 @@ SKIP:
   return token;
 }
 
-static Token *hexadecimal_constant(char **input) {
+static Token *hexadecimal_constant(const char **input) {
   Token *token = NULL;
-  char *p = *input;
+  const char *p = *input;
   if ((*p != '0') || ((*(p + 1) != 'x') && (*(p + 1)) != 'X')) {
     return NULL;
   }
@@ -411,7 +411,7 @@ static Token *hexadecimal_constant(char **input) {
 
   int val = 0;
 
-  char *q = p;
+  const char *q = p;
   for (; isxdigit(*q); q++) {
     val = val * 0x10 + hex(*q);
   }
@@ -423,9 +423,9 @@ static Token *hexadecimal_constant(char **input) {
   return token;
 }
 
-static Token *octal_constant(char **input) {
+static Token *octal_constant(const char **input) {
   Token *token = NULL;
-  char *p = *input;
+  const char *p = *input;
   if (*p != '0') {
     return NULL;
   }
@@ -433,7 +433,7 @@ static Token *octal_constant(char **input) {
 
   int val = 0;
 
-  char *q = p;
+  const char *q = p;
   for (; '0' <= *q && *q <= '7'; q++) {
     val = val * 010 + (*q - '0');
   }
@@ -445,15 +445,15 @@ static Token *octal_constant(char **input) {
   return token;
 }
 
-static Token *decimal_constant(char **input) {
+static Token *decimal_constant(const char **input) {
   Token *token = NULL;
-  char *p = *input;
+  const char *p = *input;
   if (!isdigit(*p)) {
     return NULL;
   }
   int val = 0;
 
-  char *q = p;
+  const char *q = p;
   for (; isdigit(*q); q++) {
     val = val * 10 + (*q - '0');
   }
@@ -465,9 +465,9 @@ static Token *decimal_constant(char **input) {
   return token;
 }
 
-static Token *character_constant(char **input) {
+static Token *character_constant(const char **input) {
   Token *token = NULL;
-  char *p = *input;
+  const char *p = *input;
   if (*p != '\'') {
     return NULL;
   }
@@ -484,9 +484,9 @@ static Token *character_constant(char **input) {
   return token;
 }
 
-static int c_char(char **input) {
+static int c_char(const char **input) {
   int val = 0;
-  char *p = *input;
+  const char *p = *input;
   if (*p == '\'') {
     error("空の文字リテラルです: %s", p);
   }
@@ -541,7 +541,7 @@ static int c_char(char **input) {
     }
 
     case 'x': {
-      char *q = p + 2;
+      const char *q = p + 2;
       for (; isxdigit(*q); q++) {
         val = val * 0x10 + hex(*q);
       }
@@ -553,7 +553,7 @@ static int c_char(char **input) {
     }
     }
 
-    char *q = p + 1;
+    const char *q = p + 1;
     for (int i = 0; (i < 3) && ('0' <= *q && *q <= '7'); i++, q++) {
       val = 010 * val + (*q - '0');
     }

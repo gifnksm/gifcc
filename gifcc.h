@@ -54,10 +54,10 @@ enum {
 
 // トークンの型
 typedef struct {
-  int ty;      // トークンの型
-  int val;     // tyがTK_NUMの場合、その数値
-  char *name;  // tyがTK_IDENTの場合、その名前
-  char *input; // トークン文字列 (エラーメッセージ用)
+  int ty;            // トークンの型
+  int val;           // tyがTK_NUMの場合、その数値
+  char *name;        // tyがTK_IDENTの場合、その名前
+  const char *input; // トークン文字列 (エラーメッセージ用)
 } Token;
 
 enum {
@@ -190,7 +190,7 @@ void map_put(Map *map, char *key, void *val);
 void *map_get(Map *map, char *key);
 void runtest(void);
 
-Tokenizer *new_tokenizer(char *input);
+Tokenizer *new_tokenizer(const char *input);
 void token_succ(Tokenizer *tokenizer);
 Token *token_peek(Tokenizer *tokenizer);
 Token *token_peek_ahead(Tokenizer *tokenizer, int n);
@@ -198,7 +198,7 @@ Token *token_pop(Tokenizer *tokenizer);
 Token *token_consume(Tokenizer *tokenizer, int ty);
 Token *token_expect(Tokenizer *tokenizer, int ty);
 
-Vector *parse(char *input);
+Vector *parse(const char *input);
 
 char *make_label(void);
 void gen(Function *func);
