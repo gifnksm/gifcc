@@ -5,6 +5,12 @@
 #include <stdlib.h>
 #include <string.h>
 
+struct Tokenizer {
+  int pos;
+  Vector *token_list;
+};
+
+static Token *read_token(char **p);
 static Token *new_token(int ty, char *input);
 static Token *new_token_num(char *input, int val);
 static Token *new_token_ident(char *input, char *name);
@@ -18,6 +24,55 @@ static Token *decimal_constant(char **input);
 static Token *character_constant(char **input);
 static int c_char(char **input);
 
+Tokenizer *new_tokenizer(char *input) {
+  Tokenizer *tokenizer = malloc(sizeof(Tokenizer));
+  tokenizer->token_list = new_vector();
+  while (true) {
+    Token *token = read_token(&input);
+    vec_push(tokenizer->token_list, token);
+    if (token->ty == TK_EOF) {
+      break;
+    }
+  }
+  return tokenizer;
+}
+
+void token_succ(Tokenizer *tokenizer) { tokenizer->pos++; }
+
+Token *token_peek(Tokenizer *tokenizer) {
+  return tokenizer->token_list->data[tokenizer->pos];
+}
+
+Token *token_peek_ahead(Tokenizer *tokenizer, int n) {
+  return tokenizer->token_list->data[tokenizer->pos + n];
+}
+
+Token *token_pop(Tokenizer *tokenizer) {
+  Token *token = tokenizer->token_list->data[tokenizer->pos];
+  tokenizer->pos++;
+  return token;
+}
+
+Token *token_consume(Tokenizer *tokenizer, int ty) {
+  if (token_peek(tokenizer)->ty != ty) {
+    return NULL;
+  }
+  return token_pop(tokenizer);
+}
+
+Token *token_expect(Tokenizer *tokenizer, int ty) {
+  Token *token = token_pop(tokenizer);
+  if (token->ty != ty) {
+    if (ty <= 255) {
+      error("'%c' がありません: %s", ty, token->input);
+    } else {
+      assert(ty == TK_WHILE);
+      error("'while' がありません: %s", token->input);
+    }
+  }
+  return token;
+}
+
 static inline int hex(int c) {
   assert(isxdigit(c));
   if ('0' <= c && c <= '9') {
@@ -30,7 +85,7 @@ static inline int hex(int c) {
   return (c - 'A') + 0xa;
 }
 
-Token *read_token(char **p) {
+static Token *read_token(char **p) {
   while (**p != '\0') {
     // 空白文字をスキップ
     if (isspace(**p)) {

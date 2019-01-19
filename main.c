@@ -18,8 +18,9 @@ void error_raw(const char *file, int line, char *fmt, ...) {
 }
 
 static void output_token(char *input) {
+  Tokenizer *tokenizer = new_tokenizer(input);
   for (int pos = 0;; pos++) {
-    Token *token = read_token(&input);
+    Token *token = token_pop(tokenizer);
     if (token->ty <= 255) {
       printf("%03d [%c]\n", pos, token->ty);
       continue;

@@ -173,6 +173,8 @@ typedef struct Function {
   Stmt *body;
 } Function;
 
+typedef struct Tokenizer Tokenizer;
+
 #define error(fmt, ...) error_raw(__FILE__, __LINE__, fmt, ##__VA_ARGS__)
 
 __attribute__((noreturn, format(printf, 3, 4))) void
@@ -188,7 +190,13 @@ void map_put(Map *map, char *key, void *val);
 void *map_get(Map *map, char *key);
 void runtest(void);
 
-Token *read_token(char **p);
+Tokenizer *new_tokenizer(char *input);
+void token_succ(Tokenizer *tokenizer);
+Token *token_peek(Tokenizer *tokenizer);
+Token *token_peek_ahead(Tokenizer *tokenizer, int n);
+Token *token_pop(Tokenizer *tokenizer);
+Token *token_consume(Tokenizer *tokenizer, int ty);
+Token *token_expect(Tokenizer *tokenizer, int ty);
 
 Vector *parse(char *input);
 
