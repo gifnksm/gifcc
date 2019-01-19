@@ -5,57 +5,81 @@
 #include <stdlib.h>
 #include <string.h>
 
+// 関数パース用情報
+typedef struct FuncCtxt {
+  int stack_size;
+  Map *stack_map;
+  Vector *switches;
+  Map *label_map;
+} FuncCtxt;
+
 // expression
-static Expr *primary_expression(void);
-static Expr *postfix_expression(void);
-static Vector *argument_expression_list(void);
-static Expr *unary_expression(void);
-static Expr *cast_expression(void);
-static Expr *multiplicative_expression(void);
-static Expr *additive_expression(void);
-static Expr *shift_expression(void);
-static Expr *relational_expression(void);
-static Expr *equality_expression(void);
-static Expr *and_expression(void);
-static Expr *exclusive_or_expression(void);
-static Expr *inclusive_or_expression(void);
-static Expr *logical_and_expression(void);
-static Expr *logical_or_expression(void);
-static Expr *conditional_expression(void);
-static Expr *assignment_expression(void);
-static Expr *expression(void);
-static Expr *constant_expression(void);
-static void declaration(void);
+static Expr *primary_expression(FuncCtxt *fctxt);
+static Expr *postfix_expression(FuncCtxt *fctxt);
+static Vector *argument_expression_list(FuncCtxt *fctxt);
+static Expr *unary_expression(FuncCtxt *fctxt);
+static Expr *cast_expression(FuncCtxt *fctxt);
+static Expr *multiplicative_expression(FuncCtxt *fctxt);
+static Expr *additive_expression(FuncCtxt *fctxt);
+static Expr *shift_expression(FuncCtxt *fctxt);
+static Expr *relational_expression(FuncCtxt *fctxt);
+static Expr *equality_expression(FuncCtxt *fctxt);
+static Expr *and_expression(FuncCtxt *fctxt);
+static Expr *exclusive_or_expression(FuncCtxt *fctxt);
+static Expr *inclusive_or_expression(FuncCtxt *fctxt);
+static Expr *logical_and_expression(FuncCtxt *fctxt);
+static Expr *logical_or_expression(FuncCtxt *fctxt);
+static Expr *conditional_expression(FuncCtxt *fctxt);
+static Expr *assignment_expression(FuncCtxt *fctxt);
+static Expr *expression(FuncCtxt *fctxt);
+static Expr *constant_expression(FuncCtxt *fctxt);
+
+// declaration
+static void declaration(FuncCtxt *fctxt);
 static Type *type_specifier(void);
 static void declarator(Type *base_type, char **name, Type **type);
-static Stmt *statement(void);
-static Stmt *compound_statement(void);
+
+// statement
+static Stmt *statement(FuncCtxt *fctxt);
+static Stmt *compound_statement(FuncCtxt *fctxt);
+
+// top-level
 static Function *function_declaration(void);
 
 static int pos = 0;
-static int stack_size = 0;
-static Map *stack_map;
 static Stmt null_stmt = {
     .ty = ST_NULL,
 };
-static Vector *switches = NULL;
-static Map *label_map;
 
-static bool register_stack(char *name, Type *type) {
-  if (map_get(stack_map, name)) {
+static FuncCtxt *new_func_ctxt(void) {
+  FuncCtxt *fctxt = malloc(sizeof(FuncCtxt));
+
+  fctxt->stack_size = 0;
+  fctxt->stack_map = new_map();
+  fctxt->switches = new_vector();
+
+  fctxt->label_map = new_map();
+
+  return fctxt;
+}
+
+static bool register_stack(FuncCtxt *fctxt, char *name, Type *type) {
+  if (map_get(fctxt->stack_map, name)) {
     return false;
   }
 
   StackVar *var = malloc(sizeof(StackVar));
-  var->offset = stack_size;
+  var->offset = fctxt->stack_size;
   var->type = type;
-  map_put(stack_map, name, var);
-  stack_size += 8;
+  map_put(fctxt->stack_map, name, var);
+  fctxt->stack_size += 8;
 
   return true;
 }
 
-static StackVar *get_stack(char *name) { return map_get(stack_map, name); }
+static StackVar *get_stack(FuncCtxt *fctxt, char *name) {
+  return map_get(fctxt->stack_map, name);
+}
 
 static bool is_sametype(Type *ty1, Type *ty2) {
   if (ty1->ty != ty2->ty) {
@@ -123,8 +147,8 @@ static Expr *new_expr_num(int val) {
   return expr;
 }
 
-static Expr *new_expr_ident(char *name) {
-  StackVar *var = get_stack(name);
+static Expr *new_expr_ident(FuncCtxt *fctxt, char *name) {
+  StackVar *var = get_stack(fctxt, name);
   // 未知の識別子はint型として扱う
   Type *type = var != NULL ? var->type : new_type(TY_INT);
   Expr *expr = new_expr(EX_IDENT, type);
@@ -359,11 +383,11 @@ static Stmt *new_stmt_default(void) {
   return stmt;
 }
 
-static Stmt *new_stmt_label(char *name) {
+static Stmt *new_stmt_label(FuncCtxt *fctxt, char *name) {
   Stmt *stmt = new_stmt(ST_LABEL);
   stmt->name = name;
   stmt->label = make_label();
-  map_put(label_map, stmt->name, stmt->label);
+  map_put(fctxt->label_map, stmt->name, stmt->label);
   return stmt;
 }
 
@@ -431,28 +455,28 @@ Vector *translation_unit(void) {
   return func_list;
 }
 
-static Expr *primary_expression(void) {
+static Expr *primary_expression(FuncCtxt *fctxt) {
   if (get_token(pos)->ty == TK_NUM) {
     return new_expr_num(get_token(pos++)->val);
   }
   if (get_token(pos)->ty == TK_IDENT) {
-    return new_expr_ident(get_token(pos++)->name);
+    return new_expr_ident(fctxt, get_token(pos++)->name);
   }
   if (consume('(')) {
-    Expr *expr = expression();
+    Expr *expr = expression(fctxt);
     expect(')');
     return expr;
   }
   error("数値でも開きカッコでもないトークンです: %s", get_token(pos)->input);
 }
 
-static Expr *postfix_expression(void) {
-  Expr *expr = primary_expression();
+static Expr *postfix_expression(FuncCtxt *fctxt) {
+  Expr *expr = primary_expression(fctxt);
   while (true) {
     if (consume('(')) {
       Vector *argument = NULL;
       if (get_token(pos)->ty != ')') {
-        argument = argument_expression_list();
+        argument = argument_expression_list(fctxt);
       }
       expect(')');
       expr = new_expr_call(expr, argument);
@@ -480,10 +504,10 @@ static Expr *postfix_expression(void) {
   }
 }
 
-static Vector *argument_expression_list(void) {
+static Vector *argument_expression_list(FuncCtxt *fctxt) {
   Vector *argument = new_vector();
   while (true) {
-    vec_push(argument, assignment_expression());
+    vec_push(argument, assignment_expression(fctxt));
     if (!consume(',')) {
       break;
     }
@@ -491,27 +515,27 @@ static Vector *argument_expression_list(void) {
   return argument;
 }
 
-static Expr *unary_expression(void) {
+static Expr *unary_expression(FuncCtxt *fctxt) {
   if (consume('&')) {
-    return new_expr_unary('&', cast_expression());
+    return new_expr_unary('&', cast_expression(fctxt));
   }
   if (consume('*')) {
-    return new_expr_unary('*', cast_expression());
+    return new_expr_unary('*', cast_expression(fctxt));
   }
   if (consume('+')) {
-    return new_expr_unary('+', cast_expression());
+    return new_expr_unary('+', cast_expression(fctxt));
   }
   if (consume('-')) {
-    return new_expr_unary('-', cast_expression());
+    return new_expr_unary('-', cast_expression(fctxt));
   }
   if (consume('~')) {
-    return new_expr_unary('~', cast_expression());
+    return new_expr_unary('~', cast_expression(fctxt));
   }
   if (consume('!')) {
-    return new_expr_unary('!', cast_expression());
+    return new_expr_unary('!', cast_expression(fctxt));
   }
   if (consume(TK_INC)) {
-    Expr *expr = cast_expression();
+    Expr *expr = cast_expression(fctxt);
     int val;
     if (is_ptr_type(expr->val_type)) {
       val = get_val_size(expr->val_type->ptrof);
@@ -523,7 +547,7 @@ static Expr *unary_expression(void) {
     return expr;
   }
   if (consume(TK_DEC)) {
-    Expr *expr = cast_expression();
+    Expr *expr = cast_expression(fctxt);
     int val;
     if (is_ptr_type(expr->val_type)) {
       val = get_val_size(expr->val_type->ptrof);
@@ -534,46 +558,48 @@ static Expr *unary_expression(void) {
     expr->val = val;
     return expr;
   }
-  return postfix_expression();
+  return postfix_expression(fctxt);
 }
 
-static Expr *cast_expression(void) { return unary_expression(); }
+static Expr *cast_expression(FuncCtxt *fctxt) {
+  return unary_expression(fctxt);
+}
 
-static Expr *multiplicative_expression(void) {
-  Expr *expr = cast_expression();
+static Expr *multiplicative_expression(FuncCtxt *fctxt) {
+  Expr *expr = cast_expression(fctxt);
   while (true) {
     if (consume('*')) {
-      expr = new_expr_binop('*', expr, cast_expression());
+      expr = new_expr_binop('*', expr, cast_expression(fctxt));
     } else if (consume('/')) {
-      expr = new_expr_binop('/', expr, cast_expression());
+      expr = new_expr_binop('/', expr, cast_expression(fctxt));
     } else if (consume('%')) {
-      expr = new_expr_binop('%', expr, cast_expression());
+      expr = new_expr_binop('%', expr, cast_expression(fctxt));
     } else {
       return expr;
     }
   }
 }
 
-static Expr *additive_expression(void) {
-  Expr *expr = multiplicative_expression();
+static Expr *additive_expression(FuncCtxt *fctxt) {
+  Expr *expr = multiplicative_expression(fctxt);
   while (true) {
     if (consume('+')) {
-      expr = new_expr_binop('+', expr, multiplicative_expression());
+      expr = new_expr_binop('+', expr, multiplicative_expression(fctxt));
     } else if (consume('-')) {
-      expr = new_expr_binop('-', expr, multiplicative_expression());
+      expr = new_expr_binop('-', expr, multiplicative_expression(fctxt));
     } else {
       return expr;
     }
   }
 }
 
-static Expr *shift_expression(void) {
-  Expr *expr = additive_expression();
+static Expr *shift_expression(FuncCtxt *fctxt) {
+  Expr *expr = additive_expression(fctxt);
   while (true) {
     if (consume(TK_LSHIFT)) {
-      expr = new_expr_binop(EX_LSHIFT, expr, additive_expression());
+      expr = new_expr_binop(EX_LSHIFT, expr, additive_expression(fctxt));
     } else if (consume(TK_RSHIFT)) {
-      expr = new_expr_binop(EX_RSHIFT, expr, additive_expression());
+      expr = new_expr_binop(EX_RSHIFT, expr, additive_expression(fctxt));
     } else {
       return expr;
     }
@@ -581,17 +607,17 @@ static Expr *shift_expression(void) {
   return expr;
 }
 
-static Expr *relational_expression(void) {
-  Expr *expr = shift_expression();
+static Expr *relational_expression(FuncCtxt *fctxt) {
+  Expr *expr = shift_expression(fctxt);
   while (true) {
     if (consume('<')) {
-      expr = new_expr_binop('<', expr, shift_expression());
+      expr = new_expr_binop('<', expr, shift_expression(fctxt));
     } else if (consume('>')) {
-      expr = new_expr_binop('>', expr, shift_expression());
+      expr = new_expr_binop('>', expr, shift_expression(fctxt));
     } else if (consume(TK_LTEQ)) {
-      expr = new_expr_binop(EX_LTEQ, expr, shift_expression());
+      expr = new_expr_binop(EX_LTEQ, expr, shift_expression(fctxt));
     } else if (consume(TK_GTEQ)) {
-      expr = new_expr_binop(EX_GTEQ, expr, shift_expression());
+      expr = new_expr_binop(EX_GTEQ, expr, shift_expression(fctxt));
     } else {
       return expr;
     }
@@ -599,24 +625,24 @@ static Expr *relational_expression(void) {
   return expr;
 }
 
-static Expr *equality_expression(void) {
-  Expr *expr = relational_expression();
+static Expr *equality_expression(FuncCtxt *fctxt) {
+  Expr *expr = relational_expression(fctxt);
   while (true) {
     if (consume(TK_EQEQ)) {
-      expr = new_expr_binop(EX_EQEQ, expr, relational_expression());
+      expr = new_expr_binop(EX_EQEQ, expr, relational_expression(fctxt));
     } else if (consume(TK_NOTEQ)) {
-      expr = new_expr_binop(EX_NOTEQ, expr, relational_expression());
+      expr = new_expr_binop(EX_NOTEQ, expr, relational_expression(fctxt));
     } else {
       return expr;
     }
   }
 }
 
-static Expr *and_expression(void) {
-  Expr *expr = equality_expression();
+static Expr *and_expression(FuncCtxt *fctxt) {
+  Expr *expr = equality_expression(fctxt);
   while (true) {
     if (consume('&')) {
-      expr = new_expr_binop('&', expr, equality_expression());
+      expr = new_expr_binop('&', expr, equality_expression(fctxt));
     } else {
       return expr;
     }
@@ -624,104 +650,104 @@ static Expr *and_expression(void) {
   return expr;
 }
 
-static Expr *exclusive_or_expression(void) {
-  Expr *expr = and_expression();
+static Expr *exclusive_or_expression(FuncCtxt *fctxt) {
+  Expr *expr = and_expression(fctxt);
   while (true) {
     if (consume('^')) {
-      expr = new_expr_binop('^', expr, and_expression());
+      expr = new_expr_binop('^', expr, and_expression(fctxt));
     } else {
       return expr;
     }
   }
   return expr;
 }
-static Expr *inclusive_or_expression(void) {
-  Expr *expr = exclusive_or_expression();
+static Expr *inclusive_or_expression(FuncCtxt *fctxt) {
+  Expr *expr = exclusive_or_expression(fctxt);
   while (true) {
     if (consume('|')) {
-      expr = new_expr_binop('|', expr, exclusive_or_expression());
+      expr = new_expr_binop('|', expr, exclusive_or_expression(fctxt));
     } else {
       return expr;
     }
   }
   return expr;
 }
-static Expr *logical_and_expression(void) {
-  Expr *expr = inclusive_or_expression();
+static Expr *logical_and_expression(FuncCtxt *fctxt) {
+  Expr *expr = inclusive_or_expression(fctxt);
   while (true) {
     if (consume(TK_LOGAND)) {
-      expr = new_expr_binop(EX_LOGAND, expr, inclusive_or_expression());
+      expr = new_expr_binop(EX_LOGAND, expr, inclusive_or_expression(fctxt));
     } else {
       return expr;
     }
   }
   return expr;
 }
-static Expr *logical_or_expression(void) {
-  Expr *expr = logical_and_expression();
+static Expr *logical_or_expression(FuncCtxt *fctxt) {
+  Expr *expr = logical_and_expression(fctxt);
   while (true) {
     if (consume(TK_LOGOR)) {
-      expr = new_expr_binop(EX_LOGOR, expr, logical_and_expression());
+      expr = new_expr_binop(EX_LOGOR, expr, logical_and_expression(fctxt));
     } else {
       return expr;
     }
   }
   return expr;
 }
-static Expr *conditional_expression(void) {
-  Expr *cond = logical_or_expression();
+static Expr *conditional_expression(FuncCtxt *fctxt) {
+  Expr *cond = logical_or_expression(fctxt);
   if (consume('?')) {
-    Expr *then_expr = expression();
+    Expr *then_expr = expression(fctxt);
     expect(':');
-    Expr *else_expr = conditional_expression();
+    Expr *else_expr = conditional_expression(fctxt);
     return new_expr_cond(cond, then_expr, else_expr);
   }
   return cond;
 }
 
-static Expr *assignment_expression(void) {
-  Expr *lhs = conditional_expression();
+static Expr *assignment_expression(FuncCtxt *fctxt) {
+  Expr *lhs = conditional_expression(fctxt);
   if (consume('=')) {
-    return new_expr_binop('=', lhs, assignment_expression());
+    return new_expr_binop('=', lhs, assignment_expression(fctxt));
   }
   if (consume(TK_MUL_ASSIGN)) {
-    return new_expr_binop(EX_MUL_ASSIGN, lhs, assignment_expression());
+    return new_expr_binop(EX_MUL_ASSIGN, lhs, assignment_expression(fctxt));
   }
   if (consume(TK_DIV_ASSIGN)) {
-    return new_expr_binop(EX_DIV_ASSIGN, lhs, assignment_expression());
+    return new_expr_binop(EX_DIV_ASSIGN, lhs, assignment_expression(fctxt));
   }
   if (consume(TK_MOD_ASSIGN)) {
-    return new_expr_binop(EX_MOD_ASSIGN, lhs, assignment_expression());
+    return new_expr_binop(EX_MOD_ASSIGN, lhs, assignment_expression(fctxt));
   }
   if (consume(TK_ADD_ASSIGN)) {
-    return new_expr_binop(EX_ADD_ASSIGN, lhs, assignment_expression());
+    return new_expr_binop(EX_ADD_ASSIGN, lhs, assignment_expression(fctxt));
   }
   if (consume(TK_SUB_ASSIGN)) {
-    return new_expr_binop(EX_SUB_ASSIGN, lhs, assignment_expression());
+    return new_expr_binop(EX_SUB_ASSIGN, lhs, assignment_expression(fctxt));
   }
   if (consume(TK_LSHIFT_ASSIGN)) {
-    return new_expr_binop(EX_LSHIFT_ASSIGN, lhs, assignment_expression());
+    return new_expr_binop(EX_LSHIFT_ASSIGN, lhs, assignment_expression(fctxt));
   }
   if (consume(TK_RSHIFT_ASSIGN)) {
-    return new_expr_binop(EX_RSHIFT_ASSIGN, lhs, assignment_expression());
+    return new_expr_binop(EX_RSHIFT_ASSIGN, lhs, assignment_expression(fctxt));
   }
   if (consume(TK_AND_ASSIGN)) {
-    return new_expr_binop(EX_AND_ASSIGN, lhs, assignment_expression());
+    return new_expr_binop(EX_AND_ASSIGN, lhs, assignment_expression(fctxt));
   }
   if (consume(TK_OR_ASSIGN)) {
-    return new_expr_binop(EX_OR_ASSIGN, lhs, assignment_expression());
+    return new_expr_binop(EX_OR_ASSIGN, lhs, assignment_expression(fctxt));
   }
   if (consume(TK_XOR_ASSIGN)) {
-    return new_expr_binop(EX_XOR_ASSIGN, lhs, assignment_expression());
+    return new_expr_binop(EX_XOR_ASSIGN, lhs, assignment_expression(fctxt));
   }
   return lhs;
 }
 
-static Expr *expression(void) {
-  Expr *expr = assignment_expression();
+static Expr *expression(FuncCtxt *fctxt) {
+  Expr *expr = assignment_expression(fctxt);
   while (true) {
     if (consume(',')) {
-      expr = new_expr_binop(',', expr, assignment_expression());
+      expr = new_expr_binop(',', expr, assignment_expression(fctxt));
     } else {
       return expr;
     }
@@ -729,16 +755,18 @@ static Expr *expression(void) {
   return expr;
 }
 
-static Expr *constant_expression(void) { return conditional_expression(); }
+static Expr *constant_expression(FuncCtxt *fctxt) {
+  return conditional_expression(fctxt);
+}
 
-static void declaration(void) {
+static void declaration(FuncCtxt *fctxt) {
   Type *base_type = type_specifier();
   char *name;
   Type *type;
   declarator(base_type, &name, &type);
   expect(';');
 
-  if (!register_stack(name, type)) {
+  if (!register_stack(fctxt, name, type)) {
     error("同じ名前の変数が複数回宣言されました: %s", name);
   }
 }
@@ -756,40 +784,40 @@ static void declarator(Type *base_type, char **name, Type **type) {
   *type = base_type;
 }
 
-static Stmt *statement(void) {
+static Stmt *statement(FuncCtxt *fctxt) {
   switch (get_token(pos)->ty) {
   case TK_IF: {
     pos++;
     expect('(');
-    Expr *cond = expression();
+    Expr *cond = expression(fctxt);
     expect(')');
-    Stmt *then_stmt = statement();
+    Stmt *then_stmt = statement(fctxt);
     Stmt *else_stmt = &null_stmt;
     if (consume(TK_ELSE)) {
-      else_stmt = statement();
+      else_stmt = statement(fctxt);
     }
     return new_stmt_if(cond, then_stmt, else_stmt);
   }
   case TK_SWITCH: {
     pos++;
     expect('(');
-    Expr *cond = expression();
+    Expr *cond = expression(fctxt);
     expect(')');
     Stmt *stmt = new_stmt_switch(cond, NULL);
-    vec_push(switches, stmt);
-    stmt->body = statement();
-    vec_pop(switches);
+    vec_push(fctxt->switches, stmt);
+    stmt->body = statement(fctxt);
+    vec_pop(fctxt->switches);
     return stmt;
   }
   case TK_CASE: {
     pos++;
-    Expr *expr = constant_expression();
+    Expr *expr = constant_expression(fctxt);
     expect(':');
     Stmt *stmt = new_stmt_case(expr);
-    if (switches->len <= 0) {
+    if (fctxt->switches->len <= 0) {
       error("switch文中でない箇所にcase文があります");
     }
-    Stmt *switch_stmt = switches->data[switches->len - 1];
+    Stmt *switch_stmt = fctxt->switches->data[fctxt->switches->len - 1];
     vec_push(switch_stmt->cases, stmt);
     return stmt;
   }
@@ -797,27 +825,27 @@ static Stmt *statement(void) {
     pos++;
     expect(':');
     Stmt *stmt = new_stmt_default();
-    if (switches->len <= 0) {
+    if (fctxt->switches->len <= 0) {
       error("switch文中でない箇所にcase文があります");
     }
-    Stmt *switch_expr = switches->data[switches->len - 1];
+    Stmt *switch_expr = fctxt->switches->data[fctxt->switches->len - 1];
     switch_expr->default_case = stmt;
     return stmt;
   }
   case TK_WHILE: {
     pos++;
     expect('(');
-    Expr *cond = expression();
+    Expr *cond = expression(fctxt);
     expect(')');
-    Stmt *body = statement();
+    Stmt *body = statement(fctxt);
     return new_stmt_while(cond, body);
   }
   case TK_DO: {
     pos++;
-    Stmt *body = statement();
+    Stmt *body = statement(fctxt);
     expect(TK_WHILE);
     expect('(');
-    Expr *cond = expression();
+    Expr *cond = expression(fctxt);
     expect(')');
     expect(';');
     return new_stmt_do_while(cond, body);
@@ -829,18 +857,18 @@ static Stmt *statement(void) {
     Expr *inc = NULL;
     expect('(');
     if (get_token(pos)->ty != ';') {
-      init = expression();
+      init = expression(fctxt);
     }
     expect(';');
     if (get_token(pos)->ty != ';') {
-      cond = expression();
+      cond = expression(fctxt);
     }
     expect(';');
     if (get_token(pos)->ty != ')') {
-      inc = expression();
+      inc = expression(fctxt);
     }
     expect(')');
-    Stmt *body = statement();
+    Stmt *body = statement(fctxt);
     return new_stmt_for(init, cond, inc, body);
   }
   case TK_GOTO: {
@@ -863,13 +891,13 @@ static Stmt *statement(void) {
     pos++;
     Expr *expr = NULL;
     if (get_token(pos)->ty != ';') {
-      expr = expression();
+      expr = expression(fctxt);
     }
     expect(';');
     return new_stmt_return(expr);
   }
   case '{': {
-    return compound_statement();
+    return compound_statement(fctxt);
   }
   case ';': {
     pos++;
@@ -877,42 +905,37 @@ static Stmt *statement(void) {
   }
   case TK_IDENT: {
     if (get_token(pos + 1)->ty == ':') {
-      Stmt *stmt = new_stmt_label(get_token(pos)->name);
+      Stmt *stmt = new_stmt_label(fctxt, get_token(pos)->name);
       pos += 2;
       return stmt;
     }
-    // fall through
   }
+  // fall through
   default: {
-    Expr *expr = expression();
+    Expr *expr = expression(fctxt);
     expect(';');
     return new_stmt_expr(expr);
   }
   }
 }
 
-static Stmt *compound_statement(void) {
+static Stmt *compound_statement(FuncCtxt *fctxt) {
   expect('{');
 
   Stmt *stmt = new_stmt(ST_COMPOUND);
   stmt->stmts = new_vector();
   while (!consume('}')) {
     if (get_token(pos)->ty == TK_INT) {
-      declaration();
+      declaration(fctxt);
       continue;
     }
-    vec_push(stmt->stmts, statement());
+    vec_push(stmt->stmts, statement(fctxt));
   }
   return stmt;
 }
 
 static Function *function_declaration(void) {
-  switches = new_vector();
-
-  stack_size = 0;
-  stack_map = new_map();
-  label_map = new_map();
-
+  FuncCtxt *fctxt = new_func_ctxt();
   Vector *params = new_vector();
 
   expect(TK_INT);
@@ -924,7 +947,7 @@ static Function *function_declaration(void) {
       char *name;
       Type *type;
       declarator(base_type, &name, &type);
-      if (!register_stack(name, type)) {
+      if (!register_stack(fctxt, name, type)) {
         error("同じ名前の引数が複数個あります: %s\n", name);
       }
       vec_push(params, name);
@@ -936,13 +959,13 @@ static Function *function_declaration(void) {
   }
   expect(')');
 
-  Stmt *body = compound_statement();
+  Stmt *body = compound_statement(fctxt);
 
   Function *func = malloc(sizeof(Function));
   func->name = name->name;
-  func->stack_size = stack_size;
-  func->stack_map = stack_map;
-  func->label_map = label_map;
+  func->stack_size = fctxt->stack_size;
+  func->stack_map = fctxt->stack_map;
+  func->label_map = fctxt->label_map;
   func->params = params;
   func->body = body;
 
