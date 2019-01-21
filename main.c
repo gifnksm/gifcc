@@ -220,36 +220,36 @@ static void dump_expr(Expr *expr, int level) {
     dump_indent(level);
     dump_type(expr->val_type);
     printf("(NUM %d)\n", expr->val);
-    break;
+    return;
   case EX_IDENT:
     dump_indent(level);
     dump_type(expr->val_type);
     printf("(IDENT %s)\n", expr->name);
-    break;
+    return;
   case EX_EQEQ:
     dump_binop_expr(expr, "[==]", level);
-    break;
+    return;
   case EX_NOTEQ:
     dump_binop_expr(expr, "[!=]", level);
-    break;
+    return;
   case EX_LTEQ:
     dump_binop_expr(expr, "[<=]", level);
-    break;
+    return;
   case EX_GTEQ:
     dump_binop_expr(expr, "[>=]", level);
-    break;
+    return;
   case EX_LSHIFT:
     dump_binop_expr(expr, "[<<]", level);
-    break;
+    return;
   case EX_RSHIFT:
     dump_binop_expr(expr, "[>>]", level);
-    break;
+    return;
   case EX_LOGAND:
     dump_binop_expr(expr, "[&&]", level);
-    break;
+    return;
   case EX_LOGOR:
     dump_binop_expr(expr, "[||]", level);
-    break;
+    return;
   case EX_COND:
     dump_indent(level);
     dump_type(expr->val_type);
@@ -259,13 +259,13 @@ static void dump_expr(Expr *expr, int level) {
     dump_expr(expr->rhs, level + 1);
     dump_indent(level);
     printf(")\n");
-    break;
+    return;
   case EX_INC:
     dump_binop_expr_incdec(expr, "[++]", level);
-    break;
+    return;
   case EX_DEC:
     dump_binop_expr_incdec(expr, "[--]", level);
-    break;
+    return;
   case EX_CALL:
     dump_indent(level);
     dump_type(expr->val_type);
@@ -278,7 +278,7 @@ static void dump_expr(Expr *expr, int level) {
     }
     dump_indent(level);
     printf(")\n");
-    break;
+    return;
   case EX_CAST:
     dump_indent(level);
     dump_type(expr->val_type);
@@ -286,10 +286,9 @@ static void dump_expr(Expr *expr, int level) {
     dump_expr(expr->expr, level + 1);
     dump_indent(level);
     printf(")\n");
-    break;
-  default:
-    error("未知のノードです: %d\n", expr->ty);
+    return;
   }
+  error("未知のノードです: %d\n", expr->ty);
 }
 
 static void dump_stmt(Stmt *stmt, int level) {
@@ -300,7 +299,7 @@ static void dump_stmt(Stmt *stmt, int level) {
     dump_expr(stmt->expr, level + 1);
     dump_indent(level);
     printf("}\n");
-    break;
+    return;
   case ST_COMPOUND:
     dump_indent(level);
     printf("{COMPOUND\n");
@@ -309,7 +308,7 @@ static void dump_stmt(Stmt *stmt, int level) {
     }
     dump_indent(level);
     printf("}\n");
-    break;
+    return;
   case ST_IF:
     dump_indent(level);
     printf("{IF\n");
@@ -318,7 +317,7 @@ static void dump_stmt(Stmt *stmt, int level) {
     dump_stmt(stmt->else_stmt, level + 1);
     dump_indent(level);
     printf("\n");
-    break;
+    return;
   case ST_SWITCH:
     dump_indent(level);
     printf("{SWITCH\n");
@@ -326,22 +325,22 @@ static void dump_stmt(Stmt *stmt, int level) {
     dump_stmt(stmt->body, level + 1);
     dump_indent(level);
     printf("\n");
-    break;
+    return;
   case ST_CASE:
     dump_indent(level);
     printf("{CASE\n");
     dump_expr(stmt->expr, level + 1);
     dump_indent(level);
     printf("\n");
-    break;
+    return;
   case ST_DEFAULT:
     dump_indent(level);
     printf("{DEFAULT}\n");
-    break;
+    return;
   case ST_LABEL:
     dump_indent(level);
     printf("{LABEL %s}\n", stmt->name);
-    break;
+    return;
   case ST_WHILE:
     dump_indent(level);
     printf("{WHILE\n");
@@ -349,7 +348,7 @@ static void dump_stmt(Stmt *stmt, int level) {
     dump_stmt(stmt->body, level + 1);
     dump_indent(level);
     printf("\n");
-    break;
+    return;
   case ST_DO_WHILE:
     dump_indent(level);
     printf("{DO_WHILE\n");
@@ -357,7 +356,7 @@ static void dump_stmt(Stmt *stmt, int level) {
     dump_stmt(stmt->body, level + 1);
     dump_indent(level);
     printf("\n");
-    break;
+    return;
   case ST_FOR:
     dump_indent(level);
     printf("{FOR\n");
@@ -382,33 +381,32 @@ static void dump_stmt(Stmt *stmt, int level) {
     dump_stmt(stmt->body, level + 1);
     dump_indent(level);
     printf("\n");
-    break;
+    return;
   case ST_GOTO:
     dump_indent(level);
     printf("{GOTO %s}\n", stmt->name);
-    break;
+    return;
   case ST_BREAK:
     dump_indent(level);
     printf("{BREAK}\n");
-    break;
+    return;
   case ST_CONTINUE:
     dump_indent(level);
     printf("{CONTINUE}\n");
-    break;
+    return;
   case ST_RETURN:
     dump_indent(level);
     printf("{RETURN\n");
     dump_expr(stmt->expr, level + 1);
     dump_indent(level);
     printf("\n");
-    break;
+    return;
   case ST_NULL:
     dump_indent(level);
     printf("{NULL}\n");
-    break;
-  default:
-    error("未知のノードです: %d\n", stmt->ty);
+    return;
   }
+  error("未知のノードです: %d\n", stmt->ty);
 }
 
 static void output_ast(Function *func) {

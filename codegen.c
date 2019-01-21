@@ -338,13 +338,13 @@ static void gen_stmt(Stmt *stmt) {
     // 式の評価結果としてスタックに一つの値が残っている
     // はずなので、スタックが溢れないようにポップしておく
     printf("  pop rax\n");
-    break;
+    return;
   }
   case ST_COMPOUND: {
     for (int i = 0; i < stmt->stmts->len; i++) {
       gen_stmt(stmt->stmts->data[i]);
     }
-    break;
+    return;
   }
   case ST_IF: {
     char *else_label = make_label();
@@ -358,7 +358,7 @@ static void gen_stmt(Stmt *stmt) {
     printf("%s:\n", else_label);
     gen_stmt(stmt->else_stmt);
     printf("%s:\n", end_label);
-    break;
+    return;
   }
   case ST_SWITCH: {
     char *end_label = make_label();
@@ -382,13 +382,13 @@ static void gen_stmt(Stmt *stmt) {
     gen_stmt(stmt->body);
     vec_pop(break_labels);
     printf("%s:", end_label);
-    break;
+    return;
   }
   case ST_CASE:
   case ST_DEFAULT:
   case ST_LABEL: {
     printf("%s:\n", stmt->label);
-    break;
+    return;
   }
   case ST_WHILE: {
     char *cond_label = make_label();
@@ -407,7 +407,7 @@ static void gen_stmt(Stmt *stmt) {
 
     printf("  jmp %s\n", cond_label);
     printf("%s:\n", end_label);
-    break;
+    return;
   }
   case ST_DO_WHILE: {
     char *loop_label = make_label();
@@ -427,7 +427,7 @@ static void gen_stmt(Stmt *stmt) {
     printf("  cmp rax, 0\n");
     printf("  jne %s\n", loop_label);
     printf("%s:\n", end_label);
-    break;
+    return;
   }
   case ST_FOR: {
     char *cond_label = make_label();
@@ -456,7 +456,7 @@ static void gen_stmt(Stmt *stmt) {
     }
     printf("  jmp %s\n", cond_label);
     printf("%s:\n", end_label);
-    break;
+    return;
   }
   case ST_GOTO: {
     char *label = get_label(func_ctxt, stmt->name);
@@ -464,14 +464,14 @@ static void gen_stmt(Stmt *stmt) {
       error("未知のラベルへのgotoです: %s", stmt->name);
     }
     printf("  jmp %s\n", label);
-    break;
+    return;
   }
   case ST_BREAK: {
     if (break_labels->len <= 0) {
       error("ループでもswitch文中でもない箇所にbreakがあります");
     }
     printf("  jmp %s\n", (char *)break_labels->data[break_labels->len - 1]);
-    break;
+    return;
   }
   case ST_CONTINUE: {
     if (continue_labels->len <= 0) {
@@ -479,7 +479,7 @@ static void gen_stmt(Stmt *stmt) {
     }
     printf("  jmp %s\n",
            (char *)continue_labels->data[continue_labels->len - 1]);
-    break;
+    return;
   }
   case ST_RETURN: {
     if (stmt->expr != NULL) {
@@ -487,10 +487,10 @@ static void gen_stmt(Stmt *stmt) {
       printf("  pop rax\n");
     }
     printf("  jmp %s\n", epilogue_label);
-    break;
+    return;
   }
-  default: { error("未知のノード種別です: %d", stmt->ty); }
   }
+  error("未知のノード種別です: %d", stmt->ty);
 }
 
 void gen(Function *func) {

@@ -78,7 +78,7 @@ enum {
   EX_CAST,
 };
 
-enum {
+typedef enum {
   ST_EXPR,
   ST_COMPOUND,
   ST_IF,
@@ -94,10 +94,15 @@ enum {
   ST_CONTINUE,
   ST_RETURN,
   ST_NULL,
-};
+} stmt_t;
+
+typedef enum {
+  TY_INT,
+  TY_PTR,
+} type_t;
 
 typedef struct Type {
-  enum { TY_INT, TY_PTR } ty;
+  type_t ty;
   struct Type *ptrof;
 } Type;
 
@@ -126,7 +131,7 @@ typedef struct Expr {
 } Expr;
 
 typedef struct Stmt {
-  int ty;
+  stmt_t ty;
 
   // ST_LABEL, ST_GOTO
   char *name;
