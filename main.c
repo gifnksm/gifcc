@@ -266,36 +266,6 @@ static void dump_expr(Expr *expr, int level) {
   case EX_DEC:
     dump_binop_expr_incdec(expr, "[--]", level);
     break;
-  case EX_MUL_ASSIGN:
-    dump_binop_expr(expr, "[*=]", level);
-    break;
-  case EX_DIV_ASSIGN:
-    dump_binop_expr(expr, "[/=]", level);
-    break;
-  case EX_MOD_ASSIGN:
-    dump_binop_expr(expr, "[%%=]", level);
-    break;
-  case EX_ADD_ASSIGN:
-    dump_binop_expr(expr, "[+=]", level);
-    break;
-  case EX_SUB_ASSIGN:
-    dump_binop_expr(expr, "[-=]", level);
-    break;
-  case EX_LSHIFT_ASSIGN:
-    dump_binop_expr(expr, "[<<=]", level);
-    break;
-  case EX_RSHIFT_ASSIGN:
-    dump_binop_expr(expr, "[>>=]", level);
-    break;
-  case EX_AND_ASSIGN:
-    dump_binop_expr(expr, "[^=]", level);
-    break;
-  case EX_OR_ASSIGN:
-    dump_binop_expr(expr, "[|=]", level);
-    break;
-  case EX_XOR_ASSIGN:
-    dump_binop_expr(expr, "[^=]", level);
-    break;
   case EX_CALL:
     dump_indent(level);
     dump_type(expr->val_type);

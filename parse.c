@@ -316,28 +316,6 @@ static Expr *new_expr_binop(int ty, Expr *lhs, Expr *rhs) {
   case '=':
     val_type = lhs->val_type;
     break;
-  case EX_ADD_ASSIGN:
-    if (is_ptr_type(lhs->val_type) || is_ptr_type(rhs->val_type)) {
-      return new_expr_binop('=', lhs, new_expr_binop('+', lhs, rhs));
-    }
-    val_type = lhs->val_type;
-    break;
-  case EX_SUB_ASSIGN:
-    if (is_ptr_type(lhs->val_type) || is_ptr_type(rhs->val_type)) {
-      return new_expr_binop('=', lhs, new_expr_binop('-', lhs, rhs));
-    }
-    val_type = lhs->val_type;
-    break;
-  case EX_MUL_ASSIGN:
-  case EX_DIV_ASSIGN:
-  case EX_MOD_ASSIGN:
-  case EX_LSHIFT_ASSIGN:
-  case EX_RSHIFT_ASSIGN:
-  case EX_AND_ASSIGN:
-  case EX_OR_ASSIGN:
-  case EX_XOR_ASSIGN:
-    val_type = lhs->val_type;
-    break;
   case ',':
     val_type = lhs->val_type;
     break;
@@ -712,34 +690,44 @@ static Expr *assignment_expression(FuncCtxt *fctxt) {
     return new_expr_binop('=', lhs, assignment_expression(fctxt));
   }
   if (token_consume(fctxt->tokenizer, TK_MUL_ASSIGN)) {
-    return new_expr_binop(EX_MUL_ASSIGN, lhs, assignment_expression(fctxt));
+    return new_expr_binop(
+        '=', lhs, new_expr_binop('*', lhs, assignment_expression(fctxt)));
   }
   if (token_consume(fctxt->tokenizer, TK_DIV_ASSIGN)) {
-    return new_expr_binop(EX_DIV_ASSIGN, lhs, assignment_expression(fctxt));
+    return new_expr_binop(
+        '=', lhs, new_expr_binop('/', lhs, assignment_expression(fctxt)));
   }
   if (token_consume(fctxt->tokenizer, TK_MOD_ASSIGN)) {
-    return new_expr_binop(EX_MOD_ASSIGN, lhs, assignment_expression(fctxt));
+    return new_expr_binop(
+        '=', lhs, new_expr_binop('%', lhs, assignment_expression(fctxt)));
   }
   if (token_consume(fctxt->tokenizer, TK_ADD_ASSIGN)) {
-    return new_expr_binop(EX_ADD_ASSIGN, lhs, assignment_expression(fctxt));
+    return new_expr_binop(
+        '=', lhs, new_expr_binop('+', lhs, assignment_expression(fctxt)));
   }
   if (token_consume(fctxt->tokenizer, TK_SUB_ASSIGN)) {
-    return new_expr_binop(EX_SUB_ASSIGN, lhs, assignment_expression(fctxt));
+    return new_expr_binop(
+        '=', lhs, new_expr_binop('-', lhs, assignment_expression(fctxt)));
   }
   if (token_consume(fctxt->tokenizer, TK_LSHIFT_ASSIGN)) {
-    return new_expr_binop(EX_LSHIFT_ASSIGN, lhs, assignment_expression(fctxt));
+    return new_expr_binop(
+        '=', lhs, new_expr_binop(EX_LSHIFT, lhs, assignment_expression(fctxt)));
   }
   if (token_consume(fctxt->tokenizer, TK_RSHIFT_ASSIGN)) {
-    return new_expr_binop(EX_RSHIFT_ASSIGN, lhs, assignment_expression(fctxt));
+    return new_expr_binop(
+        '=', lhs, new_expr_binop(EX_RSHIFT, lhs, assignment_expression(fctxt)));
   }
   if (token_consume(fctxt->tokenizer, TK_AND_ASSIGN)) {
-    return new_expr_binop(EX_AND_ASSIGN, lhs, assignment_expression(fctxt));
+    return new_expr_binop(
+        '=', lhs, new_expr_binop('&', lhs, assignment_expression(fctxt)));
   }
   if (token_consume(fctxt->tokenizer, TK_OR_ASSIGN)) {
-    return new_expr_binop(EX_OR_ASSIGN, lhs, assignment_expression(fctxt));
+    return new_expr_binop(
+        '=', lhs, new_expr_binop('|', lhs, assignment_expression(fctxt)));
   }
   if (token_consume(fctxt->tokenizer, TK_XOR_ASSIGN)) {
-    return new_expr_binop(EX_XOR_ASSIGN, lhs, assignment_expression(fctxt));
+    return new_expr_binop(
+        '=', lhs, new_expr_binop('^', lhs, assignment_expression(fctxt)));
   }
   return lhs;
 }

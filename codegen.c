@@ -101,57 +101,6 @@ static void gen_expr(Expr *expr) {
     printf("  push rdi\n");
     return;
   }
-  if (expr->ty == EX_MUL_ASSIGN || expr->ty == EX_DIV_ASSIGN ||
-      expr->ty == EX_MOD_ASSIGN || expr->ty == EX_ADD_ASSIGN ||
-      expr->ty == EX_SUB_ASSIGN || expr->ty == EX_LSHIFT_ASSIGN ||
-      expr->ty == EX_RSHIFT_ASSIGN || expr->ty == EX_AND_ASSIGN ||
-      expr->ty == EX_OR_ASSIGN || expr->ty == EX_XOR_ASSIGN) {
-    gen_lval(expr->lhs);
-    gen_expr(expr->rhs);
-    printf("  pop rdi\n");
-    printf("  pop rsi\n");
-    printf("  mov rax, [rsi]\n");
-    switch (expr->ty) {
-    case EX_MUL_ASSIGN:
-      printf("  mul rdi\n");
-      break;
-    case EX_DIV_ASSIGN:
-      printf("  mov rdx, 0\n");
-      printf("  div rdi\n");
-      break;
-    case EX_MOD_ASSIGN:
-      printf("  mov rdx, 0\n");
-      printf("  div rdi\n");
-      printf("  mov rax, rdx\n");
-      break;
-    case EX_ADD_ASSIGN:
-      printf("  add rax, rdi\n");
-      break;
-    case EX_SUB_ASSIGN:
-      printf("  sub rax, rdi\n");
-      break;
-    case EX_LSHIFT_ASSIGN:
-      printf("  mov rcx, rdi\n");
-      printf("  shl rax, cl\n");
-      break;
-    case EX_RSHIFT_ASSIGN:
-      printf("  mov rcx, rdi\n");
-      printf("  sar rax, cl\n");
-      break;
-    case EX_AND_ASSIGN:
-      printf("  and rax, rdi\n");
-      break;
-    case EX_OR_ASSIGN:
-      printf("  or rax, rdi\n");
-      break;
-    case EX_XOR_ASSIGN:
-      printf("  xor rax, rdi\n");
-      break;
-    }
-    printf("  mov [rsi], rax\n");
-    printf("  push rax\n");
-    return;
-  }
   if (expr->ty == EX_LOGAND) {
     char *false_label = make_label();
     char *end_label = make_label();
@@ -214,7 +163,7 @@ static void gen_expr(Expr *expr) {
     // 単項の `*`
     gen_expr(expr->rhs);
     printf("  pop rax\n");
-    printf("  mov rax, [rax]");
+    printf("  mov rax, [rax]\n");
     printf("  push rax\n");
     return;
   }
