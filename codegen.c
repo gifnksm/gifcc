@@ -9,6 +9,49 @@ static Vector *continue_labels = NULL;
 
 static void gen_expr(Expr *expr);
 
+typedef struct {
+  const char *rax;
+  const char *rdi;
+  const char *rsi;
+  const char *rdx;
+  const char *rcx;
+  const char *r8;
+  const char *r9;
+  const char *r10;
+  const char *r11;
+} Reg;
+
+const Reg Reg8 = {
+    .rax = "rax",
+    .rdi = "rdi",
+    .rsi = "rsi",
+    .rdx = "rdx",
+    .rcx = "rcx",
+    .r8 = "r8",
+    .r9 = "r9",
+    .r10 = "r10",
+    .r11 = "r11",
+};
+const Reg Reg4 = {
+    .rax = "eax",
+    .rdi = "edi",
+    .rsi = "esi",
+    .rdx = "edx",
+    .rcx = "ecx",
+    .r8 = "r8d",
+    .r9 = "r9d",
+    .r10 = "r10d",
+    .r11 = "r11d",
+};
+
+static const Reg *get_int_reg(Type *ty) {
+  if (get_val_size(ty) == 8) {
+    return &Reg8;
+  } else {
+    return &Reg4;
+  }
+}
+
 char *make_label(void) {
   static int count = 0;
   char buf[256];
@@ -35,6 +78,8 @@ static void gen_lval(Expr *expr) {
 }
 
 static void gen_expr(Expr *expr) {
+  const Reg *r = get_int_reg(expr->val_type);
+
   if (expr->ty == EX_NUM) {
     printf("  push %d\n", expr->val);
     return;
@@ -43,12 +88,13 @@ static void gen_expr(Expr *expr) {
   if (expr->ty == EX_IDENT) {
     gen_lval(expr);
     printf("  pop rax\n");
-    printf("  mov rax, [rax]\n");
+    printf("  mov %s, [rax]\n", r->rax);
     printf("  push rax\n");
     return;
   }
 
   if (expr->ty == EX_CALL) {
+    int num_push = 0;
     Vector *arg = expr->argument;
     if (expr->callee->ty != EX_IDENT) {
       error("識別子以外を関数として呼び出そうとしました");
@@ -78,11 +124,15 @@ static void gen_expr(Expr *expr) {
           break;
         // 6番目以降の引数はスタック経由で渡すため、pushされたままにする
         default:
+          num_push++;
           break;
         }
       }
     }
     printf("  call %s\n", expr->callee->name);
+    if (num_push > 0) {
+      printf("  add rsp, %d\n", 8 * num_push);
+    }
     printf("  push rax\n");
     return;
   }
@@ -97,7 +147,7 @@ static void gen_expr(Expr *expr) {
     gen_expr(expr->rhs);
     printf("  pop rdi\n");
     printf("  pop rax\n");
-    printf("  mov [rax], rdi\n");
+    printf("  mov [rax], %s\n", r->rdi);
     printf("  push rdi\n");
     return;
   }
@@ -106,11 +156,11 @@ static void gen_expr(Expr *expr) {
     char *end_label = make_label();
     gen_expr(expr->lhs);
     printf("  pop rax\n");
-    printf("  cmp rax, 0\n");
+    printf("  cmp %s, 0\n", r->rax);
     printf("  je %s\n", false_label);
     gen_expr(expr->rhs);
     printf("  pop rax\n");
-    printf("  cmp rax, 0\n");
+    printf("  cmp %s, 0\n", r->rax);
     printf("  je %s\n", false_label);
     printf("  push 1\n");
     printf("  jmp %s\n", end_label);
@@ -125,11 +175,11 @@ static void gen_expr(Expr *expr) {
     char *end_label = make_label();
     gen_expr(expr->lhs);
     printf("  pop rax\n");
-    printf("  cmp rax, 0\n");
+    printf("  cmp %s, 0\n", r->rax);
     printf("  jne %s\n", true_label);
     gen_expr(expr->rhs);
     printf("  pop rax\n");
-    printf("  cmp rax, 0\n");
+    printf("  cmp %s, 0\n", r->rax);
     printf("  jne %s\n", true_label);
     printf("  push 0\n");
     printf("  jmp %s\n", end_label);
@@ -144,7 +194,7 @@ static void gen_expr(Expr *expr) {
     char *end_label = make_label();
     gen_expr(expr->cond);
     printf("  pop rax\n");
-    printf("  cmp rax, 0\n");
+    printf("  cmp %s, 0\n", r->rax);
     printf("  je %s\n", else_label);
     gen_expr(expr->lhs);
     printf("  jmp %s\n", end_label);
@@ -163,7 +213,7 @@ static void gen_expr(Expr *expr) {
     // 単項の `*`
     gen_expr(expr->rhs);
     printf("  pop rax\n");
-    printf("  mov rax, [rax]\n");
+    printf("  mov %s, [rax]\n", r->rax);
     printf("  push rax\n");
     return;
   }
@@ -176,7 +226,7 @@ static void gen_expr(Expr *expr) {
     // 単項の `-`
     gen_expr(expr->rhs);
     printf("  pop rax\n");
-    printf("  neg rax\n");
+    printf("  neg %s\n", r->rax);
     printf("  push rax\n");
     return;
   }
@@ -184,7 +234,7 @@ static void gen_expr(Expr *expr) {
     // `~`
     gen_expr(expr->rhs);
     printf("  pop rax\n");
-    printf("  not rax\n");
+    printf("  not %s\n", r->rax);
     printf("  push rax\n");
     return;
   }
@@ -192,9 +242,9 @@ static void gen_expr(Expr *expr) {
     // `!`
     gen_expr(expr->rhs);
     printf("  pop rax\n");
-    printf("  cmp rax, 0\n");
+    printf("  cmp %s, 0\n", r->rax);
     printf("  sete al\n");
-    printf("  movzb rax, al\n");
+    printf("  movzb %s, al\n", r->rax);
     printf("  push rax\n");
     return;
   }
@@ -203,19 +253,19 @@ static void gen_expr(Expr *expr) {
       // 前置の `++`
       gen_lval(expr->rhs);
       printf("  pop rax\n");
-      printf("  mov rdi, [rax]\n");
-      printf("  add rdi, %d\n", expr->val);
-      printf("  mov [rax], rdi\n");
+      printf("  mov %s, [rax]\n", r->rdi);
+      printf("  add %s, %d\n", r->rdi, expr->val);
+      printf("  mov [rax], %s\n", r->rdi);
       printf("  push rdi\n");
       return;
     }
     // 後置の `++`
     gen_lval(expr->lhs);
     printf("  pop rax\n");
-    printf("  mov rdi, [rax]\n");
+    printf("  mov %s, [rax]\n", r->rdi);
     printf("  push rdi\n");
-    printf("  add rdi, %d\n", expr->val);
-    printf("  mov [rax], rdi\n");
+    printf("  add %s, %d\n", r->rdi, expr->val);
+    printf("  mov [rax], %s\n", r->rdi);
     return;
   }
 
@@ -224,19 +274,19 @@ static void gen_expr(Expr *expr) {
       // 前置の `--`
       gen_lval(expr->rhs);
       printf("  pop rax\n");
-      printf("  mov rdi, [rax]\n");
-      printf("  sub rdi, %d\n", expr->val);
-      printf("  mov [rax], rdi\n");
+      printf("  mov %s, [rax]\n", r->rdi);
+      printf("  sub %s, %d\n", r->rdi, expr->val);
+      printf("  mov [rax], %s\n", r->rdi);
       printf("  push rdi\n");
       return;
     }
     // 後置の `--`
     gen_lval(expr->lhs);
     printf("  pop rax\n");
-    printf("  mov rdi, [rax]\n");
+    printf("  mov %s, [rax]\n", r->rdi);
     printf("  push rdi\n");
-    printf("  sub rdi, %d\n", expr->val);
-    printf("  mov [rax], rdi\n");
+    printf("  sub %s, %d\n", r->rdi, expr->val);
+    printf("  mov [rax], %s\n", r->rdi);
     return;
   }
 
@@ -253,72 +303,72 @@ static void gen_expr(Expr *expr) {
 
   switch (expr->ty) {
   case '+':
-    printf("  add rax, rdi\n");
+    printf("  add %s, %s\n", r->rax, r->rdi);
     break;
   case '-':
-    printf("  sub rax, rdi\n");
+    printf("  sub %s, %s\n", r->rax, r->rdi);
     break;
   case '*':
-    printf("  mul rdi\n");
+    printf("  mul %s\n", r->rdi);
     break;
   case '/':
-    printf("  mov rdx, 0\n");
-    printf("  div rdi\n");
+    printf("  mov %s, 0\n", r->rdx);
+    printf("  div %s\n", r->rdi);
     break;
   case '%':
-    printf("  mov rdx, 0\n");
-    printf("  div rdi\n");
-    printf("  mov rax, rdx\n");
+    printf("  mov %s, 0\n", r->rdx);
+    printf("  div %s\n", r->rdi);
+    printf("  mov %s, %s\n", r->rax, r->rdx);
     break;
   case EX_EQEQ:
-    printf("  cmp rax, rdi\n");
+    printf("  cmp %s, %s\n", r->rax, r->rdi);
     printf("  sete al\n");
-    printf("  movzb rax, al\n");
+    printf("  movzb %s, al\n", r->rax);
     break;
   case EX_NOTEQ:
-    printf("  cmp rax, rdi\n");
+    printf("  cmp %s, %s\n", r->rax, r->rdi);
     printf("  setne al\n");
-    printf("  movzb rax, al\n");
+    printf("  movzb %s, al\n", r->rax);
     break;
   case '<':
-    printf("  cmp rax, rdi\n");
+    printf("  cmp %s, %s\n", r->rax, r->rdi);
     printf("  setl al\n");
-    printf("  movzb rax, al\n");
+    printf("  movzb %s, al\n", r->rax);
     break;
   case '>':
-    printf("  cmp rax, rdi\n");
+    printf("  cmp %s, %s\n", r->rax, r->rdi);
     printf("  setg al\n");
-    printf("  movzb rax, al\n");
+    printf("  movzb %s, al\n", r->rax);
     break;
   case EX_LTEQ:
-    printf("  cmp rax, rdi\n");
+    printf("  cmp %s, %s\n", r->rax, r->rdi);
     printf("  setle al\n");
-    printf("  movzb rax, al\n");
+    printf("  movzb %s, al\n", r->rax);
     break;
   case EX_GTEQ:
-    printf("  cmp rax, rdi\n");
+    printf("  cmp %s, %s\n", r->rax, r->rdi);
     printf("  setge al\n");
-    printf("  movzb rax, al\n");
+    printf("  movzb %s, al\n", r->rax);
     break;
   case EX_LSHIFT:
-    printf("  mov rcx, rdi\n");
-    printf("  shl rax, cl\n");
+    printf("  mov %s, %s\n", r->rcx, r->rdi);
+    printf("  shl %s, cl\n", r->rax);
     break;
   case EX_RSHIFT:
-    printf("  mov rcx, rdi\n");
-    printf("  sar rax, cl\n");
+    printf("  mov %s, %s\n", r->rcx, r->rdi);
+    printf("  sar %s, cl\n", r->rax);
     break;
   case '&':
-    printf("  and rax, rdi\n");
+    printf("  and %s, %s\n", r->rax, r->rdi);
     break;
   case '^':
-    printf("  xor rax, rdi\n");
+    printf("  xor %s, %s\n", r->rax, r->rdi);
     break;
   case '|':
-    printf("  or rax, rdi\n");
+    printf("  or %s, %s\n", r->rax, r->rdi);
     break;
   case ',':
-    printf("  mov rax, rdi\n");
+    printf("  mov %s, %s\n", r->rax, r->rdi);
     break;
   default:
     error("未知のノード種別です: %d", expr->ty);
@@ -515,33 +565,34 @@ void gen(Function *func) {
     if (var == NULL) {
       error("変数が定義されていません: %s", name);
     }
+    const Reg *r = get_int_reg(var->type);
     printf("  mov rax, rbp\n");
     printf("  sub rax, %d\n", var->offset + 8);
     switch (i) {
     case 0:
-      printf("  mov [rax], rdi\n");
+      printf("  mov [rax], %s\n", r->rdi);
       break;
     case 1:
-      printf("  mov [rax], rsi\n");
+      printf("  mov [rax], %s\n", r->rsi);
       break;
     case 2:
-      printf("  mov [rax], rdx\n");
+      printf("  mov [rax], %s\n", r->rdx);
       break;
     case 3:
-      printf("  mov [rax], rcx\n");
+      printf("  mov [rax], %s\n", r->rcx);
       break;
     case 4:
-      printf("  mov [rax], r8\n");
+      printf("  mov [rax], %s\n", r->r8);
       break;
     case 5:
-      printf("  mov [rax], r9\n");
+      printf("  mov [rax], %s\n", r->r9);
       break;
       // 6番目以降の引数はスタック経由で渡すため、スタックからコピーする
     default:
       printf("  mov r10, rbp\n");
       printf("  add r10, %d\n", (i - 6) * 8 + 16);
-      printf("  mov r11, [r10]\n");
-      printf("  mov [rax], r11\n");
+      printf("  mov %s, [r10]\n", r->r11);
+      printf("  mov [rax], %s\n", r->r11);
       break;
     }
   }

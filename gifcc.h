@@ -197,6 +197,8 @@ Token *token_pop(Tokenizer *tokenizer);
 Token *token_consume(Tokenizer *tokenizer, int ty);
 Token *token_expect(Tokenizer *tokenizer, int ty);
 
+int get_val_size(Type *ty);
+int get_val_align(Type *ty);
 Vector *parse(const char *input);
 
 char *make_label(void);

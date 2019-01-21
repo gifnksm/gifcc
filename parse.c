@@ -1,5 +1,6 @@
 #include "gifcc.h"
 #include <assert.h>
+#include <stdalign.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -78,10 +79,11 @@ static bool register_stack(FuncCtxt *fctxt, char *name, Type *type) {
   }
 
   StackVar *var = malloc(sizeof(StackVar));
+  fctxt->stack_size = align(fctxt->stack_size, get_val_align(type));
   var->offset = fctxt->stack_size;
   var->type = type;
   map_put(fctxt->stack_map, name, var);
-  fctxt->stack_size += 8;
+  fctxt->stack_size += get_val_size(type);
 
   return true;
 }
@@ -118,12 +120,24 @@ static bool token_is_typename(Token *token) {
   return false;
 }
 
-static int get_val_size(Type *ty) {
+int get_val_size(Type *ty) {
   switch (ty->ty) {
   case TY_INT:
-    return 4;
+    return sizeof(int);
   case TY_PTR:
-    return 8;
+    return sizeof(void *);
+  default:
+    assert(false);
+    break;
+  }
+}
+
+int get_val_align(Type *ty) {
+  switch (ty->ty) {
+  case TY_INT:
+    return alignof(int);
+  case TY_PTR:
+    return alignof(void *);
   default:
     assert(false);
     break;
