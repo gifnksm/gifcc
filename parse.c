@@ -132,6 +132,9 @@ static FuncCtxt *new_func_ctxt(GlobalCtxt *gctxt) {
 }
 
 static bool register_stack(FuncCtxt *fctxt, char *name, Type *type) {
+  if (type->ty == TY_VOID) {
+    error("void型の変数は定義できません");
+  }
   if (map_get(fctxt->stack_map, name)) {
     return false;
   }
@@ -151,6 +154,9 @@ static StackVar *get_stack(FuncCtxt *fctxt, char *name) {
 }
 
 static bool register_global(GlobalCtxt *gctxt, char *name, Type *type) {
+  if (type->ty == TY_VOID) {
+    error("void型の変数は定義できません");
+  }
   if (map_get(gctxt->var_map, name)) {
     return false;
   }
@@ -189,20 +195,26 @@ static Type *arith_converted(Type *ty1, Type *ty2) {
 }
 
 static bool token_is_typename(Token *token) {
-  if (token->ty == TK_INT) {
+  switch (token->ty) {
+  case TK_INT:
+  case TK_VOID:
     return true;
+  default:
+    return false;
   }
-  return false;
 }
 
 int get_val_size(Type *ty) {
   switch (ty->ty) {
+  case TY_VOID:
+    return sizeof(void);
   case TY_INT:
     return sizeof(int);
   case TY_PTR:
     return sizeof(void *);
   case TY_ARRAY:
     return get_val_size(ty->ptrof) * ty->array_len;
+  case TY_FUNC:
   default:
     assert(false);
     break;
@@ -211,12 +223,15 @@ int get_val_size(Type *ty) {
 
 int get_val_align(Type *ty) {
   switch (ty->ty) {
+  case TY_VOID:
+    return alignof(void);
   case TY_INT:
     return alignof(int);
   case TY_PTR:
     return alignof(void *);
   case TY_ARRAY:
     return get_val_align(ty->ptrof);
+  case TY_FUNC:
   default:
     assert(false);
     break;
@@ -929,8 +944,15 @@ static void declaration(FuncCtxt *fctxt) {
 }
 
 static Type *type_specifier(Tokenizer *tokenizer) {
-  token_expect(tokenizer, TK_INT);
-  return new_type(TY_INT);
+  Token *token = token_pop(tokenizer);
+  switch (token->ty) {
+  case TK_INT:
+    return new_type(TY_INT);
+  case TK_VOID:
+    return new_type(TY_VOID);
+  default:
+    error("型名がありません: %s", token->input);
+  }
 }
 
 static Type *type_name(Tokenizer *tokenizer) {
@@ -1122,11 +1144,14 @@ static Function *function_definition(GlobalCtxt *gctxt) {
     error("同じ名前の関数が複数回定義されました: %s", name);
   }
 
-  token_expect(gctxt->tokenizer, '(');
   FuncCtxt *fctxt = new_func_ctxt(gctxt);
   Vector *params = new_vector();
-  if (token_peek(fctxt->tokenizer)->ty != ')' &&
-      !token_consume(fctxt->tokenizer, TK_VOID)) {
+
+  token_expect(gctxt->tokenizer, '(');
+  if (token_consume(fctxt->tokenizer, ')') ||
+      token_consume2(fctxt->tokenizer, TK_VOID, ')')) {
+    // do nothing
+  } else {
     while (true) {
       Type *base_type = type_specifier(fctxt->tokenizer);
       char *name;
@@ -1141,8 +1166,8 @@ static Function *function_definition(GlobalCtxt *gctxt) {
       }
       token_expect(fctxt->tokenizer, ',');
     }
+    token_expect(fctxt->tokenizer, ')');
   }
-  token_expect(fctxt->tokenizer, ')');
 
   Stmt *body = compound_statement(fctxt);
 

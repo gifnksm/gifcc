@@ -151,6 +151,9 @@ static void output_token(const char *input) {
 static void dump_indent(int level) { printf("%*s", 2 * level, ""); }
 static void dump_type_inner(Type *ty) {
   switch (ty->ty) {
+  case TY_VOID:
+    printf("void");
+    break;
   case TY_INT:
     printf("int");
     break;

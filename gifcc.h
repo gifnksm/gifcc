@@ -1,5 +1,7 @@
 #pragma once
 
+#include <stdbool.h>
+
 typedef struct {
   void **data;
   int capacity;
@@ -97,6 +99,7 @@ typedef enum {
 } stmt_t;
 
 typedef enum {
+  TY_VOID,
   TY_INT,
   TY_PTR,
   TY_ARRAY,
@@ -203,6 +206,7 @@ Token *token_peek(Tokenizer *tokenizer);
 Token *token_peek_ahead(Tokenizer *tokenizer, int n);
 Token *token_pop(Tokenizer *tokenizer);
 Token *token_consume(Tokenizer *tokenizer, int ty);
+bool token_consume2(Tokenizer *tokenizer, int ty1, int ty2);
 Token *token_expect(Tokenizer *tokenizer, int ty);
 
 int get_val_size(Type *ty);

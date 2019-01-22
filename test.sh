@@ -594,5 +594,16 @@ int main(void) {
   return func(a)[2];
 }
 '
+try 1 '
+void foo(void) {}
+void *bar(void *p) { return p; }
+int main(void) {
+  void *p;
+  void *q;
+  p = 3;
+  q = bar(p);
+  return p == q;
+}
+'
 
 echo OK
