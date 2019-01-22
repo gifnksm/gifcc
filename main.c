@@ -159,6 +159,12 @@ static void dump_type_inner(Type *ty) {
     dump_type_inner(ty->ptrof);
     printf(")");
     break;
+  case TY_ARRAY:
+    printf("ARRAY[%d](", ty->array_len);
+    dump_type_inner(ty->ptrof);
+    printf(")");
+    break;
+    break;
   default:
     error("未知の型です: %d\n", ty->ty);
   }

@@ -547,5 +547,39 @@ int main(void) {
   return i;
 }
 '
+try 3 '
+int main(void) {
+  int a[2];
+  *a = 1;
+  *(a + 1) = 2;
+  int *p;
+  p = a;
+  return *p + *(p + 1);
+}
+'
+try 12 '
+int main(void) {
+  int a[3];
+  a[0] = 5;
+  a[1] = 4;
+  a[2] = 3;
+  return a[0] + a[1] + a[2];
+}
+'
+try 2 '
+int main(void) {
+  int a[3];
+  return &a[2] - &a[0];
+}
+'
+try 12 '
+int main(void) {
+  int a[3];
+  0[a] = 5;
+  1[a] = 4;
+  2[a] = 3;
+  return 0[a] + 1[a] + 2[a];
+}
+'
 
 echo OK

@@ -99,11 +99,13 @@ typedef enum {
 typedef enum {
   TY_INT,
   TY_PTR,
+  TY_ARRAY,
 } type_t;
 
 typedef struct Type {
   type_t ty;
   struct Type *ptrof;
+  int array_len;
 } Type;
 
 typedef struct StackVar {

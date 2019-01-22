@@ -65,9 +65,14 @@ Token *token_expect(Tokenizer *tokenizer, int ty) {
   if (token->ty != ty) {
     if (ty <= 255) {
       error("'%c' がありません: %s", ty, token->input);
-    } else {
-      assert(ty == TK_WHILE);
+    }
+    switch (ty) {
+    case TK_IDENT:
+      error("'識別子' がありません: %s", token->input);
+    case TK_WHILE:
       error("'while' がありません: %s", token->input);
+    default:
+      error("%d がありません: %s", ty, token->input);
     }
   }
   return token;
@@ -339,6 +344,8 @@ static Token *punctuator(const char **input) {
   case '~':
   case '{':
   case '}':
+  case '[':
+  case ']':
   case ',': {
     token = new_token(*p, p);
     p++;

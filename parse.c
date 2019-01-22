@@ -15,6 +15,46 @@ typedef struct FuncCtxt {
   Map *label_map;
 } FuncCtxt;
 
+static FuncCtxt *new_func_ctxt(Tokenizer *tokenizer);
+static bool register_stack(FuncCtxt *fctxt, char *name, Type *type);
+static StackVar *get_stack(FuncCtxt *fctxt, char *name);
+static bool is_sametype(Type *ty1, Type *ty2);
+static bool is_integer_type(Type *ty);
+static bool is_arith_type(Type *ty);
+static bool is_ptr_type(Type *ty);
+static bool is_array_type(Type *ty);
+static Type *integer_promoted(Type *ty);
+static Type *arith_converted(Type *ty1, Type *ty2);
+static bool token_is_typename(Token *token);
+static void __attribute__((noreturn))
+binop_type_error(int ty, Expr *lhs, Expr *rhs);
+static Type *new_type(int ty);
+static Type *new_type_ptr(Type *base_type);
+static Type *new_type_array(Type *base_type, int len);
+static Expr *coerce_array2ptr(Expr *expr);
+static Expr *new_expr(int ty, Type *val_type);
+static Expr *new_expr_num(int val);
+static Expr *new_expr_ident(FuncCtxt *fctxt, char *name);
+static Expr *new_expr_call(Expr *callee, Vector *argument);
+static Expr *new_expr_postfix(int ty, Expr *operand);
+static Expr *new_expr_cast(Type *val_type, Expr *operand);
+static Expr *new_expr_unary(int ty, Expr *operand);
+static Expr *new_expr_binop(int ty, Expr *lhs, Expr *rhs);
+static Expr *new_expr_cond(Expr *cond, Expr *then_expr, Expr *else_expr);
+static Expr *new_expr_index(Expr *array, Expr *index);
+static Stmt *new_stmt(int ty);
+static Stmt *new_stmt_expr(Expr *expr);
+static Stmt *new_stmt_if(Expr *cond, Stmt *then_stmt, Stmt *else_stmt);
+static Stmt *new_stmt_switch(Expr *cond, Stmt *body);
+static Stmt *new_stmt_case(Expr *expr);
+static Stmt *new_stmt_default(void);
+static Stmt *new_stmt_label(FuncCtxt *fctxt, char *name);
+static Stmt *new_stmt_while(Expr *cond, Stmt *body);
+static Stmt *new_stmt_do_while(Expr *cond, Stmt *body);
+static Stmt *new_stmt_for(Expr *init, Expr *cond, Expr *inc, Stmt *body);
+static Stmt *new_stmt_goto(char *name);
+static Stmt *new_stmt_return(Expr *expr);
+
 // expression
 static Expr *primary_expression(FuncCtxt *fctxt);
 static Expr *postfix_expression(FuncCtxt *fctxt);
@@ -105,6 +145,7 @@ static bool is_sametype(Type *ty1, Type *ty2) {
 static bool is_integer_type(Type *ty) { return ty->ty == TY_INT; }
 static bool is_arith_type(Type *ty) { return is_integer_type(ty); }
 static bool is_ptr_type(Type *ty) { return ty->ty == TY_PTR; }
+static bool is_array_type(Type *ty) { return ty->ty == TY_ARRAY; }
 static Type *integer_promoted(Type *ty) { return ty; }
 static Type *arith_converted(Type *ty1, Type *ty2) {
   if (!is_arith_type(ty1) || !is_arith_type(ty2)) {
@@ -126,6 +167,8 @@ int get_val_size(Type *ty) {
     return sizeof(int);
   case TY_PTR:
     return sizeof(void *);
+  case TY_ARRAY:
+    return get_val_size(ty->ptrof) * ty->array_len;
   default:
     assert(false);
     break;
@@ -138,6 +181,8 @@ int get_val_align(Type *ty) {
     return alignof(int);
   case TY_PTR:
     return alignof(void *);
+  case TY_ARRAY:
+    return get_val_align(ty->ptrof);
   default:
     assert(false);
     break;
@@ -164,6 +209,22 @@ static Type *new_type_ptr(Type *base_type) {
   return ptrtype;
 }
 
+static Type *new_type_array(Type *base_type, int len) {
+  Type *ptrtype = malloc(sizeof(Type));
+  ptrtype->ty = TY_ARRAY;
+  ptrtype->ptrof = base_type;
+  ptrtype->array_len = len;
+  base_type = ptrtype;
+  return ptrtype;
+}
+
+static Expr *coerce_array2ptr(Expr *expr) {
+  if (is_array_type(expr->val_type)) {
+    return new_expr_unary('&', expr);
+  }
+  return expr;
+}
+
 static Expr *new_expr(int ty, Type *val_type) {
   Expr *expr = malloc(sizeof(Expr));
   expr->ty = ty;
@@ -187,6 +248,8 @@ static Expr *new_expr_ident(FuncCtxt *fctxt, char *name) {
 }
 
 static Expr *new_expr_call(Expr *callee, Vector *argument) {
+  callee = coerce_array2ptr(callee);
+
   // TODO: 関数の戻り値はintを仮定する
   Expr *expr = new_expr(EX_CALL, new_type(TY_INT));
   expr->callee = callee;
@@ -195,6 +258,8 @@ static Expr *new_expr_call(Expr *callee, Vector *argument) {
 }
 
 static Expr *new_expr_postfix(int ty, Expr *operand) {
+  operand = coerce_array2ptr(operand);
+
   Expr *expr = new_expr(ty, operand->val_type);
   expr->lhs = operand;
   expr->rhs = NULL;
@@ -202,15 +267,26 @@ static Expr *new_expr_postfix(int ty, Expr *operand) {
 }
 
 static Expr *new_expr_cast(Type *val_type, Expr *operand) {
+  operand = coerce_array2ptr(operand);
+
   Expr *expr = new_expr(EX_CAST, val_type);
   expr->expr = operand;
   return expr;
 }
 
 static Expr *new_expr_unary(int ty, Expr *operand) {
+  if (ty != '&') {
+    // & 以外は array は ptr とみなす
+    operand = coerce_array2ptr(operand);
+  }
+
   Type *val_type;
   if (ty == '&') {
-    val_type = new_type_ptr(operand->val_type);
+    if (is_array_type(operand->val_type)) {
+      val_type = new_type_ptr(operand->val_type->ptrof);
+    } else {
+      val_type = new_type_ptr(operand->val_type);
+    }
   } else if (ty == '*') {
     if (operand->val_type->ty != TY_PTR) {
       error("ポインタ型でない値に対するデリファレンスです");
@@ -226,6 +302,9 @@ static Expr *new_expr_unary(int ty, Expr *operand) {
 }
 
 static Expr *new_expr_binop(int ty, Expr *lhs, Expr *rhs) {
+  lhs = coerce_array2ptr(lhs);
+  rhs = coerce_array2ptr(rhs);
+
   Type *val_type;
   switch (ty) {
   // multiplicative
@@ -344,6 +423,10 @@ static Expr *new_expr_binop(int ty, Expr *lhs, Expr *rhs) {
 }
 
 static Expr *new_expr_cond(Expr *cond, Expr *then_expr, Expr *else_expr) {
+  cond = coerce_array2ptr(cond);
+  then_expr = coerce_array2ptr(then_expr);
+  else_expr = coerce_array2ptr(else_expr);
+
   if (!is_sametype(then_expr->val_type, else_expr->val_type)) {
     error("条件演算子の両辺の型が異なります: %d, %d", then_expr->val_type->ty,
           else_expr->val_type->ty);
@@ -353,6 +436,13 @@ static Expr *new_expr_cond(Expr *cond, Expr *then_expr, Expr *else_expr) {
   expr->lhs = then_expr;
   expr->rhs = else_expr;
   return expr;
+}
+
+static Expr *new_expr_index(Expr *array, Expr *index) {
+  array = coerce_array2ptr(array);
+  index = coerce_array2ptr(index);
+
+  return new_expr_unary('*', new_expr_binop('+', array, index));
 }
 
 static Stmt *new_stmt(int ty) {
@@ -459,7 +549,11 @@ static Expr *primary_expression(FuncCtxt *fctxt) {
 static Expr *postfix_expression(FuncCtxt *fctxt) {
   Expr *expr = primary_expression(fctxt);
   while (true) {
-    if (token_consume(fctxt->tokenizer, '(')) {
+    if (token_consume(fctxt->tokenizer, '[')) {
+      Expr *operand = expression(fctxt);
+      token_expect(fctxt->tokenizer, ']');
+      expr = new_expr_index(expr, operand);
+    } else if (token_consume(fctxt->tokenizer, '(')) {
       Vector *argument = NULL;
       if (token_peek(fctxt->tokenizer)->ty != ')') {
         argument = argument_expression_list(fctxt);
@@ -784,6 +878,10 @@ static Type *type_name(FuncCtxt *fctxt) {
   while (token_consume(fctxt->tokenizer, '*')) {
     type = new_type_ptr(type);
   }
+  if (token_consume(fctxt->tokenizer, '[')) {
+    type = new_type_array(type, token_expect(fctxt->tokenizer, TK_INT)->val);
+    token_expect(fctxt->tokenizer, ']');
+  }
   return type;
 }
 
@@ -792,7 +890,13 @@ static void declarator(FuncCtxt *fctxt, Type *base_type, char **name,
   while (token_consume(fctxt->tokenizer, '*')) {
     base_type = new_type_ptr(base_type);
   }
-  *name = token_expect(fctxt->tokenizer, TK_IDENT)->name;
+  Token *ident = token_expect(fctxt->tokenizer, TK_IDENT);
+  if (token_consume(fctxt->tokenizer, '[')) {
+    base_type =
+        new_type_array(base_type, token_expect(fctxt->tokenizer, TK_NUM)->val);
+    token_expect(fctxt->tokenizer, ']');
+  }
+  *name = ident->name;
   *type = base_type;
 }
 
