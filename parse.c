@@ -6,8 +6,14 @@
 #include <stdlib.h>
 #include <string.h>
 
+typedef struct GlobalCtxt {
+  Tokenizer *tokenizer;
+  Map *var_map;
+} GlobalCtxt;
+
 // 関数パース用情報
 typedef struct FuncCtxt {
+  GlobalCtxt *global;
   Tokenizer *tokenizer;
   int stack_size;
   Map *stack_map;
@@ -15,9 +21,12 @@ typedef struct FuncCtxt {
   Map *label_map;
 } FuncCtxt;
 
-static FuncCtxt *new_func_ctxt(Tokenizer *tokenizer);
+static GlobalCtxt *new_global_ctxt(Tokenizer *tokenizer);
+static FuncCtxt *new_func_ctxt(GlobalCtxt *gctxt);
 static bool register_stack(FuncCtxt *fctxt, char *name, Type *type);
 static StackVar *get_stack(FuncCtxt *fctxt, char *name);
+static bool register_global(GlobalCtxt *gctxt, char *name, Type *type);
+static GlobalVar *get_global(GlobalCtxt *gctxt, char *name);
 static bool is_sametype(Type *ty1, Type *ty2);
 static bool is_integer_type(Type *ty);
 static bool is_arith_type(Type *ty);
@@ -78,8 +87,8 @@ static Expr *constant_expression(FuncCtxt *fctxt);
 
 // declaration
 static void declaration(FuncCtxt *fctxt);
-static Type *type_specifier(FuncCtxt *fctxt);
-static Type *type_name(FuncCtxt *fctxt);
+static Type *type_specifier(Tokenizer *tokenizer);
+static Type *type_name(Tokenizer *tokenizer);
 static void declarator(FuncCtxt *fctxt, Type *base_type, char **name,
                        Type **type);
 
@@ -88,7 +97,7 @@ static Stmt *statement(FuncCtxt *fctxt);
 static Stmt *compound_statement(FuncCtxt *fctxt);
 
 // top-level
-static Function *function_declaration(Tokenizer *tokenizer);
+static Function *function_definition(GlobalCtxt *gctxt);
 static Vector *translation_unit(Tokenizer *tokenizer);
 
 static Stmt null_stmt = {
@@ -100,10 +109,19 @@ Vector *parse(const char *input) {
   return translation_unit(tokenizer);
 }
 
-static FuncCtxt *new_func_ctxt(Tokenizer *tokenizer) {
+static GlobalCtxt *new_global_ctxt(Tokenizer *tokenizer) {
+  GlobalCtxt *gctxt = malloc(sizeof(GlobalCtxt));
+  gctxt->tokenizer = tokenizer;
+  gctxt->var_map = new_map();
+
+  return gctxt;
+}
+
+static FuncCtxt *new_func_ctxt(GlobalCtxt *gctxt) {
   FuncCtxt *fctxt = malloc(sizeof(FuncCtxt));
 
-  fctxt->tokenizer = tokenizer;
+  fctxt->global = gctxt;
+  fctxt->tokenizer = gctxt->tokenizer;
   fctxt->stack_size = 0;
   fctxt->stack_map = new_map();
   fctxt->switches = new_vector();
@@ -132,6 +150,21 @@ static StackVar *get_stack(FuncCtxt *fctxt, char *name) {
   return map_get(fctxt->stack_map, name);
 }
 
+static bool register_global(GlobalCtxt *gctxt, char *name, Type *type) {
+  if (map_get(gctxt->var_map, name)) {
+    return false;
+  }
+
+  GlobalVar *var = malloc(sizeof(GlobalVar));
+  var->type = type;
+  map_put(gctxt->var_map, name, var);
+  return true;
+}
+
+static GlobalVar *get_global(GlobalCtxt *gctxt, char *name) {
+  return map_get(gctxt->var_map, name);
+}
+
 static bool is_sametype(Type *ty1, Type *ty2) {
   if (ty1->ty != ty2->ty) {
     return false;
@@ -146,6 +179,7 @@ static bool is_integer_type(Type *ty) { return ty->ty == TY_INT; }
 static bool is_arith_type(Type *ty) { return is_integer_type(ty); }
 static bool is_ptr_type(Type *ty) { return ty->ty == TY_PTR; }
 static bool is_array_type(Type *ty) { return ty->ty == TY_ARRAY; }
+static bool is_func_type(Type *ty) { return ty->ty == TY_FUNC; }
 static Type *integer_promoted(Type *ty) { return ty; }
 static Type *arith_converted(Type *ty1, Type *ty2) {
   if (!is_arith_type(ty1) || !is_arith_type(ty2)) {
@@ -218,6 +252,13 @@ static Type *new_type_array(Type *base_type, int len) {
   return ptrtype;
 }
 
+static Type *new_type_func(Type *ret_type) {
+  Type *funtype = malloc(sizeof(Type));
+  funtype->ty = TY_FUNC;
+  funtype->func_ret = ret_type;
+  return funtype;
+}
+
 static Expr *coerce_array2ptr(Expr *expr) {
   if (is_array_type(expr->val_type)) {
     return new_expr_unary('&', expr);
@@ -239,9 +280,17 @@ static Expr *new_expr_num(int val) {
 }
 
 static Expr *new_expr_ident(FuncCtxt *fctxt, char *name) {
-  StackVar *var = get_stack(fctxt, name);
-  // 未知の識別子はint型として扱う
-  Type *type = var != NULL ? var->type : new_type(TY_INT);
+  Type *type;
+  StackVar *svar = get_stack(fctxt, name);
+  GlobalVar *gvar = get_global(fctxt->global, name);
+  if (svar != NULL) {
+    type = svar->type;
+  } else if (gvar != NULL) {
+    type = gvar->type;
+  } else {
+    // 未知の識別子はint型として扱う
+    type = new_type(TY_INT);
+  }
   Expr *expr = new_expr(EX_IDENT, type);
   expr->name = name;
   return expr;
@@ -249,9 +298,20 @@ static Expr *new_expr_ident(FuncCtxt *fctxt, char *name) {
 
 static Expr *new_expr_call(Expr *callee, Vector *argument) {
   callee = coerce_array2ptr(callee);
+  if (argument != NULL) {
+    for (int i = 0; i < argument->len; i++) {
+      argument->data[i] = coerce_array2ptr(argument->data[i]);
+    }
+  }
 
-  // TODO: 関数の戻り値はintを仮定する
-  Expr *expr = new_expr(EX_CALL, new_type(TY_INT));
+  Type *ret_type;
+  if (is_func_type(callee->val_type)) {
+    ret_type = callee->val_type->func_ret;
+  } else {
+    // TODO: 定義のない関数の戻り値はintを仮定する
+    ret_type = new_type(TY_INT);
+  }
+  Expr *expr = new_expr(EX_CALL, ret_type);
   expr->callee = callee;
   expr->argument = argument;
   return expr;
@@ -645,7 +705,7 @@ static Expr *cast_expression(FuncCtxt *fctxt) {
   if (token_peek(fctxt->tokenizer)->ty == '(' &&
       token_is_typename(token_peek_ahead(fctxt->tokenizer, 1))) {
     token_succ(fctxt->tokenizer);
-    Type *val_type = type_name(fctxt);
+    Type *val_type = type_name(fctxt->tokenizer);
     token_expect(fctxt->tokenizer, ')');
     return new_expr_cast(val_type, cast_expression(fctxt));
   }
@@ -857,7 +917,7 @@ static Expr *constant_expression(FuncCtxt *fctxt) {
 }
 
 static void declaration(FuncCtxt *fctxt) {
-  Type *base_type = type_specifier(fctxt);
+  Type *base_type = type_specifier(fctxt->tokenizer);
   char *name;
   Type *type;
   declarator(fctxt, base_type, &name, &type);
@@ -868,19 +928,19 @@ static void declaration(FuncCtxt *fctxt) {
   }
 }
 
-static Type *type_specifier(FuncCtxt *fctxt) {
-  token_expect(fctxt->tokenizer, TK_INT);
+static Type *type_specifier(Tokenizer *tokenizer) {
+  token_expect(tokenizer, TK_INT);
   return new_type(TY_INT);
 }
 
-static Type *type_name(FuncCtxt *fctxt) {
-  Type *type = type_specifier(fctxt);
-  while (token_consume(fctxt->tokenizer, '*')) {
+static Type *type_name(Tokenizer *tokenizer) {
+  Type *type = type_specifier(tokenizer);
+  while (token_consume(tokenizer, '*')) {
     type = new_type_ptr(type);
   }
-  if (token_consume(fctxt->tokenizer, '[')) {
-    type = new_type_array(type, token_expect(fctxt->tokenizer, TK_INT)->val);
-    token_expect(fctxt->tokenizer, ']');
+  if (token_consume(tokenizer, '[')) {
+    type = new_type_array(type, token_expect(tokenizer, TK_INT)->val);
+    token_expect(tokenizer, ']');
   }
   return type;
 }
@@ -1041,7 +1101,7 @@ static Stmt *compound_statement(FuncCtxt *fctxt) {
   Stmt *stmt = new_stmt(ST_COMPOUND);
   stmt->stmts = new_vector();
   while (!token_consume(fctxt->tokenizer, '}')) {
-    if (token_peek(fctxt->tokenizer)->ty == TK_INT) {
+    if (token_is_typename(token_peek(fctxt->tokenizer))) {
       declaration(fctxt);
       continue;
     }
@@ -1050,17 +1110,25 @@ static Stmt *compound_statement(FuncCtxt *fctxt) {
   return stmt;
 }
 
-static Function *function_declaration(Tokenizer *tokenizer) {
-  FuncCtxt *fctxt = new_func_ctxt(tokenizer);
-  Vector *params = new_vector();
+static Function *function_definition(GlobalCtxt *gctxt) {
+  Type *ret_type = type_specifier(gctxt->tokenizer);
+  while (token_consume(gctxt->tokenizer, '*')) {
+    ret_type = new_type_ptr(ret_type);
+  }
+  char *name = token_expect(gctxt->tokenizer, TK_IDENT)->name;
 
-  token_expect(fctxt->tokenizer, TK_INT);
-  Token *name = token_expect(fctxt->tokenizer, TK_IDENT);
-  token_expect(fctxt->tokenizer, '(');
+  Type *func_type = new_type_func(ret_type);
+  if (!register_global(gctxt, name, func_type)) {
+    error("同じ名前の関数が複数回定義されました: %s", name);
+  }
+
+  token_expect(gctxt->tokenizer, '(');
+  FuncCtxt *fctxt = new_func_ctxt(gctxt);
+  Vector *params = new_vector();
   if (token_peek(fctxt->tokenizer)->ty != ')' &&
       !token_consume(fctxt->tokenizer, TK_VOID)) {
     while (true) {
-      Type *base_type = type_specifier(fctxt);
+      Type *base_type = type_specifier(fctxt->tokenizer);
       char *name;
       Type *type;
       declarator(fctxt, base_type, &name, &type);
@@ -1079,7 +1147,7 @@ static Function *function_declaration(Tokenizer *tokenizer) {
   Stmt *body = compound_statement(fctxt);
 
   Function *func = malloc(sizeof(Function));
-  func->name = name->name;
+  func->name = name;
   func->stack_size = fctxt->stack_size;
   func->stack_map = fctxt->stack_map;
   func->label_map = fctxt->label_map;
@@ -1090,9 +1158,10 @@ static Function *function_declaration(Tokenizer *tokenizer) {
 }
 
 static Vector *translation_unit(Tokenizer *tokenizer) {
+  GlobalCtxt *gctxt = new_global_ctxt(tokenizer);
   Vector *func_list = new_vector();
   while (token_peek(tokenizer)->ty != TK_EOF) {
-    vec_push(func_list, function_declaration(tokenizer));
+    vec_push(func_list, function_definition(gctxt));
   }
   return func_list;
 }

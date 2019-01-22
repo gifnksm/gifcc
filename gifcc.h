@@ -100,18 +100,24 @@ typedef enum {
   TY_INT,
   TY_PTR,
   TY_ARRAY,
+  TY_FUNC,
 } type_t;
 
 typedef struct Type {
   type_t ty;
   struct Type *ptrof;
   int array_len;
+  struct Type *func_ret;
 } Type;
 
 typedef struct StackVar {
   int offset;
   Type *type;
 } StackVar;
+
+typedef struct GlobalVar {
+  Type *type;
+} GlobalVar;
 
 typedef struct Expr {
   int ty;         // ノードの型

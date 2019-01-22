@@ -164,6 +164,10 @@ static void dump_type_inner(Type *ty) {
     dump_type_inner(ty->ptrof);
     printf(")");
     break;
+  case TY_FUNC:
+    printf("FUNC(");
+    dump_type_inner(ty->func_ret);
+    printf(")");
     break;
   default:
     error("未知の型です: %d\n", ty->ty);

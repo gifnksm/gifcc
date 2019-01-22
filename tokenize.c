@@ -71,6 +71,8 @@ Token *token_expect(Tokenizer *tokenizer, int ty) {
       error("'識別子' がありません: %s", token->input);
     case TK_WHILE:
       error("'while' がありません: %s", token->input);
+    case TK_INT:
+      error("'int' がありません: %s", token->input);
     default:
       error("%d がありません: %s", ty, token->input);
     }

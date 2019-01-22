@@ -581,5 +581,18 @@ int main(void) {
   return 0[a] + 1[a] + 2[a];
 }
 '
+try 8 '
+int *func(int *x) {
+  return x + 1;
+}
+int main(void) {
+  int a[4];
+  a[0] = 1;
+  a[1] = 2;
+  a[2] = 4;
+  a[3] = 8;
+  return func(a)[2];
+}
+'
 
 echo OK
