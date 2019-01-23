@@ -60,13 +60,18 @@ char *make_label(void) {
 }
 
 static void gen_lval(Expr *expr) {
-  if (expr->ty == EX_IDENT) {
+  if (expr->ty == EX_STACK_VAR) {
     StackVar *var = get_stack_variable(func_ctxt, expr->name);
     if (var == NULL) {
       error("変数が定義されていません: %s", expr->name);
     }
     printf("  mov rax, rbp\n");
     printf("  sub rax, %d\n", var->offset + 8);
+    printf("  push rax\n");
+    return;
+  }
+  if (expr->ty == EX_GLOBAL_VAR) {
+    printf("  lea rax, %s[rip]\n", expr->name);
     printf("  push rax\n");
     return;
   }
@@ -85,7 +90,7 @@ static void gen_expr(Expr *expr) {
     return;
   }
 
-  if (expr->ty == EX_IDENT) {
+  if (expr->ty == EX_STACK_VAR) {
     StackVar *var = get_stack_variable(func_ctxt, expr->name);
     if (var == NULL) {
       error("変数が定義されていません: %s", expr->name);
@@ -95,10 +100,16 @@ static void gen_expr(Expr *expr) {
     return;
   }
 
+  if (expr->ty == EX_GLOBAL_VAR) {
+    printf("  mov %s, %s[rip]\n", r->rax, expr->name);
+    printf("  push rax\n");
+    return;
+  }
+
   if (expr->ty == EX_CALL) {
     int num_push = 0;
     Vector *arg = expr->argument;
-    if (expr->callee->ty != EX_IDENT) {
+    if (expr->callee->ty != EX_GLOBAL_VAR) {
       error("識別子以外を関数として呼び出そうとしました");
     }
     if (arg && arg->len > 0) {
@@ -545,7 +556,7 @@ static void gen_stmt(Stmt *stmt) {
   error("未知のノード種別です: %d", stmt->ty);
 }
 
-void gen(Function *func) {
+static void gen_func(Function *func) {
   epilogue_label = make_label();
   func_ctxt = func;
   break_labels = new_vector();
@@ -607,4 +618,23 @@ void gen(Function *func) {
   printf("  mov rsp, rbp\n");
   printf("  pop rbp\n");
   printf("  ret\n");
+}
+
+static void gen_gvar(GlobalVar *gvar) {
+  printf(".global %s\n", gvar->name);
+  printf("%s:\n", gvar->name);
+  printf("  .zero %d\n", get_val_size(gvar->type));
+}
+
+void gen(TranslationUnit *tunit) {
+  printf(".intel_syntax noprefix\n");
+
+  printf("  .text\n");
+  for (int i = 0; i < tunit->func_list->len; i++) {
+    gen_func(tunit->func_list->data[i]);
+  }
+  printf("  .bss\n");
+  for (int i = 0; i < tunit->gvar_list->len; i++) {
+    gen_gvar(tunit->gvar_list->data[i]);
+  }
 }

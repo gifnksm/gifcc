@@ -64,7 +64,8 @@ typedef struct {
 
 enum {
   EX_NUM = 256, // 整数のノードの型
-  EX_IDENT,
+  EX_STACK_VAR,
+  EX_GLOBAL_VAR,
   EX_EQEQ,
   EX_NOTEQ,
   EX_LTEQ,
@@ -119,6 +120,7 @@ typedef struct StackVar {
 } StackVar;
 
 typedef struct GlobalVar {
+  char *name;
   Type *type;
 } GlobalVar;
 
@@ -183,6 +185,11 @@ typedef struct Function {
   Stmt *body;
 } Function;
 
+typedef struct TranslationUnit {
+  Vector *func_list;
+  Vector *gvar_list;
+} TranslationUnit;
+
 typedef struct Tokenizer Tokenizer;
 
 #define error(fmt, ...) error_raw(__FILE__, __LINE__, fmt, ##__VA_ARGS__)
@@ -211,10 +218,10 @@ Token *token_expect(Tokenizer *tokenizer, int ty);
 
 int get_val_size(Type *ty);
 int get_val_align(Type *ty);
-Vector *parse(const char *input);
+TranslationUnit *parse(const char *input);
 
 char *make_label(void);
-void gen(Function *func);
+void gen(TranslationUnit *tunit);
 
 static inline StackVar *get_stack_variable(Function *func, char *name) {
   return map_get(func->stack_map, name);

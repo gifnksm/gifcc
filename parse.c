@@ -97,14 +97,15 @@ static Stmt *statement(FuncCtxt *fctxt);
 static Stmt *compound_statement(FuncCtxt *fctxt);
 
 // top-level
-static Function *function_definition(GlobalCtxt *gctxt);
-static Vector *translation_unit(Tokenizer *tokenizer);
+static Function *function_definition(GlobalCtxt *gctxt, Type *type, char *name);
+static GlobalVar *global_variable(GlobalCtxt *gctxt, Type *type, char *name);
+static TranslationUnit *translation_unit(Tokenizer *tokenizer);
 
 static Stmt null_stmt = {
     .ty = ST_NULL,
 };
 
-Vector *parse(const char *input) {
+TranslationUnit *parse(const char *input) {
   Tokenizer *tokenizer = new_tokenizer(input);
   return translation_unit(tokenizer);
 }
@@ -163,6 +164,7 @@ static bool register_global(GlobalCtxt *gctxt, char *name, Type *type) {
 
   GlobalVar *var = malloc(sizeof(GlobalVar));
   var->type = type;
+  var->name = name;
   map_put(gctxt->var_map, name, var);
   return true;
 }
@@ -295,18 +297,22 @@ static Expr *new_expr_num(int val) {
 }
 
 static Expr *new_expr_ident(FuncCtxt *fctxt, char *name) {
+  int ty;
   Type *type;
   StackVar *svar = get_stack(fctxt, name);
   GlobalVar *gvar = get_global(fctxt->global, name);
   if (svar != NULL) {
+    ty = EX_STACK_VAR;
     type = svar->type;
   } else if (gvar != NULL) {
+    ty = EX_GLOBAL_VAR;
     type = gvar->type;
   } else {
-    // 未知の識別子はint型として扱う
+    // 未知の識別子はint型のグローバル変数として扱う
+    ty = EX_GLOBAL_VAR;
     type = new_type(TY_INT);
   }
-  Expr *expr = new_expr(EX_IDENT, type);
+  Expr *expr = new_expr(ty, type);
   expr->name = name;
   return expr;
 }
@@ -1132,22 +1138,16 @@ static Stmt *compound_statement(FuncCtxt *fctxt) {
   return stmt;
 }
 
-static Function *function_definition(GlobalCtxt *gctxt) {
-  Type *ret_type = type_specifier(gctxt->tokenizer);
-  while (token_consume(gctxt->tokenizer, '*')) {
-    ret_type = new_type_ptr(ret_type);
-  }
-  char *name = token_expect(gctxt->tokenizer, TK_IDENT)->name;
-
+static Function *function_definition(GlobalCtxt *gctxt, Type *ret_type,
+                                     char *name) {
   Type *func_type = new_type_func(ret_type);
   if (!register_global(gctxt, name, func_type)) {
-    error("同じ名前の関数が複数回定義されました: %s", name);
+    error("同じ名前の関数またはグローバル変数が複数回定義されました: %s", name);
   }
 
   FuncCtxt *fctxt = new_func_ctxt(gctxt);
   Vector *params = new_vector();
 
-  token_expect(gctxt->tokenizer, '(');
   if (token_consume(fctxt->tokenizer, ')') ||
       token_consume2(fctxt->tokenizer, TK_VOID, ')')) {
     // do nothing
@@ -1182,11 +1182,36 @@ static Function *function_definition(GlobalCtxt *gctxt) {
   return func;
 }
 
-static Vector *translation_unit(Tokenizer *tokenizer) {
-  GlobalCtxt *gctxt = new_global_ctxt(tokenizer);
-  Vector *func_list = new_vector();
-  while (token_peek(tokenizer)->ty != TK_EOF) {
-    vec_push(func_list, function_definition(gctxt));
+static GlobalVar *global_variable(GlobalCtxt *gctxt, Type *type, char *name) {
+  if (token_consume(gctxt->tokenizer, '[')) {
+    type = new_type_array(type, token_expect(gctxt->tokenizer, TK_NUM)->val);
+    token_expect(gctxt->tokenizer, ']');
   }
-  return func_list;
+  token_expect(gctxt->tokenizer, ';');
+
+  if (!register_global(gctxt, name, type)) {
+    error("同じ名前の関数またはグローバル変数が複数回定義されました: %s", name);
+  }
+
+  return get_global(gctxt, name);
+}
+
+static TranslationUnit *translation_unit(Tokenizer *tokenizer) {
+  GlobalCtxt *gctxt = new_global_ctxt(tokenizer);
+  TranslationUnit *tunit = malloc(sizeof(TranslationUnit));
+  tunit->func_list = new_vector();
+  tunit->gvar_list = new_vector();
+  while (token_peek(tokenizer)->ty != TK_EOF) {
+    Type *type = type_specifier(gctxt->tokenizer);
+    while (token_consume(gctxt->tokenizer, '*')) {
+      type = new_type_ptr(type);
+    }
+    char *name = token_expect(gctxt->tokenizer, TK_IDENT)->name;
+    if (token_consume(gctxt->tokenizer, '(')) {
+      vec_push(tunit->func_list, function_definition(gctxt, type, name));
+    } else {
+      vec_push(tunit->gvar_list, global_variable(gctxt, type, name));
+    }
+  }
+  return tunit;
 }

@@ -234,10 +234,15 @@ static void dump_expr(Expr *expr, int level) {
     dump_type(expr->val_type);
     printf("(NUM %d)\n", expr->val);
     return;
-  case EX_IDENT:
+  case EX_STACK_VAR:
     dump_indent(level);
     dump_type(expr->val_type);
-    printf("(IDENT %s)\n", expr->name);
+    printf("(STACK_VAR %s)\n", expr->name);
+    return;
+  case EX_GLOBAL_VAR:
+    dump_indent(level);
+    dump_type(expr->val_type);
+    printf("(GLOBAL_VAR %s)\n", expr->name);
     return;
   case EX_EQEQ:
     dump_binop_expr(expr, "[==]", level);
@@ -422,13 +427,18 @@ static void dump_stmt(Stmt *stmt, int level) {
   error("未知のノードです: %d\n", stmt->ty);
 }
 
-static void output_ast(Function *func) {
+static void output_ast(TranslationUnit *tunit) {
   int level = 0;
-  dump_indent(level);
-  printf("{FUNCTION %s\n", func->name);
-  dump_stmt(func->body, level + 1);
-  dump_indent(level);
-  printf(")\n");
+  for (int i = 0; i < tunit->func_list->len; i++) {
+    Function *func = tunit->func_list->data[i];
+
+    dump_indent(level);
+    printf("{FUNCTION %s\n", func->name);
+    dump_stmt(func->body, level + 1);
+    dump_indent(level);
+    printf(")\n");
+    output_ast(tunit->func_list->data[i]);
+  }
 }
 
 enum {
@@ -488,19 +498,14 @@ int main(int argc, char **argv) {
     return 0;
   }
 
-  Vector *func_list = parse(input);
+  TranslationUnit *tunit = parse(input);
 
   if (output_mode == OUTPUT_AST) {
-    for (int i = 0; i < func_list->len; i++) {
-      output_ast(func_list->data[i]);
-    }
+    output_ast(tunit);
     return 0;
   }
 
-  printf(".intel_syntax noprefix\n");
+  gen(tunit);
 
-  for (int i = 0; i < func_list->len; i++) {
-    gen(func_list->data[i]);
-  }
   return 0;
 }

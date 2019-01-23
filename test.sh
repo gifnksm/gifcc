@@ -605,5 +605,45 @@ int main(void) {
   return p == q;
 }
 '
+try 100 '
+  int g;
+  int main(void) {
+    g = 100;
+    return g;
+  }
+'
+try 0 '
+int g;
+int h[3];
+int init(void) {
+  g = 3;
+  h[0] = 1;
+  h[1] = 2;
+  h[2] = 3;
+}
+int add(int n) {
+  g += n;
+  h[0] *= h[0];
+  h[1] *= h[1];
+  h[2] *= h[2];
+}
+int main(void) {
+  init();
+  add(7);
+  if (g != 10) {
+    abort();
+  }
+  if (h[0] != 1) {
+    abort();
+  }
+  if (h[1] != 4) {
+    abort();
+  }
+  if (h[2] != 9) {
+    abort();
+  }
+  return 0;
+}
+'
 
 echo OK
