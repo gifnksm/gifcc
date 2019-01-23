@@ -43,12 +43,28 @@ const Reg Reg4 = {
     .r10 = "r10d",
     .r11 = "r11d",
 };
+const Reg Reg1 = {
+    .rax = "al",
+    .rdi = "dil",
+    .rsi = "sil",
+    .rdx = "dl",
+    .rcx = "cl",
+    .r8 = "r8b",
+    .r9 = "r9b",
+    .r10 = "r10b",
+    .r11 = "r11b",
+};
 
 static const Reg *get_int_reg(Type *ty) {
-  if (get_val_size(ty) == 8) {
+  switch (get_val_size(ty)) {
+  case 8:
     return &Reg8;
-  } else {
+  case 4:
     return &Reg4;
+  case 1:
+    return &Reg1;
+  default:
+    error("サポートしていない型サイズです");
   }
 }
 

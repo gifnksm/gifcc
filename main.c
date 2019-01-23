@@ -102,6 +102,9 @@ static void output_token(const char *input) {
     case TK_INT:
       printf("%03d [INT]\n", pos);
       break;
+    case TK_CHAR:
+      printf("%03d [CHAR]\n", pos);
+      break;
     case TK_IF:
       printf("%03d [IF]\n", pos);
       break;
@@ -156,6 +159,9 @@ static void dump_type_inner(Type *ty) {
     break;
   case TY_INT:
     printf("int");
+    break;
+  case TY_CHAR:
+    printf("char");
     break;
   case TY_PTR:
     printf("PTR(");

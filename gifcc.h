@@ -39,6 +39,7 @@ enum {
   TK_XOR_ASSIGN,    // `^=`
   TK_VOID,          // `void`
   TK_INT,           // `int`
+  TK_CHAR,          // `char`
   TK_IF,            // `if`
   TK_ELSE,          // `else`
   TK_SWITCH,        // `switch`
@@ -102,6 +103,7 @@ typedef enum {
 typedef enum {
   TY_VOID,
   TY_INT,
+  TY_CHAR,
   TY_PTR,
   TY_ARRAY,
   TY_FUNC,

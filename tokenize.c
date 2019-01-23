@@ -152,6 +152,8 @@ static Token *new_token_ident(const char *input, char *name) {
     token->ty = TK_VOID;
   } else if (strcmp(name, "int") == 0) {
     token->ty = TK_INT;
+  } else if (strcmp(name, "char") == 0) {
+    token->ty = TK_CHAR;
   } else if (strcmp(name, "if") == 0) {
     token->ty = TK_IF;
   } else if (strcmp(name, "else") == 0) {

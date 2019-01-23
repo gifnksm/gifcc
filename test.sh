@@ -645,5 +645,25 @@ int main(void) {
   return 0;
 }
 '
+try 4 "
+int main(void) {
+  char x[4];
+  x[0] = 'a';
+  x[1] = 'b';
+  x[2] = 'c';
+  x[3] = '\0';
+  return puts(x);
+}
+"
+try 3 '
+int main(void) {
+  char x[3];
+  x[0] = -1;
+  x[1] = 2;
+  int y;
+  y = 4;
+  return x[0] + y;
+}
+'
 
 echo OK

@@ -183,7 +183,9 @@ static bool is_sametype(Type *ty1, Type *ty2) {
   return true;
 }
 
-static bool is_integer_type(Type *ty) { return ty->ty == TY_INT; }
+static bool is_integer_type(Type *ty) {
+  return ty->ty == TY_INT || ty->ty == TY_CHAR;
+}
 static bool is_arith_type(Type *ty) { return is_integer_type(ty); }
 static bool is_ptr_type(Type *ty) { return ty->ty == TY_PTR; }
 static bool is_array_type(Type *ty) { return ty->ty == TY_ARRAY; }
@@ -198,8 +200,9 @@ static Type *arith_converted(Type *ty1, Type *ty2) {
 
 static bool token_is_typename(Token *token) {
   switch (token->ty) {
-  case TK_INT:
   case TK_VOID:
+  case TK_INT:
+  case TK_CHAR:
     return true;
   default:
     return false;
@@ -209,7 +212,9 @@ static bool token_is_typename(Token *token) {
 int get_val_size(Type *ty) {
   switch (ty->ty) {
   case TY_VOID:
-    return sizeof(void);
+    error("void型の値サイズを取得しようとしました");
+  case TY_CHAR:
+    return sizeof(char);
   case TY_INT:
     return sizeof(int);
   case TY_PTR:
@@ -217,16 +222,17 @@ int get_val_size(Type *ty) {
   case TY_ARRAY:
     return get_val_size(ty->ptrof) * ty->array_len;
   case TY_FUNC:
-  default:
-    assert(false);
-    break;
+    error("関数型の値サイズを取得しようとしました");
   }
+  error("不明な型のサイズを取得しようとしました");
 }
 
 int get_val_align(Type *ty) {
   switch (ty->ty) {
   case TY_VOID:
-    return alignof(void);
+    error("void型の値アラインメントを取得しようとしました");
+  case TY_CHAR:
+    return alignof(char);
   case TY_INT:
     return alignof(int);
   case TY_PTR:
@@ -234,10 +240,9 @@ int get_val_align(Type *ty) {
   case TY_ARRAY:
     return get_val_align(ty->ptrof);
   case TY_FUNC:
-  default:
-    assert(false);
-    break;
+    error("関数型の値アラインメントを取得しようとしました");
   }
+  error("不明な型の値アラインメントを取得しようとしました");
 }
 
 static void __attribute__((noreturn))
@@ -952,6 +957,8 @@ static void declaration(FuncCtxt *fctxt) {
 static Type *type_specifier(Tokenizer *tokenizer) {
   Token *token = token_pop(tokenizer);
   switch (token->ty) {
+  case TK_CHAR:
+    return new_type(TY_CHAR);
   case TK_INT:
     return new_type(TY_INT);
   case TK_VOID:
@@ -967,7 +974,7 @@ static Type *type_name(Tokenizer *tokenizer) {
     type = new_type_ptr(type);
   }
   if (token_consume(tokenizer, '[')) {
-    type = new_type_array(type, token_expect(tokenizer, TK_INT)->val);
+    type = new_type_array(type, token_expect(tokenizer, TK_NUM)->val);
     token_expect(tokenizer, ']');
   }
   return type;
