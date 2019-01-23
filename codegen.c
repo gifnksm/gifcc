@@ -86,9 +86,11 @@ static void gen_expr(Expr *expr) {
   }
 
   if (expr->ty == EX_IDENT) {
-    gen_lval(expr);
-    printf("  pop rax\n");
-    printf("  mov %s, [rax]\n", r->rax);
+    StackVar *var = get_stack_variable(func_ctxt, expr->name);
+    if (var == NULL) {
+      error("変数が定義されていません: %s", expr->name);
+    }
+    printf("  mov %s, [rbp - %d]\n", r->rax, var->offset + 8);
     printf("  push rax\n");
     return;
   }
