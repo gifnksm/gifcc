@@ -3,8 +3,14 @@ SRCS=$(wildcard src/*.c)
 OBJS=$(patsubst src/%.c,target/%.o,$(SRCS))
 DEPS=$(patsubst src/%.c,target/%.d,$(SRCS))
 
+ifdef ASAN
+CFLAGS  += -fsanitize=address
+LDFLAGS += -fsanitize=address
+export ASAN_OPTIONS=detect_leaks=0
+endif
+
 target/gifcc: $(OBJS)
-	$(CC) -o $@ $^
+	$(CC) $(LDFLAGS) -o $@ $^
 
 test: target/gifcc
 	./target/gifcc --test
