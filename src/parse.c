@@ -214,7 +214,7 @@ static bool token_is_typename(Token *token) {
 int get_val_size(Type *ty) {
   switch (ty->ty) {
   case TY_VOID:
-    error("void型の値サイズを取得しようとしました");
+    return sizeof(void);
   case TY_CHAR:
     return sizeof(char);
   case TY_INT:
@@ -232,7 +232,7 @@ int get_val_size(Type *ty) {
 int get_val_align(Type *ty) {
   switch (ty->ty) {
   case TY_VOID:
-    error("void型の値アラインメントを取得しようとしました");
+    return alignof(void);
   case TY_CHAR:
     return alignof(char);
   case TY_INT:

@@ -1,4 +1,5 @@
 #include "gifcc.h"
+#include <assert.h>
 #include <getopt.h>
 #include <stdarg.h>
 #include <stdbool.h>
@@ -455,7 +456,6 @@ static void output_ast(TranslationUnit *tunit) {
     dump_stmt(func->body, level + 1);
     dump_indent(level);
     printf(")\n");
-    output_ast(tunit->func_list->data[i]);
   }
 }
 
@@ -505,11 +505,40 @@ int main(int argc, char **argv) {
     }
   }
 
-  if (optind != argc - 1) {
+  if (optind > argc) {
     error("引数の個数が正しくありません");
   }
 
-  const char *input = argv[optind];
+  char *filename;
+  FILE *file;
+  if (optind == argc) {
+    filename = "STDIN";
+    file = stdin;
+  } else {
+    filename = argv[optind];
+    file = fopen(filename, "r");
+    if (file == NULL) {
+      error("ファイルが開けませんでした: %s", filename);
+    }
+  }
+
+  const size_t BUF_SIZE = 10240;
+  size_t read_size = 0;
+  char *input = NULL;
+  while (true) {
+    input = realloc(input, read_size + BUF_SIZE + 1);
+    size_t nread = fread(&input[read_size], 1, BUF_SIZE, file);
+    read_size += nread;
+    if (nread < BUF_SIZE) {
+      if (!feof(file)) {
+        error("ファイルの読み込みに失敗しました: %s", filename);
+      }
+      assert(nread <= BUF_SIZE);
+      input[read_size] = '\0';
+      read_size++;
+      break;
+    }
+  }
 
   if (output_mode == OUTPUT_TOKEN) {
     output_token(input);

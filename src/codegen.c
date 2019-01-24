@@ -164,6 +164,7 @@ static void gen_expr(Expr *expr) {
         }
       }
     }
+    printf("  mov al, 0\n");
     printf("  call %s\n", expr->callee->name);
     if (num_push > 0) {
       printf("  add rsp, %d\n", 8 * num_push);

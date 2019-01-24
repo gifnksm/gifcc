@@ -527,19 +527,21 @@ static Token *string_literal(const char **input) {
   q++;
   int alloc = 0;
   int len = 0;
-  char *str = malloc(len);
+  char *str = NULL;
   while (*q != '"' && *q != '\0') {
     if (len == alloc) {
-      if (alloc == 0) {
-        alloc = 8;
-      } else {
-        alloc *= 2;
-      }
+      alloc = (alloc == 0) ? 8 : alloc * 2;
       str = realloc(str, alloc);
     }
     str[len] = c_char(&q);
     len++;
   }
+  if (len == alloc) {
+    alloc = (alloc == 0) ? 8 : alloc * 2;
+    str = realloc(str, alloc);
+  }
+  str[len] = '\0';
+
   if (*q != '"') {
     error("文字列の終端がありません: %s", p);
   }

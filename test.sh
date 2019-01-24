@@ -2,6 +2,43 @@
 
 index=0
 
+compiletest() {
+    filename="${1}"
+    name=$(basename "${filename%%.c}")
+
+    for kind in token ast; do
+        target/gifcc --output "${kind}" "${filename}" > target/test/${name}."${kind}"
+        if [ "$?" -ne 0 ]; then
+            echo "test [${name}]: gifcc(${kind}) failed"
+            exit 1
+        fi
+    done
+
+    target/gifcc "${filename}" > target/test/${name}.s
+    if [ "$?" -ne 0 ]; then
+        echo "test [${name}]: gifcc(asm) failed"
+        exit 1
+    fi
+
+    gcc -o target/test/${name} target/test/${name}.s
+    if [ "$?" -ne 0 ]; then
+        echo "test [${name}]: gcc failed"
+        exit 1
+    fi
+    target/test/${name}
+    if [ "$?" -ne 0 ]; then
+        echo "test [${name}]: exec failed"
+        exit 1
+    fi
+
+    echo "test [${name}]: OK"
+}
+
+mkdir -p target/test
+for src in test/*.c; do
+    compiletest "${src}"
+done
+
 try() {
   expected="$1"
   input="$2"
@@ -10,21 +47,22 @@ try() {
   echo "${input}" | sed 's/^/  /'
 
   mkdir -p target/test
-  target/gifcc --output token "${input}" > target/test/${index}.token
+  echo "${input}" | target/gifcc --output token > target/test/${index}.token
   if [ "$?" -ne 0 ]; then
     echo "test #${index}: gifcc(token) failed"
     exit 1
   fi
-  target/gifcc --output ast "${input}" > target/test/${index}.ast
+  echo "${input}" | target/gifcc --output ast > target/test/${index}.ast
   if [ "$?" -ne 0 ]; then
     echo "test #${index}: gifcc(ast) failed"
     exit 1
   fi
-  target/gifcc "${input}" > target/test/${index}.s
+  echo "${input}" | target/gifcc > target/test/${index}.s
   if [ "$?" -ne 0 ]; then
     echo "test #${index}: gifcc(asm) failed"
     exit 1
   fi
+
   gcc -o target/test/${index} target/test/${index}.s
   if [ "$?" -ne 0 ]; then
     echo "test #${index}: gcc failed"
