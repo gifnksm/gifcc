@@ -17,6 +17,7 @@ typedef struct {
 enum {
   TK_NUM = 256,     // 整数トークン
   TK_IDENT,         // 識別子
+  TK_STR,           // 文字列リテラル
   TK_EQEQ,          // `==`
   TK_NOTEQ,         // `!=`
   TK_LTEQ,          // `<=`
@@ -60,6 +61,7 @@ typedef struct {
   int ty;            // トークンの型
   int val;           // tyがTK_NUMの場合、その数値
   char *name;        // tyがTK_IDENTの場合、その名前
+  char *str;         // tyがTK_STRの場合、その値
   const char *input; // トークン文字列 (エラーメッセージ用)
 } Token;
 
@@ -67,6 +69,7 @@ enum {
   EX_NUM = 256, // 整数のノードの型
   EX_STACK_VAR,
   EX_GLOBAL_VAR,
+  EX_STR,
   EX_EQEQ,
   EX_NOTEQ,
   EX_LTEQ,
@@ -126,6 +129,11 @@ typedef struct GlobalVar {
   Type *type;
 } GlobalVar;
 
+typedef struct StringLiteral {
+  char *name;
+  char *val;
+} StringLiteral;
+
 typedef struct Expr {
   int ty;         // ノードの型
   Type *val_type; // 値の型
@@ -135,7 +143,7 @@ typedef struct Expr {
   struct Expr *cond; // 条件式 (tyがEX_CONDの場合のみ使う)
 
   int val;    // tyがEX_NUMの場合のみ使う
-  char *name; // tyがEX_IDENTの場合のみ使う
+  char *name; // tyがEX_IDENT, EX_STRの場合のみ使う
 
   // EX_CALL: <callee>(<argument>...)
   struct Expr *callee;
@@ -190,6 +198,7 @@ typedef struct Function {
 typedef struct TranslationUnit {
   Vector *func_list;
   Vector *gvar_list;
+  Vector *str_list;
 } TranslationUnit;
 
 typedef struct Tokenizer Tokenizer;
@@ -207,6 +216,7 @@ void *vec_pop(Vector *vec);
 Map *new_map(void);
 void map_put(Map *map, char *key, void *val);
 void *map_get(Map *map, char *key);
+void print_string_literal(char *str);
 void runtest(void);
 
 Tokenizer *new_tokenizer(const char *input);

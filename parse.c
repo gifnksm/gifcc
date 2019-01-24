@@ -9,6 +9,7 @@
 typedef struct GlobalCtxt {
   Tokenizer *tokenizer;
   Map *var_map;
+  Vector *str_list;
 } GlobalCtxt;
 
 // 関数パース用情報
@@ -114,6 +115,7 @@ static GlobalCtxt *new_global_ctxt(Tokenizer *tokenizer) {
   GlobalCtxt *gctxt = malloc(sizeof(GlobalCtxt));
   gctxt->tokenizer = tokenizer;
   gctxt->var_map = new_map();
+  gctxt->str_list = new_vector();
 
   return gctxt;
 }
@@ -319,6 +321,18 @@ static Expr *new_expr_ident(FuncCtxt *fctxt, char *name) {
   }
   Expr *expr = new_expr(ty, type);
   expr->name = name;
+  return expr;
+}
+
+static Expr *new_expr_str(FuncCtxt *fctxt, char *val) {
+  Type *type = new_type_ptr(new_type(TY_CHAR));
+  Expr *expr = new_expr(EX_STR, type);
+
+  expr->name = make_label();
+  StringLiteral *str = malloc(sizeof(StringLiteral));
+  str->name = expr->name;
+  str->val = val;
+  vec_push(fctxt->global->str_list, str);
   return expr;
 }
 
@@ -617,11 +631,15 @@ static Stmt *new_stmt_return(Expr *expr) {
 }
 
 static Expr *primary_expression(FuncCtxt *fctxt) {
-  if (token_peek(fctxt->tokenizer)->ty == TK_NUM) {
-    return new_expr_num(token_pop(fctxt->tokenizer)->val);
+  Token *token = NULL;
+  if ((token = token_consume(fctxt->tokenizer, TK_NUM)) != NULL) {
+    return new_expr_num(token->val);
   }
-  if (token_peek(fctxt->tokenizer)->ty == TK_IDENT) {
-    return new_expr_ident(fctxt, token_pop(fctxt->tokenizer)->name);
+  if ((token = token_consume(fctxt->tokenizer, TK_IDENT)) != NULL) {
+    return new_expr_ident(fctxt, token->name);
+  }
+  if ((token = token_consume(fctxt->tokenizer, TK_STR)) != NULL) {
+    return new_expr_str(fctxt, token->str);
   }
   if (token_consume(fctxt->tokenizer, '(')) {
     Expr *expr = expression(fctxt);
@@ -1205,9 +1223,10 @@ static GlobalVar *global_variable(GlobalCtxt *gctxt, Type *type, char *name) {
 
 static TranslationUnit *translation_unit(Tokenizer *tokenizer) {
   GlobalCtxt *gctxt = new_global_ctxt(tokenizer);
-  TranslationUnit *tunit = malloc(sizeof(TranslationUnit));
-  tunit->func_list = new_vector();
-  tunit->gvar_list = new_vector();
+
+  Vector *func_list = new_vector();
+  Vector *gvar_list = new_vector();
+
   while (token_peek(tokenizer)->ty != TK_EOF) {
     Type *type = type_specifier(gctxt->tokenizer);
     while (token_consume(gctxt->tokenizer, '*')) {
@@ -1215,10 +1234,15 @@ static TranslationUnit *translation_unit(Tokenizer *tokenizer) {
     }
     char *name = token_expect(gctxt->tokenizer, TK_IDENT)->name;
     if (token_consume(gctxt->tokenizer, '(')) {
-      vec_push(tunit->func_list, function_definition(gctxt, type, name));
+      vec_push(func_list, function_definition(gctxt, type, name));
     } else {
-      vec_push(tunit->gvar_list, global_variable(gctxt, type, name));
+      vec_push(gvar_list, global_variable(gctxt, type, name));
     }
   }
+
+  TranslationUnit *tunit = malloc(sizeof(TranslationUnit));
+  tunit->func_list = func_list;
+  tunit->gvar_list = gvar_list;
+  tunit->str_list = gctxt->str_list;
   return tunit;
 }

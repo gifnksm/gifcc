@@ -665,5 +665,19 @@ int main(void) {
   return x[0] + y;
 }
 '
+try 3 '
+int main(void) {
+  puts("hogehoge");
+  puts("\n\n\r\r");
+  puts("ほげほげ");
+  return 3;
+}
+'
+try 0 '
+int main(void) {
+  printf("%s %d\n", "123", 456);
+  return 0;
+}
+'
 
 echo OK

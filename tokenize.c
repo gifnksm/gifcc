@@ -24,6 +24,7 @@ static Token *hexadecimal_constant(const char **input);
 static Token *octal_constant(const char **input);
 static Token *decimal_constant(const char **input);
 static Token *character_constant(const char **input);
+static Token *string_literal(const char **input);
 static int c_char(const char **input);
 
 Tokenizer *new_tokenizer(const char *input) {
@@ -120,6 +121,9 @@ static Token *read_token(const char **p, bool *read_eof) {
     if ((token = constant(p)) != NULL) {
       return token;
     }
+    if ((token = string_literal(p)) != NULL) {
+      return token;
+    }
 
     error("トークナイズできません: %s", *p);
   }
@@ -183,6 +187,14 @@ static Token *new_token_ident(const char *input, char *name) {
   }
   token->input = input;
   token->name = name;
+  return token;
+}
+
+static Token *new_token_str(const char *input, char *str) {
+  Token *token = malloc(sizeof(Token));
+  token->ty = TK_STR;
+  token->input = input;
+  token->str = str;
   return token;
 }
 
@@ -500,6 +512,40 @@ static Token *character_constant(const char **input) {
     error("'\\'' がありません: %s", *input);
   }
   p++;
+
+  *input = p;
+  return token;
+}
+
+static Token *string_literal(const char **input) {
+  Token *token = NULL;
+  const char *p = *input;
+  if (*p != '"') {
+    return NULL;
+  }
+  const char *q = p;
+  q++;
+  int alloc = 0;
+  int len = 0;
+  char *str = malloc(len);
+  while (*q != '"' && *q != '\0') {
+    if (len == alloc) {
+      if (alloc == 0) {
+        alloc = 8;
+      } else {
+        alloc *= 2;
+      }
+      str = realloc(str, alloc);
+    }
+    str[len] = c_char(&q);
+    len++;
+  }
+  if (*q != '"') {
+    error("文字列の終端がありません: %s", p);
+  }
+  q++;
+  token = new_token_str(p, str);
+  p = q;
 
   *input = p;
   return token;

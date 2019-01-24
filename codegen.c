@@ -122,6 +122,12 @@ static void gen_expr(Expr *expr) {
     return;
   }
 
+  if (expr->ty == EX_STR) {
+    printf("  lea rax, %s[rip]\n", expr->name);
+    printf("  push rax\n");
+    return;
+  }
+
   if (expr->ty == EX_CALL) {
     int num_push = 0;
     Vector *arg = expr->argument;
@@ -642,6 +648,13 @@ static void gen_gvar(GlobalVar *gvar) {
   printf("  .zero %d\n", get_val_size(gvar->type));
 }
 
+static void gen_str(StringLiteral *str) {
+  printf("%s:\n", str->name);
+  printf("  .string ");
+  print_string_literal(str->val);
+  printf("\n");
+}
+
 void gen(TranslationUnit *tunit) {
   printf(".intel_syntax noprefix\n");
 
@@ -652,5 +665,9 @@ void gen(TranslationUnit *tunit) {
   printf("  .bss\n");
   for (int i = 0; i < tunit->gvar_list->len; i++) {
     gen_gvar(tunit->gvar_list->data[i]);
+  }
+  printf("  .section .rodata\n");
+  for (int i = 0; i < tunit->str_list->len; i++) {
+    gen_str(tunit->str_list->data[i]);
   }
 }

@@ -1,4 +1,6 @@
 #include "gifcc.h"
+#include <ctype.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -39,4 +41,45 @@ void *map_get(Map *map, char *key) {
     }
   }
   return NULL;
+}
+
+void print_string_literal(char *str) {
+  printf("\"");
+  for (int i = 0; str[i] != '\0'; i++) {
+    switch (str[i]) {
+    case '\'':
+    case '\"':
+    case '\\':
+      printf("\\%c", str[i]);
+      break;
+    case '\a':
+      printf("\\a");
+      break;
+    case '\b':
+      printf("\\b");
+      break;
+    case '\f':
+      printf("\\f");
+      break;
+    case '\n':
+      printf("\\n");
+      break;
+    case '\r':
+      printf("\\r");
+      break;
+    case '\t':
+      printf("\\t");
+      break;
+    case '\v':
+      printf("\\v");
+      break;
+    default:
+      if (isgraph(str[i]) || isspace(str[i])) {
+        printf("%c", str[i]);
+      } else {
+        printf("\\%hho", str[i]);
+      }
+    }
+  }
+  printf("\"");
 }

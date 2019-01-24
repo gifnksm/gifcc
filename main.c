@@ -33,6 +33,11 @@ static void output_token(const char *input) {
     case TK_IDENT:
       printf("%03d IDENT %s\n", pos, token->name);
       break;
+    case TK_STR:
+      printf("%03d STR ", pos);
+      print_string_literal(token->str);
+      printf("\n");
+      break;
     case TK_EQEQ:
       printf("%03d [==]\n", pos);
       break;
@@ -249,6 +254,13 @@ static void dump_expr(Expr *expr, int level) {
     dump_indent(level);
     dump_type(expr->val_type);
     printf("(GLOBAL_VAR %s)\n", expr->name);
+    return;
+  case EX_STR:
+    dump_indent(level);
+    dump_type(expr->val_type);
+    printf("(STR ");
+    print_string_literal(expr->name);
+    printf(")\n");
     return;
   case EX_EQEQ:
     dump_binop_expr(expr, "[==]", level);
