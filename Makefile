@@ -1,8 +1,7 @@
 CFLAGS=-Wall -Wextra -std=c11 -g3 -D_POSIX_C_SOURCE=201809L -MMD -fdiagnostics-color
-SRCS=$(wildcard *.c)
-HDRS=$(wildcard *.h)
-OBJS=$(patsubst %.c,target/%.o,$(SRCS))
-DEPS=$(patsubst %.c,target/%.d,$(SRCS))
+SRCS=$(wildcard src/*.c)
+OBJS=$(patsubst src/%.c,target/%.o,$(SRCS))
+DEPS=$(patsubst src/%.c,target/%.d,$(SRCS))
 
 target/gifcc: $(OBJS)
 	$(CC) -o $@ $^
@@ -23,7 +22,7 @@ format:
 clang-tidy:
 	clang-tidy -fix -fix-errors $(SRCS) -- $(CFLAGS)
 
-target/%.o: %.c | target/
+target/%.o: src/%.c | target/
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 %/:
