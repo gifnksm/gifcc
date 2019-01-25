@@ -81,7 +81,8 @@ static void gen_lval(Expr *expr) {
     if (var == NULL) {
       error("変数が定義されていません: %s", expr->name);
     }
-    printf("  lea rax, [rbp - %d]\n", var->offset + 8);
+    printf("  lea rax, [rbp - %d]\n",
+           align(func_ctxt->stack_size, 16) - var->offset);
     printf("  push rax\n");
     return;
   }
@@ -110,7 +111,8 @@ static void gen_expr(Expr *expr) {
     if (var == NULL) {
       error("変数が定義されていません: %s", expr->name);
     }
-    printf("  mov %s, [rbp - %d]\n", r->rax, var->offset + 8);
+    printf("  mov %s, [rbp - %d]\n", r->rax,
+           align(func_ctxt->stack_size, 16) - var->offset);
     printf("  push rax\n");
     return;
   }
@@ -601,7 +603,8 @@ static void gen_func(Function *func) {
       error("変数が定義されていません: %s", name);
     }
     const Reg *r = get_int_reg(var->type);
-    printf("  lea rax, [rbp - %d]\n", var->offset + 8);
+    printf("  lea rax, [rbp - %d]\n",
+           align(func_ctxt->stack_size, 16) - var->offset);
     switch (i) {
     case 0:
       printf("  mov [rax], %s\n", r->rdi);
