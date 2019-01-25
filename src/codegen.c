@@ -81,8 +81,7 @@ static void gen_lval(Expr *expr) {
     if (var == NULL) {
       error("変数が定義されていません: %s", expr->name);
     }
-    printf("  mov rax, rbp\n");
-    printf("  sub rax, %d\n", var->offset + 8);
+    printf("  lea rax, [rbp - %d]\n", var->offset + 8);
     printf("  push rax\n");
     return;
   }
@@ -602,8 +601,7 @@ static void gen_func(Function *func) {
       error("変数が定義されていません: %s", name);
     }
     const Reg *r = get_int_reg(var->type);
-    printf("  mov rax, rbp\n");
-    printf("  sub rax, %d\n", var->offset + 8);
+    printf("  lea rax, [rbp - %d]\n", var->offset + 8);
     switch (i) {
     case 0:
       printf("  mov [rax], %s\n", r->rdi);
@@ -625,9 +623,7 @@ static void gen_func(Function *func) {
       break;
       // 6番目以降の引数はスタック経由で渡すため、スタックからコピーする
     default:
-      printf("  mov r10, rbp\n");
-      printf("  add r10, %d\n", (i - 6) * 8 + 16);
-      printf("  mov %s, [r10]\n", r->r11);
+      printf("  mov %s, [rbp + %d]\n", r->r11, (i - 6) * 8 + 16);
       printf("  mov [rax], %s\n", r->r11);
       break;
     }
