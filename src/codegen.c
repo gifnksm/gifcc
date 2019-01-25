@@ -176,6 +176,11 @@ static void gen_expr(Expr *expr) {
 
   if (expr->ty == EX_CAST) {
     gen_expr(expr->expr);
+    if (expr->expr->val_type->ty == TY_CHAR && expr->val_type->ty == TY_INT) {
+      printf("  pop rax\n");
+      printf("  movsx rax, al\n");
+      printf("  push rax\n");
+    }
     return;
   }
 

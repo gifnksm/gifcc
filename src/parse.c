@@ -33,8 +33,8 @@ static bool is_integer_type(Type *ty);
 static bool is_arith_type(Type *ty);
 static bool is_ptr_type(Type *ty);
 static bool is_array_type(Type *ty);
-static Type *integer_promoted(Type *ty);
-static Type *arith_converted(Type *ty1, Type *ty2);
+static Type *integer_promoted(Expr **e);
+static Type *arith_converted(Expr **e1, Expr **e2);
 static bool token_is_typename(Token *token);
 static void __attribute__((noreturn))
 binop_type_error(int ty, Expr *lhs, Expr *rhs);
@@ -192,11 +192,23 @@ static bool is_arith_type(Type *ty) { return is_integer_type(ty); }
 static bool is_ptr_type(Type *ty) { return ty->ty == TY_PTR; }
 static bool is_array_type(Type *ty) { return ty->ty == TY_ARRAY; }
 static bool is_func_type(Type *ty) { return ty->ty == TY_FUNC; }
-static Type *integer_promoted(Type *ty) { return ty; }
-static Type *arith_converted(Type *ty1, Type *ty2) {
-  if (!is_arith_type(ty1) || !is_arith_type(ty2)) {
+static Type *integer_promoted(Expr **e) {
+  if (!is_integer_type((*e)->val_type)) {
     return NULL;
   }
+  // CHAR は INT へ昇格する
+  if ((*e)->val_type->ty == TY_CHAR) {
+    *e = new_expr_cast(new_type(TY_INT), *e);
+  }
+  return (*e)->val_type;
+}
+static Type *arith_converted(Expr **e1, Expr **e2) {
+  if (!is_arith_type((*e1)->val_type) || !is_arith_type((*e2)->val_type)) {
+    return NULL;
+  }
+  Type *ty1 = integer_promoted(e2);
+  Type *ty2 = integer_promoted(e1);
+  assert(is_sametype(ty1, ty2));
   return ty1;
 }
 
@@ -369,6 +381,10 @@ static Expr *new_expr_postfix(int ty, Expr *operand) {
 static Expr *new_expr_cast(Type *val_type, Expr *operand) {
   operand = coerce_array2ptr(operand);
 
+  if (is_sametype(operand->val_type, val_type)) {
+    return operand;
+  }
+
   Expr *expr = new_expr(EX_CAST, val_type);
   expr->expr = operand;
   return expr;
@@ -411,7 +427,7 @@ static Expr *new_expr_binop(int ty, Expr *lhs, Expr *rhs) {
   case '*':
   case '/':
   case '%':
-    val_type = arith_converted(lhs->val_type, rhs->val_type);
+    val_type = arith_converted(&lhs, &rhs);
     if (val_type == NULL) {
       binop_type_error(ty, lhs, rhs);
     }
@@ -438,7 +454,7 @@ static Expr *new_expr_binop(int ty, Expr *lhs, Expr *rhs) {
       break;
     }
 
-    val_type = arith_converted(lhs->val_type, rhs->val_type);
+    val_type = arith_converted(&lhs, &rhs);
     if (val_type == NULL) {
       binop_type_error(ty, lhs, rhs);
     }
@@ -468,7 +484,7 @@ static Expr *new_expr_binop(int ty, Expr *lhs, Expr *rhs) {
       binop_type_error(ty, lhs, rhs);
     }
 
-    val_type = arith_converted(lhs->val_type, rhs->val_type);
+    val_type = arith_converted(&lhs, &rhs);
     if (val_type == NULL) {
       binop_type_error(ty, lhs, rhs);
     }
@@ -479,7 +495,7 @@ static Expr *new_expr_binop(int ty, Expr *lhs, Expr *rhs) {
     if (!is_integer_type(lhs->val_type) || !is_integer_type(rhs->val_type)) {
       binop_type_error(ty, lhs, rhs);
     }
-    val_type = integer_promoted(lhs->val_type);
+    val_type = integer_promoted(&lhs);
     if (val_type == NULL) {
       binop_type_error(ty, lhs, rhs);
     }
@@ -500,7 +516,7 @@ static Expr *new_expr_binop(int ty, Expr *lhs, Expr *rhs) {
     if (!is_integer_type(lhs->val_type) || !is_integer_type(rhs->val_type)) {
       binop_type_error(ty, lhs, rhs);
     }
-    val_type = arith_converted(lhs->val_type, rhs->val_type);
+    val_type = arith_converted(&lhs, &rhs);
     break;
   case EX_LOGAND:
   case EX_LOGOR:
