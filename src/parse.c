@@ -1007,7 +1007,7 @@ static Type *type_name(Tokenizer *tokenizer) {
   while (token_consume(tokenizer, '*')) {
     type = new_type_ptr(type);
   }
-  if (token_consume(tokenizer, '[')) {
+  while (token_consume(tokenizer, '[')) {
     type = new_type_array(type, token_expect(tokenizer, TK_NUM)->val);
     token_expect(tokenizer, ']');
   }
@@ -1020,11 +1020,15 @@ static void declarator(FuncCtxt *fctxt, Type *base_type, char **name,
     base_type = new_type_ptr(base_type);
   }
   Token *ident = token_expect(fctxt->tokenizer, TK_IDENT);
-  if (token_consume(fctxt->tokenizer, '[')) {
-    base_type =
-        new_type_array(base_type, token_expect(fctxt->tokenizer, TK_NUM)->val);
+  Vector *vec = new_vector();
+  while (token_consume(fctxt->tokenizer, '[')) {
+    vec_push(vec, token_expect(fctxt->tokenizer, TK_NUM));
     token_expect(fctxt->tokenizer, ']');
   }
+  for (int i = vec->len - 1; i >= 0; i--) {
+    base_type = new_type_array(base_type, ((Token *)vec->data[i])->val);
+  }
+
   *name = ident->name;
   *type = base_type;
 }
@@ -1224,11 +1228,16 @@ static Function *function_definition(GlobalCtxt *gctxt, Type *ret_type,
 }
 
 static GlobalVar *global_variable(GlobalCtxt *gctxt, Type *type, char *name) {
-  if (token_consume(gctxt->tokenizer, '[')) {
-    type = new_type_array(type, token_expect(gctxt->tokenizer, TK_NUM)->val);
+  Vector *vec = new_vector();
+  while (token_consume(gctxt->tokenizer, '[')) {
+    vec_push(vec, token_expect(gctxt->tokenizer, TK_NUM));
     token_expect(gctxt->tokenizer, ']');
   }
   token_expect(gctxt->tokenizer, ';');
+
+  for (int i = vec->len - 1; i >= 0; i--) {
+    type = new_type_array(type, ((Token *)vec->data[i])->val);
+  }
 
   if (!register_global(gctxt, name, type)) {
     error("同じ名前の関数またはグローバル変数が複数回定義されました: %s", name);

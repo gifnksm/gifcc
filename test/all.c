@@ -899,6 +899,8 @@ void test19(void) {
   y = 4;
   check_int(3, x[0] + y);
 
+  check_int(1, &x[1] - &x[0]);
+
   test_ok("test19");
 }
 
@@ -910,6 +912,37 @@ void test20(void) {
   printf("%s %d\n", "abc", 456);
 
   test_ok("test20");
+}
+
+void test21(void) {
+  int a[3][5];
+
+  int i;
+  int j;
+
+  for (i = 0; i < 3; i++) {
+    for (j = 0; j < 5; j++) {
+      a[i][j] = i * j;
+    }
+  }
+
+  for (i = 0; i < 3; i++) {
+    printf("%d:", i);
+    for (j = 0; j < 5; j++) {
+      printf(" %d", a[i][j]);
+      printf(" %p", &a[i][j]);
+      printf(" (%zu)", &a[i][j] - &a[0][0]);
+    }
+    printf("\n");
+  }
+
+  for (i = 0; i < 3; i++) {
+    for (j = 0; j < 5; j++) {
+      check_int(10000 * i + 1000 * j + i * j, 10000 * i + 1000 * j + a[i][j]);
+    }
+  }
+
+  test_ok("test21");
 }
 
 int main(void) {
@@ -933,6 +966,7 @@ int main(void) {
   test18();
   test19();
   test20();
+  test21();
 
   return 0;
 }
