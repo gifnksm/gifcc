@@ -811,6 +811,103 @@ void test15(void) {
   test_ok("test15");
 }
 
+void test16(void) {
+  int a[3];
+
+  *a = 1;
+  *(a + 1) = 2;
+  int *p;
+  p = a;
+  check_int(3, *p + *(p + 1));
+
+  a[0] = 5;
+  a[1] = 4;
+  a[2] = 3;
+  check_int(12, a[0] + a[1] + a[2]);
+  check_int(12, 0 [a] + 1 [a] + 2 [a]);
+
+  check_int(2, &a[2] - &a[0]);
+
+  test_ok("test16");
+}
+
+int *test17_01(int *x) { return x + 1; }
+void test17_02(void) {}
+void *test17_03(void *p) { return p; }
+void test17(void) {
+  int a[4];
+
+  a[0] = 1;
+  a[1] = 2;
+  a[2] = 4;
+  a[3] = 8;
+  check_int(8, test17_01(a)[2]);
+
+  void *p;
+  void *q;
+  p = 3;
+  q = test17_03(p);
+  check_int(1, p == q);
+
+  test_ok("test17");
+}
+
+int test18_g;
+int test18_h[3];
+void test18_init(void) {
+  test18_g = 3;
+  test18_h[0] = 1;
+  test18_h[1] = 2;
+  test18_h[2] = 3;
+}
+
+int test18_add(int n) {
+  test18_g += n;
+  test18_h[0] *= test18_h[0];
+  test18_h[1] *= test18_h[1];
+  test18_h[2] *= test18_h[2];
+}
+void test18(void) {
+  test18_g = 100;
+  check_int(test18_g, 100);
+
+  test18_init();
+  test18_add(7);
+  check_int(10, test18_g);
+  check_int(1, test18_h[0]);
+  check_int(4, test18_h[1]);
+  check_int(9, test18_h[2]);
+
+  test_ok("test18");
+}
+
+void test19(void) {
+  char x[4];
+  x[0] = 'a';
+  x[1] = 'b';
+  x[2] = 'c';
+  x[3] = '\0';
+  puts(x);
+
+  x[0] = -1;
+  x[1] = 2;
+  int y;
+  y = 4;
+  check_int(3, x[0] + y);
+
+  test_ok("test19");
+}
+
+void test20(void) {
+  puts("hogehoge");
+  puts("\n\n\r\r");
+  puts("ほげほげ");
+
+  printf("%s %d\n", "abc", 456);
+
+  test_ok("test20");
+}
+
 int main(void) {
   num_check = 0;
   test01();
@@ -827,6 +924,11 @@ int main(void) {
   test13();
   test14();
   test15();
+  test16();
+  test17();
+  test18();
+  test19();
+  test20();
 
   return 0;
 }
