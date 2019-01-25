@@ -263,6 +263,8 @@ void test03(void) {
 }
 
 void test04(void) {
+  int a;
+  a = 0;
   check_int(8, 1 << 2 << 1);
   check_int(2, 1 << 2 >> 1);
   check_int(0, 1 >> 3);
@@ -280,9 +282,11 @@ void test04(void) {
   check_int(7, 5 | 3);
   check_int(1, 3 && 5);
   check_int(0, 3 && 0);
-  check_int(0, 0 && abort());
+  check_int(0, 0 && (a = 1));
+  check_int(0, a);
   check_int(1, 3 || 5);
-  check_int(1, 3 || abort());
+  check_int(1, 3 || (a = 1));
+  check_int(0, a);
   check_int(1, 0 || 1);
   check_int(0, 0 || 0);
   check_int(12, 1 ? 12 : 34);
