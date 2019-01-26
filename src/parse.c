@@ -275,7 +275,6 @@ static Type *new_type_ptr(Type *base_type) {
   Type *ptrtype = malloc(sizeof(Type));
   ptrtype->ty = TY_PTR;
   ptrtype->ptrof = base_type;
-  base_type = ptrtype;
   return ptrtype;
 }
 
@@ -284,7 +283,6 @@ static Type *new_type_array(Type *base_type, int len) {
   ptrtype->ty = TY_ARRAY;
   ptrtype->ptrof = base_type;
   ptrtype->array_len = len;
-  base_type = ptrtype;
   return ptrtype;
 }
 
