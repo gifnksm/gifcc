@@ -36,8 +36,7 @@ static bool is_array_type(Type *ty);
 static Type *integer_promoted(Expr **e);
 static Type *arith_converted(Expr **e1, Expr **e2);
 static bool token_is_typename(Token *token);
-static void __attribute__((noreturn))
-binop_type_error(int ty, Expr *lhs, Expr *rhs);
+static _Noreturn void binop_type_error(int ty, Expr *lhs, Expr *rhs);
 static Type *new_type(int ty);
 static Type *new_type_ptr(Type *base_type);
 static Type *new_type_array(Type *base_type, int len);
@@ -259,8 +258,7 @@ int get_val_align(Type *ty) {
   error("不明な型の値アラインメントを取得しようとしました");
 }
 
-static void __attribute__((noreturn))
-binop_type_error(int ty, Expr *lhs, Expr *rhs) {
+static _Noreturn void binop_type_error(int ty, Expr *lhs, Expr *rhs) {
   error("不正な型の値に対する演算です: 演算=%d, 左辺=%d, 右辺=%d", ty,
         lhs->val_type->ty, rhs->val_type->ty);
 }
