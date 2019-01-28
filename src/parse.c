@@ -1227,34 +1227,14 @@ static Stmt *compound_statement(FuncCtxt *fctxt) {
   return stmt;
 }
 
-static Function *function_definition(GlobalCtxt *gctxt, Type *ret_type,
+static Function *function_definition(GlobalCtxt *gctxt, Type *type,
                                      char *name) {
-  Vector *params = new_vector();
-  if (token_consume(gctxt->tokenizer, ')') ||
-      token_consume2(gctxt->tokenizer, TK_VOID, ')')) {
-    // do nothing
-  } else {
-    while (true) {
-      Type *base_type = type_specifier(gctxt->tokenizer);
-      Param *param = malloc(sizeof(Param));
-      declarator(gctxt->tokenizer, base_type, &param->name, &param->type);
-      vec_push(params, param);
-      if (token_peek(gctxt->tokenizer)->ty == ')') {
-        break;
-      }
-      token_expect(gctxt->tokenizer, ',');
-    }
-    token_expect(gctxt->tokenizer, ')');
-  }
-
-  Type *func_type = new_type_func(ret_type, params);
-
   FuncCtxt *fctxt = new_func_ctxt(gctxt);
-  if (!register_global(gctxt, name, func_type)) {
+  if (!register_global(gctxt, name, type)) {
     error("同じ名前の関数またはグローバル変数が複数回定義されました: %s", name);
   }
-  for (int i = 0; i < params->len; i++) {
-    Param *param = params->data[i];
+  for (int i = 0; i < type->func_param->len; i++) {
+    Param *param = type->func_param->data[i];
     if (!register_stack(fctxt, param->name, param->type)) {
       error("同じ名前の引数が複数個あります: %s\n", name);
     }
@@ -1267,23 +1247,14 @@ static Function *function_definition(GlobalCtxt *gctxt, Type *ret_type,
   func->stack_size = fctxt->stack_size;
   func->stack_map = fctxt->stack_map;
   func->label_map = fctxt->label_map;
-  func->params = params;
+  func->params = type->func_param;
   func->body = body;
 
   return func;
 }
 
 static GlobalVar *global_variable(GlobalCtxt *gctxt, Type *type, char *name) {
-  Vector *vec = new_vector();
-  while (token_consume(gctxt->tokenizer, '[')) {
-    vec_push(vec, token_expect(gctxt->tokenizer, TK_NUM));
-    token_expect(gctxt->tokenizer, ']');
-  }
   token_expect(gctxt->tokenizer, ';');
-
-  for (int i = vec->len - 1; i >= 0; i--) {
-    type = new_type_array(type, ((Token *)vec->data[i])->val);
-  }
 
   if (!register_global(gctxt, name, type)) {
     error("同じ名前の関数またはグローバル変数が複数回定義されました: %s", name);
@@ -1299,16 +1270,17 @@ static TranslationUnit *translation_unit(Tokenizer *tokenizer) {
   Vector *gvar_list = new_vector();
 
   while (token_peek(tokenizer)->ty != TK_EOF) {
-    Type *type = type_specifier(gctxt->tokenizer);
-    while (token_consume(gctxt->tokenizer, '*')) {
-      type = new_type_ptr(type);
-    }
-    char *name = token_expect(gctxt->tokenizer, TK_IDENT)->name;
-    if (token_consume(gctxt->tokenizer, '(')) {
+    Type *base_type = type_specifier(gctxt->tokenizer);
+    char *name;
+    Type *type;
+    declarator(gctxt->tokenizer, base_type, &name, &type);
+
+    if (is_func_type(type)) {
       vec_push(func_list, function_definition(gctxt, type, name));
-    } else {
-      vec_push(gvar_list, global_variable(gctxt, type, name));
+      continue;
     }
+
+    vec_push(gvar_list, global_variable(gctxt, type, name));
   }
 
   TranslationUnit *tunit = malloc(sizeof(TranslationUnit));
