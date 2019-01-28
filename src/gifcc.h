@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stdbool.h>
+#include <stdnoreturn.h>
 
 typedef struct {
   void **data;
@@ -205,7 +206,7 @@ typedef struct Tokenizer Tokenizer;
 
 #define error(fmt, ...) error_raw(__FILE__, __LINE__, fmt, ##__VA_ARGS__)
 
-_Noreturn __attribute__((format(printf, 3, 4))) void
+noreturn __attribute__((format(printf, 3, 4))) void
 error_raw(const char *file, int line, char *fmt, ...);
 
 static inline int align(int n, int s) { return ((n + (s - 1)) / s) * s; }
