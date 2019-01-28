@@ -89,10 +89,10 @@ static Expr *constant_expression(FuncCtxt *fctxt);
 static void declaration(FuncCtxt *fctxt);
 static Type *type_specifier(Tokenizer *tokenizer);
 static Type *type_name(Tokenizer *tokenizer);
-static void declarator(FuncCtxt *fctxt, Type *base_type, char **name,
+static void declarator(Tokenizer *tokenizer, Type *base_type, char **name,
                        Type **type);
-static void direct_declarator(FuncCtxt *fctxt, Type *base_type, char **name,
-                              Type **type);
+static void direct_declarator(Tokenizer *tokenizer, Type *base_type,
+                              char **name, Type **type);
 
 // statement
 static Stmt *statement(FuncCtxt *fctxt);
@@ -978,7 +978,7 @@ static void declaration(FuncCtxt *fctxt) {
   Type *base_type = type_specifier(fctxt->tokenizer);
   char *name;
   Type *type;
-  declarator(fctxt, base_type, &name, &type);
+  declarator(fctxt->tokenizer, base_type, &name, &type);
   token_expect(fctxt->tokenizer, ';');
 
   if (!register_stack(fctxt, name, type)) {
@@ -1012,36 +1012,38 @@ static Type *type_name(Tokenizer *tokenizer) {
   return type;
 }
 
-static void declarator(FuncCtxt *fctxt, Type *base_type, char **name,
+static void declarator(Tokenizer *tokenizer, Type *base_type, char **name,
                        Type **type) {
-  while (token_consume(fctxt->tokenizer, '*')) {
+  while (token_consume(tokenizer, '*')) {
     base_type = new_type_ptr(base_type);
   }
-  direct_declarator(fctxt, base_type, name, type);
+  direct_declarator(tokenizer, base_type, name, type);
 }
 
-static void direct_declarator(FuncCtxt *fctxt, Type *base_type, char **name,
-                              Type **type) {
+static void direct_declarator(Tokenizer *tokenizer, Type *base_type,
+                              char **name, Type **type) {
   Type *placeholder = malloc(sizeof(Type));
   Token *token;
-  if ((token = token_consume(fctxt->tokenizer, TK_IDENT)) != NULL) {
+  if ((token = token_consume(tokenizer, TK_IDENT)) != NULL) {
     *name = token->name;
     *type = placeholder;
-  } else if (token_consume(fctxt->tokenizer, '(')) {
-    declarator(fctxt, placeholder, name, type);
-    token_expect(fctxt->tokenizer, ')');
+  } else if (token_consume(tokenizer, '(')) {
+    declarator(tokenizer, placeholder, name, type);
+    token_expect(tokenizer, ')');
   } else {
-    error("識別子でも括弧でもありません: %s",
-          token_peek(fctxt->tokenizer)->input);
+    error("識別子でも括弧でもありません: %s", token_peek(tokenizer)->input);
   }
 
-  Vector *vec = new_vector();
-  while (token_consume(fctxt->tokenizer, '[')) {
-    vec_push(vec, token_expect(fctxt->tokenizer, TK_NUM));
-    token_expect(fctxt->tokenizer, ']');
-  }
-  for (int i = vec->len - 1; i >= 0; i--) {
-    base_type = new_type_array(base_type, ((Token *)vec->data[i])->val);
+  while (true) {
+    if (token_consume(tokenizer, '[')) {
+      Type *inner = malloc(sizeof(Type));
+      *placeholder =
+          *new_type_array(inner, token_expect(tokenizer, TK_NUM)->val);
+      placeholder = inner;
+      token_expect(tokenizer, ']');
+      continue;
+    }
+    break;
   }
 
   *placeholder = *base_type;
@@ -1215,7 +1217,7 @@ static Function *function_definition(GlobalCtxt *gctxt, Type *ret_type,
       Type *base_type = type_specifier(fctxt->tokenizer);
       char *name;
       Type *type;
-      declarator(fctxt, base_type, &name, &type);
+      declarator(fctxt->tokenizer, base_type, &name, &type);
       if (!register_stack(fctxt, name, type)) {
         error("同じ名前の引数が複数個あります: %s\n", name);
       }
