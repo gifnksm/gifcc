@@ -945,6 +945,8 @@ void test21(void) {
   test_ok("test21");
 }
 
+int test22_g;
+void test22_func(int n) { test22_g = n; }
 void test22(void) {
   int(*a)[3];
   int b[3];
@@ -959,6 +961,12 @@ void test22(void) {
   check_int(3, b[0]);
   check_int(4, b[1]);
   check_int(5, b[2]);
+
+  test22_g = 0;
+  void (*f)(int n);
+  f = &test22_func;
+  f(3);
+  check_int(3, test22_g);
 
   test_ok("test22");
 }

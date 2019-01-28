@@ -132,12 +132,31 @@ static void gen_expr(Expr *expr) {
   if (expr->ty == EX_CALL) {
     int num_push = 0;
     Vector *arg = expr->argument;
-    if (expr->callee->ty != EX_GLOBAL_VAR) {
-      error("識別子以外を関数として呼び出そうとしました");
+    bool call_direct;
+    if (expr->callee->val_type->ty == TY_FUNC) {
+      call_direct = true;
+    } else if (expr->callee->val_type->ty == TY_PTR &&
+               expr->callee->val_type->ptrof->ty == TY_FUNC) {
+      call_direct = false;
+    } else if (expr->callee->ty == EX_GLOBAL_VAR) {
+      call_direct = true;
+    } else {
+      error("関数または関数ポインタ以外を呼び出そうとしました: %d",
+            expr->callee->val_type->ty);
     }
     if (arg && arg->len > 0) {
+      // 引数をスタックに積む
       for (int i = arg->len - 1; i >= 0; i--) {
         gen_expr(arg->data[i]);
+      }
+    }
+    if (!call_direct) {
+      gen_expr(expr->callee);
+      printf("  pop r10\n");
+    }
+    if (arg && arg->len > 0) {
+      // レジスタ渡しする引数をpopする
+      for (int i = 0; i < arg->len; i++) {
         switch (i) {
         // 0~5番目の引数はレジスタ経由で渡す
         case 0:
@@ -166,7 +185,11 @@ static void gen_expr(Expr *expr) {
       }
     }
     printf("  mov al, 0\n");
-    printf("  call %s\n", expr->callee->name);
+    if (call_direct) {
+      printf("  call %s\n", expr->callee->name);
+    } else {
+      printf("  call r10\n");
+    }
     if (num_push > 0) {
       printf("  add rsp, %d\n", 8 * num_push);
     }

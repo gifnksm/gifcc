@@ -181,8 +181,16 @@ static void dump_type_inner(Type *ty) {
     break;
   case TY_FUNC:
     printf("FUNC(");
+    for (int i = 0; i < ty->func_param->len; i++) {
+      if (i > 0) {
+        printf(", ");
+      }
+      Param *param = ty->func_param->data[i];
+      dump_type_inner(param->type);
+      printf(" %s", param->name);
+    }
+    printf(") -> ");
     dump_type_inner(ty->func_ret);
-    printf(")");
     break;
   default:
     error("未知の型です: %d\n", ty->ty);

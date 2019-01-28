@@ -1045,6 +1045,32 @@ static void direct_declarator(Tokenizer *tokenizer, Type *base_type,
       token_expect(tokenizer, ']');
       continue;
     }
+
+    if (token_consume(tokenizer, '(')) {
+      Vector *params = new_vector();
+      if (token_consume(tokenizer, ')') ||
+          token_consume2(tokenizer, TK_VOID, ')')) {
+        // do nothing
+      } else {
+        while (true) {
+          Type *base_type = type_specifier(tokenizer);
+          Param *param = malloc(sizeof(Param));
+          declarator(tokenizer, base_type, &param->name, &param->type);
+          vec_push(params, param);
+          if (token_peek(tokenizer)->ty == ')') {
+            break;
+          }
+          token_expect(tokenizer, ',');
+        }
+        token_expect(tokenizer, ')');
+      }
+
+      Type *inner = malloc(sizeof(Type));
+      *placeholder = *new_type_func(inner, params);
+      placeholder = inner;
+      continue;
+    }
+
     break;
   }
 
@@ -1203,27 +1229,27 @@ static Stmt *compound_statement(FuncCtxt *fctxt) {
 
 static Function *function_definition(GlobalCtxt *gctxt, Type *ret_type,
                                      char *name) {
-  FuncCtxt *fctxt = new_func_ctxt(gctxt);
   Vector *params = new_vector();
-
-  if (token_consume(fctxt->tokenizer, ')') ||
-      token_consume2(fctxt->tokenizer, TK_VOID, ')')) {
+  if (token_consume(gctxt->tokenizer, ')') ||
+      token_consume2(gctxt->tokenizer, TK_VOID, ')')) {
     // do nothing
   } else {
     while (true) {
-      Type *base_type = type_specifier(fctxt->tokenizer);
+      Type *base_type = type_specifier(gctxt->tokenizer);
       Param *param = malloc(sizeof(Param));
-      declarator(fctxt->tokenizer, base_type, &param->name, &param->type);
+      declarator(gctxt->tokenizer, base_type, &param->name, &param->type);
       vec_push(params, param);
-      if (token_peek(fctxt->tokenizer)->ty == ')') {
+      if (token_peek(gctxt->tokenizer)->ty == ')') {
         break;
       }
-      token_expect(fctxt->tokenizer, ',');
+      token_expect(gctxt->tokenizer, ',');
     }
-    token_expect(fctxt->tokenizer, ')');
+    token_expect(gctxt->tokenizer, ')');
   }
 
   Type *func_type = new_type_func(ret_type, params);
+
+  FuncCtxt *fctxt = new_func_ctxt(gctxt);
   if (!register_global(gctxt, name, func_type)) {
     error("同じ名前の関数またはグローバル変数が複数回定義されました: %s", name);
   }
