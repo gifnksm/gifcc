@@ -118,7 +118,13 @@ typedef struct Type {
   struct Type *ptrof;
   int array_len;
   struct Type *func_ret;
+  Vector *func_param;
 } Type;
+
+typedef struct Param {
+  char *name;
+  Type *type;
+} Param;
 
 typedef struct StackVar {
   int offset;

@@ -602,10 +602,10 @@ static void gen_func(Function *func) {
 
   // 引数をスタックへコピー
   for (int i = 0; i < func->params->len; i++) {
-    char *name = func->params->data[i];
-    StackVar *var = get_stack_variable(func, name);
+    Param *param = func->params->data[i];
+    StackVar *var = get_stack_variable(func, param->name);
     if (var == NULL) {
-      error("変数が定義されていません: %s", name);
+      error("変数が定義されていません: %s", param->name);
     }
     const Reg *r = get_int_reg(var->type);
     printf("  lea rax, [rbp - %d]\n",

@@ -40,6 +40,7 @@ static noreturn void binop_type_error(int ty, Expr *lhs, Expr *rhs);
 static Type *new_type(int ty);
 static Type *new_type_ptr(Type *base_type);
 static Type *new_type_array(Type *base_type, int len);
+static Type *new_type_func(Type *ret_type, Vector *func_param);
 static Expr *coerce_array2ptr(Expr *expr);
 static Expr *new_expr(int ty, Type *val_type);
 static Expr *new_expr_num(int val);
@@ -286,10 +287,11 @@ static Type *new_type_array(Type *base_type, int len) {
   return ptrtype;
 }
 
-static Type *new_type_func(Type *ret_type) {
+static Type *new_type_func(Type *ret_type, Vector *func_param) {
   Type *funtype = malloc(sizeof(Type));
   funtype->ty = TY_FUNC;
   funtype->func_ret = ret_type;
+  funtype->func_param = func_param;
   return funtype;
 }
 
@@ -1201,11 +1203,6 @@ static Stmt *compound_statement(FuncCtxt *fctxt) {
 
 static Function *function_definition(GlobalCtxt *gctxt, Type *ret_type,
                                      char *name) {
-  Type *func_type = new_type_func(ret_type);
-  if (!register_global(gctxt, name, func_type)) {
-    error("同じ名前の関数またはグローバル変数が複数回定義されました: %s", name);
-  }
-
   FuncCtxt *fctxt = new_func_ctxt(gctxt);
   Vector *params = new_vector();
 
@@ -1215,19 +1212,26 @@ static Function *function_definition(GlobalCtxt *gctxt, Type *ret_type,
   } else {
     while (true) {
       Type *base_type = type_specifier(fctxt->tokenizer);
-      char *name;
-      Type *type;
-      declarator(fctxt->tokenizer, base_type, &name, &type);
-      if (!register_stack(fctxt, name, type)) {
-        error("同じ名前の引数が複数個あります: %s\n", name);
-      }
-      vec_push(params, name);
+      Param *param = malloc(sizeof(Param));
+      declarator(fctxt->tokenizer, base_type, &param->name, &param->type);
+      vec_push(params, param);
       if (token_peek(fctxt->tokenizer)->ty == ')') {
         break;
       }
       token_expect(fctxt->tokenizer, ',');
     }
     token_expect(fctxt->tokenizer, ')');
+  }
+
+  Type *func_type = new_type_func(ret_type, params);
+  if (!register_global(gctxt, name, func_type)) {
+    error("同じ名前の関数またはグローバル変数が複数回定義されました: %s", name);
+  }
+  for (int i = 0; i < params->len; i++) {
+    Param *param = params->data[i];
+    if (!register_stack(fctxt, param->name, param->type)) {
+      error("同じ名前の引数が複数個あります: %s\n", name);
+    }
   }
 
   Stmt *body = compound_statement(fctxt);
