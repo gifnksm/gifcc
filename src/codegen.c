@@ -624,8 +624,8 @@ static void gen_func(Function *func) {
   printf("  sub rsp, %d\n", align(func->stack_size, 16));
 
   // 引数をスタックへコピー
-  for (int i = 0; i < func->params->len; i++) {
-    Param *param = func->params->data[i];
+  for (int i = 0; i < func->type->func_param->len; i++) {
+    Param *param = func->type->func_param->data[i];
     StackVar *var = get_stack_variable(func, param->name);
     if (var == NULL) {
       error("変数が定義されていません: %s", param->name);

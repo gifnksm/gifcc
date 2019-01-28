@@ -1244,10 +1244,10 @@ static Function *function_definition(GlobalCtxt *gctxt, Type *type,
 
   Function *func = malloc(sizeof(Function));
   func->name = name;
+  func->type = type;
   func->stack_size = fctxt->stack_size;
   func->stack_map = fctxt->stack_map;
   func->label_map = fctxt->label_map;
-  func->params = type->func_param;
   func->body = body;
 
   return func;

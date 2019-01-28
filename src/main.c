@@ -180,7 +180,8 @@ static void dump_type_inner(Type *ty) {
     printf(")");
     break;
   case TY_FUNC:
-    printf("FUNC(");
+    printf("FUNC ");
+    printf("(");
     for (int i = 0; i < ty->func_param->len; i++) {
       if (i > 0) {
         printf(", ");
@@ -189,7 +190,7 @@ static void dump_type_inner(Type *ty) {
       dump_type_inner(param->type);
       printf(" %s", param->name);
     }
-    printf(") -> ");
+    printf(")->");
     dump_type_inner(ty->func_ret);
     break;
   default:
@@ -460,10 +461,20 @@ static void output_ast(TranslationUnit *tunit) {
     Function *func = tunit->func_list->data[i];
 
     dump_indent(level);
-    printf("{FUNCTION %s\n", func->name);
+    printf("FUNCTION ");
+    dump_type(func->type);
+    printf(" %s = {\n", func->name);
     dump_stmt(func->body, level + 1);
     dump_indent(level);
-    printf(")\n");
+    printf("}\n");
+  }
+  for (int i = 0; i < tunit->gvar_list->len; i++) {
+    GlobalVar *gvar = tunit->gvar_list->data[i];
+
+    dump_indent(level);
+    printf("GLOBAL ");
+    dump_type(gvar->type);
+    printf(" %s\n", gvar->name);
   }
 }
 
