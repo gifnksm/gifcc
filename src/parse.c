@@ -91,6 +91,8 @@ static Type *type_specifier(Tokenizer *tokenizer);
 static Type *type_name(Tokenizer *tokenizer);
 static void declarator(FuncCtxt *fctxt, Type *base_type, char **name,
                        Type **type);
+static void direct_declarator(FuncCtxt *fctxt, Type *base_type, char **name,
+                              Type **type);
 
 // statement
 static Stmt *statement(FuncCtxt *fctxt);
@@ -1015,7 +1017,24 @@ static void declarator(FuncCtxt *fctxt, Type *base_type, char **name,
   while (token_consume(fctxt->tokenizer, '*')) {
     base_type = new_type_ptr(base_type);
   }
-  Token *ident = token_expect(fctxt->tokenizer, TK_IDENT);
+  direct_declarator(fctxt, base_type, name, type);
+}
+
+static void direct_declarator(FuncCtxt *fctxt, Type *base_type, char **name,
+                              Type **type) {
+  Type *placeholder = malloc(sizeof(Type));
+  Token *token;
+  if ((token = token_consume(fctxt->tokenizer, TK_IDENT)) != NULL) {
+    *name = token->name;
+    *type = placeholder;
+  } else if (token_consume(fctxt->tokenizer, '(')) {
+    declarator(fctxt, placeholder, name, type);
+    token_expect(fctxt->tokenizer, ')');
+  } else {
+    error("識別子でも括弧でもありません: %s",
+          token_peek(fctxt->tokenizer)->input);
+  }
+
   Vector *vec = new_vector();
   while (token_consume(fctxt->tokenizer, '[')) {
     vec_push(vec, token_expect(fctxt->tokenizer, TK_NUM));
@@ -1025,8 +1044,7 @@ static void declarator(FuncCtxt *fctxt, Type *base_type, char **name,
     base_type = new_type_array(base_type, ((Token *)vec->data[i])->val);
   }
 
-  *name = ident->name;
-  *type = base_type;
+  *placeholder = *base_type;
 }
 
 static Stmt *statement(FuncCtxt *fctxt) {

@@ -945,6 +945,24 @@ void test21(void) {
   test_ok("test21");
 }
 
+void test22(void) {
+  int(*a)[3];
+  int b[3];
+  int(**c)[3];
+
+  c = &a;
+  a = &b;
+  (*a)[0] = 3;
+  (**c)[1] = 4;
+  (*a)[2] = 5;
+
+  check_int(3, b[0]);
+  check_int(4, b[1]);
+  check_int(5, b[2]);
+
+  test_ok("test22");
+}
+
 int main(void) {
   num_check = 0;
   test01();
@@ -967,6 +985,7 @@ int main(void) {
   test19();
   test20();
   test21();
+  test22();
 
   return 0;
 }
