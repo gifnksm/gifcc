@@ -1010,6 +1010,22 @@ void test23(void) {
   test_ok("test23");
 }
 
+void test24(void) {
+  char a;
+  char b;
+  char c;
+  char d;
+  a = 64;
+  b = 64;
+  c = 64;
+  d = 64;
+  check_int(256, a + b + c + d);
+
+  check_int(256, (char)64 + (char)64 + (char)64 + (char)64);
+  check_int(64, (char)320);
+  check_int(256, (char)320 + (char)320 + (char)320 + (char)320);
+}
+
 int main(void) {
   num_check = 0;
   test01();
