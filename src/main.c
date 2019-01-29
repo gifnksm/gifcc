@@ -258,7 +258,7 @@ static void dump_expr(Expr *expr, int level) {
   case EX_STACK_VAR:
     dump_indent(level);
     dump_type(expr->val_type);
-    printf("(STACK_VAR %s)\n", expr->name);
+    printf("(STACK_VAR %s@%d)\n", expr->name, expr->stack_var->offset);
     return;
   case EX_GLOBAL_VAR:
     dump_indent(level);

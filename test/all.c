@@ -971,6 +971,45 @@ void test22(void) {
   test_ok("test22");
 }
 
+void test23_fun(int a, int b) {
+  int c;
+  int d;
+  int e;
+  c = 3;
+  d = 4;
+  e = 5;
+  check_int(1, a);
+  check_int(2, b);
+  check_int(3, c);
+  check_int(4, d);
+  check_int(5, e);
+
+  {
+    int c;
+    int f;
+    c = 6;
+    e = 7;
+    f = 8;
+    check_int(1, a);
+    check_int(2, b);
+    check_int(6, c);
+    check_int(4, d);
+    check_int(7, e);
+    check_int(8, f);
+  }
+
+  check_int(1, a);
+  check_int(2, b);
+  check_int(3, c);
+  check_int(4, d);
+  check_int(7, e);
+}
+void test23(void) {
+  test23_fun(1, 2);
+
+  test_ok("test23");
+}
+
 int main(void) {
   num_check = 0;
   test01();
@@ -994,6 +1033,7 @@ int main(void) {
   test20();
   test21();
   test22();
+  test23();
 
   return 0;
 }

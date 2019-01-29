@@ -12,20 +12,28 @@ typedef struct GlobalCtxt {
   Vector *str_list;
 } GlobalCtxt;
 
-// 関数パース用情報
 typedef struct FuncCtxt {
   GlobalCtxt *global;
   Tokenizer *tokenizer;
   int stack_size;
-  Map *stack_map;
   Vector *switches;
   Map *label_map;
 } FuncCtxt;
 
+typedef struct ScopeCtxt {
+  GlobalCtxt *global;
+  FuncCtxt *func;
+  struct ScopeCtxt *outer;
+  Tokenizer *tokenizer;
+  Map *stack_map;
+} ScopeCtxt;
+
 static GlobalCtxt *new_global_ctxt(Tokenizer *tokenizer);
 static FuncCtxt *new_func_ctxt(GlobalCtxt *gctxt);
-static StackVar *register_stack(FuncCtxt *fctxt, char *name, Type *type);
-static StackVar *get_stack(FuncCtxt *fctxt, char *name);
+static ScopeCtxt *new_root_scope_ctxt(FuncCtxt *fctxt);
+static ScopeCtxt *new_inner_scope_ctxt(ScopeCtxt *outer);
+static StackVar *register_stack(ScopeCtxt *sctxt, char *name, Type *type);
+static StackVar *get_stack(ScopeCtxt *sctxt, char *name);
 static bool register_global(GlobalCtxt *gctxt, char *name, Type *type);
 static GlobalVar *get_global(GlobalCtxt *gctxt, char *name);
 static bool is_sametype(Type *ty1, Type *ty2);
@@ -44,7 +52,8 @@ static Type *new_type_func(Type *ret_type, Vector *func_param);
 static Expr *coerce_array2ptr(Expr *expr);
 static Expr *new_expr(int ty, Type *val_type);
 static Expr *new_expr_num(int val);
-static Expr *new_expr_ident(FuncCtxt *fctxt, char *name);
+static Expr *new_expr_ident(ScopeCtxt *sctxt, char *name);
+static Expr *new_expr_str(ScopeCtxt *sctxt, char *val);
 static Expr *new_expr_call(Expr *callee, Vector *argument);
 static Expr *new_expr_postfix(int ty, Expr *operand);
 static Expr *new_expr_cast(Type *val_type, Expr *operand);
@@ -66,28 +75,28 @@ static Stmt *new_stmt_goto(char *name);
 static Stmt *new_stmt_return(Expr *expr);
 
 // expression
-static Expr *primary_expression(FuncCtxt *fctxt);
-static Expr *postfix_expression(FuncCtxt *fctxt);
-static Vector *argument_expression_list(FuncCtxt *fctxt);
-static Expr *unary_expression(FuncCtxt *fctxt);
-static Expr *cast_expression(FuncCtxt *fctxt);
-static Expr *multiplicative_expression(FuncCtxt *fctxt);
-static Expr *additive_expression(FuncCtxt *fctxt);
-static Expr *shift_expression(FuncCtxt *fctxt);
-static Expr *relational_expression(FuncCtxt *fctxt);
-static Expr *equality_expression(FuncCtxt *fctxt);
-static Expr *and_expression(FuncCtxt *fctxt);
-static Expr *exclusive_or_expression(FuncCtxt *fctxt);
-static Expr *inclusive_or_expression(FuncCtxt *fctxt);
-static Expr *logical_and_expression(FuncCtxt *fctxt);
-static Expr *logical_or_expression(FuncCtxt *fctxt);
-static Expr *conditional_expression(FuncCtxt *fctxt);
-static Expr *assignment_expression(FuncCtxt *fctxt);
-static Expr *expression(FuncCtxt *fctxt);
-static Expr *constant_expression(FuncCtxt *fctxt);
+static Expr *primary_expression(ScopeCtxt *sctxt);
+static Expr *postfix_expression(ScopeCtxt *sctxt);
+static Vector *argument_expression_list(ScopeCtxt *sctxt);
+static Expr *unary_expression(ScopeCtxt *sctxt);
+static Expr *cast_expression(ScopeCtxt *sctxt);
+static Expr *multiplicative_expression(ScopeCtxt *sctxt);
+static Expr *additive_expression(ScopeCtxt *sctxt);
+static Expr *shift_expression(ScopeCtxt *sctxt);
+static Expr *relational_expression(ScopeCtxt *sctxt);
+static Expr *equality_expression(ScopeCtxt *sctxt);
+static Expr *and_expression(ScopeCtxt *sctxt);
+static Expr *exclusive_or_expression(ScopeCtxt *sctxt);
+static Expr *inclusive_or_expression(ScopeCtxt *sctxt);
+static Expr *logical_and_expression(ScopeCtxt *sctxt);
+static Expr *logical_or_expression(ScopeCtxt *sctxt);
+static Expr *conditional_expression(ScopeCtxt *sctxt);
+static Expr *assignment_expression(ScopeCtxt *sctxt);
+static Expr *expression(ScopeCtxt *sctxt);
+static Expr *constant_expression(ScopeCtxt *sctxt);
 
 // declaration
-static void declaration(FuncCtxt *fctxt);
+static void declaration(ScopeCtxt *sctxt);
 static Type *type_specifier(Tokenizer *tokenizer);
 static Type *type_name(Tokenizer *tokenizer);
 static void declarator(Tokenizer *tokenizer, Type *base_type, char **name,
@@ -96,8 +105,8 @@ static void direct_declarator(Tokenizer *tokenizer, Type *base_type,
                               char **name, Type **type);
 
 // statement
-static Stmt *statement(FuncCtxt *fctxt);
-static Stmt *compound_statement(FuncCtxt *fctxt);
+static Stmt *statement(ScopeCtxt *sctxt);
+static Stmt *compound_statement(ScopeCtxt *sctxt);
 
 // top-level
 static Function *function_definition(GlobalCtxt *gctxt, Type *type, char *name);
@@ -128,35 +137,66 @@ static FuncCtxt *new_func_ctxt(GlobalCtxt *gctxt) {
   fctxt->global = gctxt;
   fctxt->tokenizer = gctxt->tokenizer;
   fctxt->stack_size = 0;
-  fctxt->stack_map = new_map();
   fctxt->switches = new_vector();
-
   fctxt->label_map = new_map();
 
   return fctxt;
 }
 
-static StackVar *register_stack(FuncCtxt *fctxt, char *name, Type *type) {
+static ScopeCtxt *new_root_scope_ctxt(FuncCtxt *fctxt) {
+  ScopeCtxt *sctxt = malloc(sizeof(ScopeCtxt));
+
+  sctxt->global = fctxt->global;
+  sctxt->func = fctxt;
+  sctxt->outer = NULL;
+  sctxt->tokenizer = fctxt->tokenizer;
+  sctxt->stack_map = new_map();
+
+  return sctxt;
+}
+
+static ScopeCtxt *new_inner_scope_ctxt(ScopeCtxt *outer) {
+  ScopeCtxt *inner = malloc(sizeof(ScopeCtxt));
+
+  inner->global = outer->global;
+  inner->func = outer->func;
+  inner->outer = outer;
+  inner->tokenizer = outer->tokenizer;
+  inner->stack_map = new_map();
+
+  return inner;
+}
+
+static StackVar *register_stack(ScopeCtxt *sctxt, char *name, Type *type) {
   if (type->ty == TY_VOID) {
     error("void型の変数は定義できません: %s", name);
   }
-  if (map_get(fctxt->stack_map, name)) {
+  if (map_get(sctxt->stack_map, name)) {
     error("同じ名前のローカル変数が複数あります: %s", name);
     return NULL;
   }
+
+  FuncCtxt *fctxt = sctxt->func;
 
   StackVar *var = malloc(sizeof(StackVar));
   fctxt->stack_size = align(fctxt->stack_size, get_val_align(type));
   var->offset = fctxt->stack_size;
   var->type = type;
-  map_put(fctxt->stack_map, name, var);
+  map_put(sctxt->stack_map, name, var);
   fctxt->stack_size += get_val_size(type);
 
   return var;
 }
 
-static StackVar *get_stack(FuncCtxt *fctxt, char *name) {
-  return map_get(fctxt->stack_map, name);
+static StackVar *get_stack(ScopeCtxt *sctxt, char *name) {
+  while (sctxt != NULL) {
+    StackVar *var = map_get(sctxt->stack_map, name);
+    if (var != NULL) {
+      return var;
+    }
+    sctxt = sctxt->outer;
+  }
+  return NULL;
 }
 
 static bool register_global(GlobalCtxt *gctxt, char *name, Type *type) {
@@ -316,11 +356,11 @@ static Expr *new_expr_num(int val) {
   return expr;
 }
 
-static Expr *new_expr_ident(FuncCtxt *fctxt, char *name) {
+static Expr *new_expr_ident(ScopeCtxt *sctxt, char *name) {
   int ty;
   Type *type;
-  StackVar *svar = get_stack(fctxt, name);
-  GlobalVar *gvar = get_global(fctxt->global, name);
+  StackVar *svar = get_stack(sctxt, name);
+  GlobalVar *gvar = get_global(sctxt->global, name);
   if (svar != NULL) {
     ty = EX_STACK_VAR;
     type = svar->type;
@@ -342,7 +382,7 @@ static Expr *new_expr_ident(FuncCtxt *fctxt, char *name) {
   return expr;
 }
 
-static Expr *new_expr_str(FuncCtxt *fctxt, char *val) {
+static Expr *new_expr_str(ScopeCtxt *sctxt, char *val) {
   Type *type = new_type_ptr(new_type(TY_CHAR));
   Expr *expr = new_expr(EX_STR, type);
 
@@ -350,7 +390,7 @@ static Expr *new_expr_str(FuncCtxt *fctxt, char *val) {
   StringLiteral *str = malloc(sizeof(StringLiteral));
   str->name = expr->name;
   str->val = val;
-  vec_push(fctxt->global->str_list, str);
+  vec_push(sctxt->global->str_list, str);
   return expr;
 }
 
@@ -652,41 +692,41 @@ static Stmt *new_stmt_return(Expr *expr) {
   return stmt;
 }
 
-static Expr *primary_expression(FuncCtxt *fctxt) {
+static Expr *primary_expression(ScopeCtxt *sctxt) {
   Token *token = NULL;
-  if ((token = token_consume(fctxt->tokenizer, TK_NUM)) != NULL) {
+  if ((token = token_consume(sctxt->tokenizer, TK_NUM)) != NULL) {
     return new_expr_num(token->val);
   }
-  if ((token = token_consume(fctxt->tokenizer, TK_IDENT)) != NULL) {
-    return new_expr_ident(fctxt, token->name);
+  if ((token = token_consume(sctxt->tokenizer, TK_IDENT)) != NULL) {
+    return new_expr_ident(sctxt, token->name);
   }
-  if ((token = token_consume(fctxt->tokenizer, TK_STR)) != NULL) {
-    return new_expr_str(fctxt, token->str);
+  if ((token = token_consume(sctxt->tokenizer, TK_STR)) != NULL) {
+    return new_expr_str(sctxt, token->str);
   }
-  if (token_consume(fctxt->tokenizer, '(')) {
-    Expr *expr = expression(fctxt);
-    token_expect(fctxt->tokenizer, ')');
+  if (token_consume(sctxt->tokenizer, '(')) {
+    Expr *expr = expression(sctxt);
+    token_expect(sctxt->tokenizer, ')');
     return expr;
   }
   error("数値でも開きカッコでもないトークンです: %s",
-        token_peek(fctxt->tokenizer)->input);
+        token_peek(sctxt->tokenizer)->input);
 }
 
-static Expr *postfix_expression(FuncCtxt *fctxt) {
-  Expr *expr = primary_expression(fctxt);
+static Expr *postfix_expression(ScopeCtxt *sctxt) {
+  Expr *expr = primary_expression(sctxt);
   while (true) {
-    if (token_consume(fctxt->tokenizer, '[')) {
-      Expr *operand = expression(fctxt);
-      token_expect(fctxt->tokenizer, ']');
+    if (token_consume(sctxt->tokenizer, '[')) {
+      Expr *operand = expression(sctxt);
+      token_expect(sctxt->tokenizer, ']');
       expr = new_expr_index(expr, operand);
-    } else if (token_consume(fctxt->tokenizer, '(')) {
+    } else if (token_consume(sctxt->tokenizer, '(')) {
       Vector *argument = NULL;
-      if (token_peek(fctxt->tokenizer)->ty != ')') {
-        argument = argument_expression_list(fctxt);
+      if (token_peek(sctxt->tokenizer)->ty != ')') {
+        argument = argument_expression_list(sctxt);
       }
-      token_expect(fctxt->tokenizer, ')');
+      token_expect(sctxt->tokenizer, ')');
       expr = new_expr_call(expr, argument);
-    } else if (token_consume(fctxt->tokenizer, TK_INC)) {
+    } else if (token_consume(sctxt->tokenizer, TK_INC)) {
       int val;
       if (is_ptr_type(expr->val_type)) {
         val = get_val_size(expr->val_type->ptrof);
@@ -695,7 +735,7 @@ static Expr *postfix_expression(FuncCtxt *fctxt) {
       }
       expr = new_expr_postfix(EX_INC, expr);
       expr->val = val;
-    } else if (token_consume(fctxt->tokenizer, TK_DEC)) {
+    } else if (token_consume(sctxt->tokenizer, TK_DEC)) {
       int val;
       if (is_ptr_type(expr->val_type)) {
         val = get_val_size(expr->val_type->ptrof);
@@ -710,38 +750,38 @@ static Expr *postfix_expression(FuncCtxt *fctxt) {
   }
 }
 
-static Vector *argument_expression_list(FuncCtxt *fctxt) {
+static Vector *argument_expression_list(ScopeCtxt *sctxt) {
   Vector *argument = new_vector();
   while (true) {
-    vec_push(argument, assignment_expression(fctxt));
-    if (!token_consume(fctxt->tokenizer, ',')) {
+    vec_push(argument, assignment_expression(sctxt));
+    if (!token_consume(sctxt->tokenizer, ',')) {
       break;
     }
   }
   return argument;
 }
 
-static Expr *unary_expression(FuncCtxt *fctxt) {
-  if (token_consume(fctxt->tokenizer, '&')) {
-    return new_expr_unary('&', cast_expression(fctxt));
+static Expr *unary_expression(ScopeCtxt *sctxt) {
+  if (token_consume(sctxt->tokenizer, '&')) {
+    return new_expr_unary('&', cast_expression(sctxt));
   }
-  if (token_consume(fctxt->tokenizer, '*')) {
-    return new_expr_unary('*', cast_expression(fctxt));
+  if (token_consume(sctxt->tokenizer, '*')) {
+    return new_expr_unary('*', cast_expression(sctxt));
   }
-  if (token_consume(fctxt->tokenizer, '+')) {
-    return new_expr_unary('+', cast_expression(fctxt));
+  if (token_consume(sctxt->tokenizer, '+')) {
+    return new_expr_unary('+', cast_expression(sctxt));
   }
-  if (token_consume(fctxt->tokenizer, '-')) {
-    return new_expr_unary('-', cast_expression(fctxt));
+  if (token_consume(sctxt->tokenizer, '-')) {
+    return new_expr_unary('-', cast_expression(sctxt));
   }
-  if (token_consume(fctxt->tokenizer, '~')) {
-    return new_expr_unary('~', cast_expression(fctxt));
+  if (token_consume(sctxt->tokenizer, '~')) {
+    return new_expr_unary('~', cast_expression(sctxt));
   }
-  if (token_consume(fctxt->tokenizer, '!')) {
-    return new_expr_unary('!', cast_expression(fctxt));
+  if (token_consume(sctxt->tokenizer, '!')) {
+    return new_expr_unary('!', cast_expression(sctxt));
   }
-  if (token_consume(fctxt->tokenizer, TK_INC)) {
-    Expr *expr = cast_expression(fctxt);
+  if (token_consume(sctxt->tokenizer, TK_INC)) {
+    Expr *expr = cast_expression(sctxt);
     int val;
     if (is_ptr_type(expr->val_type)) {
       val = get_val_size(expr->val_type->ptrof);
@@ -752,8 +792,8 @@ static Expr *unary_expression(FuncCtxt *fctxt) {
     expr->val = val;
     return expr;
   }
-  if (token_consume(fctxt->tokenizer, TK_DEC)) {
-    Expr *expr = cast_expression(fctxt);
+  if (token_consume(sctxt->tokenizer, TK_DEC)) {
+    Expr *expr = cast_expression(sctxt);
     int val;
     if (is_ptr_type(expr->val_type)) {
       val = get_val_size(expr->val_type->ptrof);
@@ -764,55 +804,55 @@ static Expr *unary_expression(FuncCtxt *fctxt) {
     expr->val = val;
     return expr;
   }
-  return postfix_expression(fctxt);
+  return postfix_expression(sctxt);
 }
 
-static Expr *cast_expression(FuncCtxt *fctxt) {
-  if (token_peek(fctxt->tokenizer)->ty == '(' &&
-      token_is_typename(token_peek_ahead(fctxt->tokenizer, 1))) {
-    token_succ(fctxt->tokenizer);
-    Type *val_type = type_name(fctxt->tokenizer);
-    token_expect(fctxt->tokenizer, ')');
-    return new_expr_cast(val_type, cast_expression(fctxt));
+static Expr *cast_expression(ScopeCtxt *sctxt) {
+  if (token_peek(sctxt->tokenizer)->ty == '(' &&
+      token_is_typename(token_peek_ahead(sctxt->tokenizer, 1))) {
+    token_succ(sctxt->tokenizer);
+    Type *val_type = type_name(sctxt->tokenizer);
+    token_expect(sctxt->tokenizer, ')');
+    return new_expr_cast(val_type, cast_expression(sctxt));
   }
-  return unary_expression(fctxt);
+  return unary_expression(sctxt);
 }
 
-static Expr *multiplicative_expression(FuncCtxt *fctxt) {
-  Expr *expr = cast_expression(fctxt);
+static Expr *multiplicative_expression(ScopeCtxt *sctxt) {
+  Expr *expr = cast_expression(sctxt);
   while (true) {
-    if (token_consume(fctxt->tokenizer, '*')) {
-      expr = new_expr_binop('*', expr, cast_expression(fctxt));
-    } else if (token_consume(fctxt->tokenizer, '/')) {
-      expr = new_expr_binop('/', expr, cast_expression(fctxt));
-    } else if (token_consume(fctxt->tokenizer, '%')) {
-      expr = new_expr_binop('%', expr, cast_expression(fctxt));
+    if (token_consume(sctxt->tokenizer, '*')) {
+      expr = new_expr_binop('*', expr, cast_expression(sctxt));
+    } else if (token_consume(sctxt->tokenizer, '/')) {
+      expr = new_expr_binop('/', expr, cast_expression(sctxt));
+    } else if (token_consume(sctxt->tokenizer, '%')) {
+      expr = new_expr_binop('%', expr, cast_expression(sctxt));
     } else {
       return expr;
     }
   }
 }
 
-static Expr *additive_expression(FuncCtxt *fctxt) {
-  Expr *expr = multiplicative_expression(fctxt);
+static Expr *additive_expression(ScopeCtxt *sctxt) {
+  Expr *expr = multiplicative_expression(sctxt);
   while (true) {
-    if (token_consume(fctxt->tokenizer, '+')) {
-      expr = new_expr_binop('+', expr, multiplicative_expression(fctxt));
-    } else if (token_consume(fctxt->tokenizer, '-')) {
-      expr = new_expr_binop('-', expr, multiplicative_expression(fctxt));
+    if (token_consume(sctxt->tokenizer, '+')) {
+      expr = new_expr_binop('+', expr, multiplicative_expression(sctxt));
+    } else if (token_consume(sctxt->tokenizer, '-')) {
+      expr = new_expr_binop('-', expr, multiplicative_expression(sctxt));
     } else {
       return expr;
     }
   }
 }
 
-static Expr *shift_expression(FuncCtxt *fctxt) {
-  Expr *expr = additive_expression(fctxt);
+static Expr *shift_expression(ScopeCtxt *sctxt) {
+  Expr *expr = additive_expression(sctxt);
   while (true) {
-    if (token_consume(fctxt->tokenizer, TK_LSHIFT)) {
-      expr = new_expr_binop(EX_LSHIFT, expr, additive_expression(fctxt));
-    } else if (token_consume(fctxt->tokenizer, TK_RSHIFT)) {
-      expr = new_expr_binop(EX_RSHIFT, expr, additive_expression(fctxt));
+    if (token_consume(sctxt->tokenizer, TK_LSHIFT)) {
+      expr = new_expr_binop(EX_LSHIFT, expr, additive_expression(sctxt));
+    } else if (token_consume(sctxt->tokenizer, TK_RSHIFT)) {
+      expr = new_expr_binop(EX_RSHIFT, expr, additive_expression(sctxt));
     } else {
       return expr;
     }
@@ -820,17 +860,17 @@ static Expr *shift_expression(FuncCtxt *fctxt) {
   return expr;
 }
 
-static Expr *relational_expression(FuncCtxt *fctxt) {
-  Expr *expr = shift_expression(fctxt);
+static Expr *relational_expression(ScopeCtxt *sctxt) {
+  Expr *expr = shift_expression(sctxt);
   while (true) {
-    if (token_consume(fctxt->tokenizer, '<')) {
-      expr = new_expr_binop('<', expr, shift_expression(fctxt));
-    } else if (token_consume(fctxt->tokenizer, '>')) {
-      expr = new_expr_binop('>', expr, shift_expression(fctxt));
-    } else if (token_consume(fctxt->tokenizer, TK_LTEQ)) {
-      expr = new_expr_binop(EX_LTEQ, expr, shift_expression(fctxt));
-    } else if (token_consume(fctxt->tokenizer, TK_GTEQ)) {
-      expr = new_expr_binop(EX_GTEQ, expr, shift_expression(fctxt));
+    if (token_consume(sctxt->tokenizer, '<')) {
+      expr = new_expr_binop('<', expr, shift_expression(sctxt));
+    } else if (token_consume(sctxt->tokenizer, '>')) {
+      expr = new_expr_binop('>', expr, shift_expression(sctxt));
+    } else if (token_consume(sctxt->tokenizer, TK_LTEQ)) {
+      expr = new_expr_binop(EX_LTEQ, expr, shift_expression(sctxt));
+    } else if (token_consume(sctxt->tokenizer, TK_GTEQ)) {
+      expr = new_expr_binop(EX_GTEQ, expr, shift_expression(sctxt));
     } else {
       return expr;
     }
@@ -838,24 +878,24 @@ static Expr *relational_expression(FuncCtxt *fctxt) {
   return expr;
 }
 
-static Expr *equality_expression(FuncCtxt *fctxt) {
-  Expr *expr = relational_expression(fctxt);
+static Expr *equality_expression(ScopeCtxt *sctxt) {
+  Expr *expr = relational_expression(sctxt);
   while (true) {
-    if (token_consume(fctxt->tokenizer, TK_EQEQ)) {
-      expr = new_expr_binop(EX_EQEQ, expr, relational_expression(fctxt));
-    } else if (token_consume(fctxt->tokenizer, TK_NOTEQ)) {
-      expr = new_expr_binop(EX_NOTEQ, expr, relational_expression(fctxt));
+    if (token_consume(sctxt->tokenizer, TK_EQEQ)) {
+      expr = new_expr_binop(EX_EQEQ, expr, relational_expression(sctxt));
+    } else if (token_consume(sctxt->tokenizer, TK_NOTEQ)) {
+      expr = new_expr_binop(EX_NOTEQ, expr, relational_expression(sctxt));
     } else {
       return expr;
     }
   }
 }
 
-static Expr *and_expression(FuncCtxt *fctxt) {
-  Expr *expr = equality_expression(fctxt);
+static Expr *and_expression(ScopeCtxt *sctxt) {
+  Expr *expr = equality_expression(sctxt);
   while (true) {
-    if (token_consume(fctxt->tokenizer, '&')) {
-      expr = new_expr_binop('&', expr, equality_expression(fctxt));
+    if (token_consume(sctxt->tokenizer, '&')) {
+      expr = new_expr_binop('&', expr, equality_expression(sctxt));
     } else {
       return expr;
     }
@@ -863,114 +903,114 @@ static Expr *and_expression(FuncCtxt *fctxt) {
   return expr;
 }
 
-static Expr *exclusive_or_expression(FuncCtxt *fctxt) {
-  Expr *expr = and_expression(fctxt);
+static Expr *exclusive_or_expression(ScopeCtxt *sctxt) {
+  Expr *expr = and_expression(sctxt);
   while (true) {
-    if (token_consume(fctxt->tokenizer, '^')) {
-      expr = new_expr_binop('^', expr, and_expression(fctxt));
+    if (token_consume(sctxt->tokenizer, '^')) {
+      expr = new_expr_binop('^', expr, and_expression(sctxt));
     } else {
       return expr;
     }
   }
   return expr;
 }
-static Expr *inclusive_or_expression(FuncCtxt *fctxt) {
-  Expr *expr = exclusive_or_expression(fctxt);
+static Expr *inclusive_or_expression(ScopeCtxt *sctxt) {
+  Expr *expr = exclusive_or_expression(sctxt);
   while (true) {
-    if (token_consume(fctxt->tokenizer, '|')) {
-      expr = new_expr_binop('|', expr, exclusive_or_expression(fctxt));
+    if (token_consume(sctxt->tokenizer, '|')) {
+      expr = new_expr_binop('|', expr, exclusive_or_expression(sctxt));
     } else {
       return expr;
     }
   }
   return expr;
 }
-static Expr *logical_and_expression(FuncCtxt *fctxt) {
-  Expr *expr = inclusive_or_expression(fctxt);
+static Expr *logical_and_expression(ScopeCtxt *sctxt) {
+  Expr *expr = inclusive_or_expression(sctxt);
   while (true) {
-    if (token_consume(fctxt->tokenizer, TK_LOGAND)) {
-      expr = new_expr_binop(EX_LOGAND, expr, inclusive_or_expression(fctxt));
+    if (token_consume(sctxt->tokenizer, TK_LOGAND)) {
+      expr = new_expr_binop(EX_LOGAND, expr, inclusive_or_expression(sctxt));
     } else {
       return expr;
     }
   }
   return expr;
 }
-static Expr *logical_or_expression(FuncCtxt *fctxt) {
-  Expr *expr = logical_and_expression(fctxt);
+static Expr *logical_or_expression(ScopeCtxt *sctxt) {
+  Expr *expr = logical_and_expression(sctxt);
   while (true) {
-    if (token_consume(fctxt->tokenizer, TK_LOGOR)) {
-      expr = new_expr_binop(EX_LOGOR, expr, logical_and_expression(fctxt));
+    if (token_consume(sctxt->tokenizer, TK_LOGOR)) {
+      expr = new_expr_binop(EX_LOGOR, expr, logical_and_expression(sctxt));
     } else {
       return expr;
     }
   }
   return expr;
 }
-static Expr *conditional_expression(FuncCtxt *fctxt) {
-  Expr *cond = logical_or_expression(fctxt);
-  if (token_consume(fctxt->tokenizer, '?')) {
-    Expr *then_expr = expression(fctxt);
-    token_expect(fctxt->tokenizer, ':');
-    Expr *else_expr = conditional_expression(fctxt);
+static Expr *conditional_expression(ScopeCtxt *sctxt) {
+  Expr *cond = logical_or_expression(sctxt);
+  if (token_consume(sctxt->tokenizer, '?')) {
+    Expr *then_expr = expression(sctxt);
+    token_expect(sctxt->tokenizer, ':');
+    Expr *else_expr = conditional_expression(sctxt);
     return new_expr_cond(cond, then_expr, else_expr);
   }
   return cond;
 }
 
-static Expr *assignment_expression(FuncCtxt *fctxt) {
-  Expr *lhs = conditional_expression(fctxt);
-  if (token_consume(fctxt->tokenizer, '=')) {
-    return new_expr_binop('=', lhs, assignment_expression(fctxt));
+static Expr *assignment_expression(ScopeCtxt *sctxt) {
+  Expr *lhs = conditional_expression(sctxt);
+  if (token_consume(sctxt->tokenizer, '=')) {
+    return new_expr_binop('=', lhs, assignment_expression(sctxt));
   }
-  if (token_consume(fctxt->tokenizer, TK_MUL_ASSIGN)) {
+  if (token_consume(sctxt->tokenizer, TK_MUL_ASSIGN)) {
     return new_expr_binop(
-        '=', lhs, new_expr_binop('*', lhs, assignment_expression(fctxt)));
+        '=', lhs, new_expr_binop('*', lhs, assignment_expression(sctxt)));
   }
-  if (token_consume(fctxt->tokenizer, TK_DIV_ASSIGN)) {
+  if (token_consume(sctxt->tokenizer, TK_DIV_ASSIGN)) {
     return new_expr_binop(
-        '=', lhs, new_expr_binop('/', lhs, assignment_expression(fctxt)));
+        '=', lhs, new_expr_binop('/', lhs, assignment_expression(sctxt)));
   }
-  if (token_consume(fctxt->tokenizer, TK_MOD_ASSIGN)) {
+  if (token_consume(sctxt->tokenizer, TK_MOD_ASSIGN)) {
     return new_expr_binop(
-        '=', lhs, new_expr_binop('%', lhs, assignment_expression(fctxt)));
+        '=', lhs, new_expr_binop('%', lhs, assignment_expression(sctxt)));
   }
-  if (token_consume(fctxt->tokenizer, TK_ADD_ASSIGN)) {
+  if (token_consume(sctxt->tokenizer, TK_ADD_ASSIGN)) {
     return new_expr_binop(
-        '=', lhs, new_expr_binop('+', lhs, assignment_expression(fctxt)));
+        '=', lhs, new_expr_binop('+', lhs, assignment_expression(sctxt)));
   }
-  if (token_consume(fctxt->tokenizer, TK_SUB_ASSIGN)) {
+  if (token_consume(sctxt->tokenizer, TK_SUB_ASSIGN)) {
     return new_expr_binop(
-        '=', lhs, new_expr_binop('-', lhs, assignment_expression(fctxt)));
+        '=', lhs, new_expr_binop('-', lhs, assignment_expression(sctxt)));
   }
-  if (token_consume(fctxt->tokenizer, TK_LSHIFT_ASSIGN)) {
+  if (token_consume(sctxt->tokenizer, TK_LSHIFT_ASSIGN)) {
     return new_expr_binop(
-        '=', lhs, new_expr_binop(EX_LSHIFT, lhs, assignment_expression(fctxt)));
+        '=', lhs, new_expr_binop(EX_LSHIFT, lhs, assignment_expression(sctxt)));
   }
-  if (token_consume(fctxt->tokenizer, TK_RSHIFT_ASSIGN)) {
+  if (token_consume(sctxt->tokenizer, TK_RSHIFT_ASSIGN)) {
     return new_expr_binop(
-        '=', lhs, new_expr_binop(EX_RSHIFT, lhs, assignment_expression(fctxt)));
+        '=', lhs, new_expr_binop(EX_RSHIFT, lhs, assignment_expression(sctxt)));
   }
-  if (token_consume(fctxt->tokenizer, TK_AND_ASSIGN)) {
+  if (token_consume(sctxt->tokenizer, TK_AND_ASSIGN)) {
     return new_expr_binop(
-        '=', lhs, new_expr_binop('&', lhs, assignment_expression(fctxt)));
+        '=', lhs, new_expr_binop('&', lhs, assignment_expression(sctxt)));
   }
-  if (token_consume(fctxt->tokenizer, TK_OR_ASSIGN)) {
+  if (token_consume(sctxt->tokenizer, TK_OR_ASSIGN)) {
     return new_expr_binop(
-        '=', lhs, new_expr_binop('|', lhs, assignment_expression(fctxt)));
+        '=', lhs, new_expr_binop('|', lhs, assignment_expression(sctxt)));
   }
-  if (token_consume(fctxt->tokenizer, TK_XOR_ASSIGN)) {
+  if (token_consume(sctxt->tokenizer, TK_XOR_ASSIGN)) {
     return new_expr_binop(
-        '=', lhs, new_expr_binop('^', lhs, assignment_expression(fctxt)));
+        '=', lhs, new_expr_binop('^', lhs, assignment_expression(sctxt)));
   }
   return lhs;
 }
 
-static Expr *expression(FuncCtxt *fctxt) {
-  Expr *expr = assignment_expression(fctxt);
+static Expr *expression(ScopeCtxt *sctxt) {
+  Expr *expr = assignment_expression(sctxt);
   while (true) {
-    if (token_consume(fctxt->tokenizer, ',')) {
-      expr = new_expr_binop(',', expr, assignment_expression(fctxt));
+    if (token_consume(sctxt->tokenizer, ',')) {
+      expr = new_expr_binop(',', expr, assignment_expression(sctxt));
     } else {
       return expr;
     }
@@ -978,17 +1018,17 @@ static Expr *expression(FuncCtxt *fctxt) {
   return expr;
 }
 
-static Expr *constant_expression(FuncCtxt *fctxt) {
-  return conditional_expression(fctxt);
+static Expr *constant_expression(ScopeCtxt *sctxt) {
+  return conditional_expression(sctxt);
 }
 
-static void declaration(FuncCtxt *fctxt) {
-  Type *base_type = type_specifier(fctxt->tokenizer);
+static void declaration(ScopeCtxt *sctxt) {
+  Type *base_type = type_specifier(sctxt->tokenizer);
   char *name;
   Type *type;
-  declarator(fctxt->tokenizer, base_type, &name, &type);
-  token_expect(fctxt->tokenizer, ';');
-  (void)register_stack(fctxt, name, type);
+  declarator(sctxt->tokenizer, base_type, &name, &type);
+  token_expect(sctxt->tokenizer, ';');
+  (void)register_stack(sctxt, name, type);
 }
 
 static Type *type_specifier(Tokenizer *tokenizer) {
@@ -1080,152 +1120,156 @@ static void direct_declarator(Tokenizer *tokenizer, Type *base_type,
   *placeholder = *base_type;
 }
 
-static Stmt *statement(FuncCtxt *fctxt) {
-  switch (token_peek(fctxt->tokenizer)->ty) {
+static Stmt *statement(ScopeCtxt *sctxt) {
+  switch (token_peek(sctxt->tokenizer)->ty) {
   case TK_IF: {
-    token_succ(fctxt->tokenizer);
-    token_expect(fctxt->tokenizer, '(');
-    Expr *cond = expression(fctxt);
-    token_expect(fctxt->tokenizer, ')');
-    Stmt *then_stmt = statement(fctxt);
+    token_succ(sctxt->tokenizer);
+    token_expect(sctxt->tokenizer, '(');
+    Expr *cond = expression(sctxt);
+    token_expect(sctxt->tokenizer, ')');
+    Stmt *then_stmt = statement(sctxt);
     Stmt *else_stmt = &null_stmt;
-    if (token_consume(fctxt->tokenizer, TK_ELSE)) {
-      else_stmt = statement(fctxt);
+    if (token_consume(sctxt->tokenizer, TK_ELSE)) {
+      else_stmt = statement(sctxt);
     }
     return new_stmt_if(cond, then_stmt, else_stmt);
   }
   case TK_SWITCH: {
-    token_succ(fctxt->tokenizer);
-    token_expect(fctxt->tokenizer, '(');
-    Expr *cond = expression(fctxt);
-    token_expect(fctxt->tokenizer, ')');
+    token_succ(sctxt->tokenizer);
+    token_expect(sctxt->tokenizer, '(');
+    Expr *cond = expression(sctxt);
+    token_expect(sctxt->tokenizer, ')');
     Stmt *stmt = new_stmt_switch(cond, NULL);
-    vec_push(fctxt->switches, stmt);
-    stmt->body = statement(fctxt);
-    vec_pop(fctxt->switches);
+    vec_push(sctxt->func->switches, stmt);
+    stmt->body = statement(sctxt);
+    vec_pop(sctxt->func->switches);
     return stmt;
   }
   case TK_CASE: {
-    token_succ(fctxt->tokenizer);
-    Expr *expr = constant_expression(fctxt);
-    token_expect(fctxt->tokenizer, ':');
+    token_succ(sctxt->tokenizer);
+    Expr *expr = constant_expression(sctxt);
+    token_expect(sctxt->tokenizer, ':');
     Stmt *stmt = new_stmt_case(expr);
-    if (fctxt->switches->len <= 0) {
+    if (sctxt->func->switches->len <= 0) {
       error("switch文中でない箇所にcase文があります");
     }
-    Stmt *switch_stmt = fctxt->switches->data[fctxt->switches->len - 1];
+    Stmt *switch_stmt =
+        sctxt->func->switches->data[sctxt->func->switches->len - 1];
     vec_push(switch_stmt->cases, stmt);
     return stmt;
   }
   case TK_DEFAULT: {
-    token_succ(fctxt->tokenizer);
-    token_expect(fctxt->tokenizer, ':');
+    token_succ(sctxt->tokenizer);
+    token_expect(sctxt->tokenizer, ':');
     Stmt *stmt = new_stmt_default();
-    if (fctxt->switches->len <= 0) {
+    if (sctxt->func->switches->len <= 0) {
       error("switch文中でない箇所にcase文があります");
     }
-    Stmt *switch_expr = fctxt->switches->data[fctxt->switches->len - 1];
+    Stmt *switch_expr =
+        sctxt->func->switches->data[sctxt->func->switches->len - 1];
     switch_expr->default_case = stmt;
     return stmt;
   }
   case TK_WHILE: {
-    token_succ(fctxt->tokenizer);
-    token_expect(fctxt->tokenizer, '(');
-    Expr *cond = expression(fctxt);
-    token_expect(fctxt->tokenizer, ')');
-    Stmt *body = statement(fctxt);
+    token_succ(sctxt->tokenizer);
+    token_expect(sctxt->tokenizer, '(');
+    Expr *cond = expression(sctxt);
+    token_expect(sctxt->tokenizer, ')');
+    Stmt *body = statement(sctxt);
     return new_stmt_while(cond, body);
   }
   case TK_DO: {
-    token_succ(fctxt->tokenizer);
-    Stmt *body = statement(fctxt);
-    token_expect(fctxt->tokenizer, TK_WHILE);
-    token_expect(fctxt->tokenizer, '(');
-    Expr *cond = expression(fctxt);
-    token_expect(fctxt->tokenizer, ')');
-    token_expect(fctxt->tokenizer, ';');
+    token_succ(sctxt->tokenizer);
+    Stmt *body = statement(sctxt);
+    token_expect(sctxt->tokenizer, TK_WHILE);
+    token_expect(sctxt->tokenizer, '(');
+    Expr *cond = expression(sctxt);
+    token_expect(sctxt->tokenizer, ')');
+    token_expect(sctxt->tokenizer, ';');
     return new_stmt_do_while(cond, body);
   }
   case TK_FOR: {
-    token_succ(fctxt->tokenizer);
+    token_succ(sctxt->tokenizer);
     Expr *init = NULL;
     Expr *cond = NULL;
     Expr *inc = NULL;
-    token_expect(fctxt->tokenizer, '(');
-    if (token_peek(fctxt->tokenizer)->ty != ';') {
-      init = expression(fctxt);
+    token_expect(sctxt->tokenizer, '(');
+    if (token_peek(sctxt->tokenizer)->ty != ';') {
+      init = expression(sctxt);
     }
-    token_expect(fctxt->tokenizer, ';');
-    if (token_peek(fctxt->tokenizer)->ty != ';') {
-      cond = expression(fctxt);
+    token_expect(sctxt->tokenizer, ';');
+    if (token_peek(sctxt->tokenizer)->ty != ';') {
+      cond = expression(sctxt);
     }
-    token_expect(fctxt->tokenizer, ';');
-    if (token_peek(fctxt->tokenizer)->ty != ')') {
-      inc = expression(fctxt);
+    token_expect(sctxt->tokenizer, ';');
+    if (token_peek(sctxt->tokenizer)->ty != ')') {
+      inc = expression(sctxt);
     }
-    token_expect(fctxt->tokenizer, ')');
-    Stmt *body = statement(fctxt);
+    token_expect(sctxt->tokenizer, ')');
+    Stmt *body = statement(sctxt);
     return new_stmt_for(init, cond, inc, body);
   }
   case TK_GOTO: {
-    token_succ(fctxt->tokenizer);
-    char *name = token_expect(fctxt->tokenizer, TK_IDENT)->name;
-    token_expect(fctxt->tokenizer, ';');
+    token_succ(sctxt->tokenizer);
+    char *name = token_expect(sctxt->tokenizer, TK_IDENT)->name;
+    token_expect(sctxt->tokenizer, ';');
     return new_stmt_goto(name);
   }
   case TK_BREAK: {
-    token_succ(fctxt->tokenizer);
-    token_expect(fctxt->tokenizer, ';');
+    token_succ(sctxt->tokenizer);
+    token_expect(sctxt->tokenizer, ';');
     return new_stmt(ST_BREAK);
   }
   case TK_CONTINUE: {
-    token_succ(fctxt->tokenizer);
-    token_expect(fctxt->tokenizer, ';');
+    token_succ(sctxt->tokenizer);
+    token_expect(sctxt->tokenizer, ';');
     return new_stmt(ST_CONTINUE);
   }
   case TK_RETURN: {
-    token_succ(fctxt->tokenizer);
+    token_succ(sctxt->tokenizer);
     Expr *expr = NULL;
-    if (token_peek(fctxt->tokenizer)->ty != ';') {
-      expr = expression(fctxt);
+    if (token_peek(sctxt->tokenizer)->ty != ';') {
+      expr = expression(sctxt);
     }
-    token_expect(fctxt->tokenizer, ';');
+    token_expect(sctxt->tokenizer, ';');
     return new_stmt_return(expr);
   }
   case '{': {
-    return compound_statement(fctxt);
+    ScopeCtxt *inner = new_inner_scope_ctxt(sctxt);
+    return compound_statement(inner);
   }
   case ';': {
-    token_succ(fctxt->tokenizer);
+    token_succ(sctxt->tokenizer);
     return &null_stmt;
   }
   case TK_IDENT: {
-    if (token_peek_ahead(fctxt->tokenizer, 1)->ty == ':') {
-      Stmt *stmt = new_stmt_label(fctxt, token_pop(fctxt->tokenizer)->name);
-      token_succ(fctxt->tokenizer);
+    if (token_peek_ahead(sctxt->tokenizer, 1)->ty == ':') {
+      Stmt *stmt =
+          new_stmt_label(sctxt->func, token_pop(sctxt->tokenizer)->name);
+      token_succ(sctxt->tokenizer);
       return stmt;
     }
   }
   // fall through
   default: {
-    Expr *expr = expression(fctxt);
-    token_expect(fctxt->tokenizer, ';');
+    Expr *expr = expression(sctxt);
+    token_expect(sctxt->tokenizer, ';');
     return new_stmt_expr(expr);
   }
   }
 }
 
-static Stmt *compound_statement(FuncCtxt *fctxt) {
-  token_expect(fctxt->tokenizer, '{');
+static Stmt *compound_statement(ScopeCtxt *sctxt) {
+  token_expect(sctxt->tokenizer, '{');
 
   Stmt *stmt = new_stmt(ST_COMPOUND);
   stmt->stmts = new_vector();
-  while (!token_consume(fctxt->tokenizer, '}')) {
-    if (token_is_typename(token_peek(fctxt->tokenizer))) {
-      declaration(fctxt);
+  while (!token_consume(sctxt->tokenizer, '}')) {
+    if (token_is_typename(token_peek(sctxt->tokenizer))) {
+      declaration(sctxt);
       continue;
     }
-    vec_push(stmt->stmts, statement(fctxt));
+    vec_push(stmt->stmts, statement(sctxt));
   }
   return stmt;
 }
@@ -1233,15 +1277,16 @@ static Stmt *compound_statement(FuncCtxt *fctxt) {
 static Function *function_definition(GlobalCtxt *gctxt, Type *type,
                                      char *name) {
   FuncCtxt *fctxt = new_func_ctxt(gctxt);
+  ScopeCtxt *sctxt = new_root_scope_ctxt(fctxt);
   if (!register_global(gctxt, name, type)) {
     error("同じ名前の関数またはグローバル変数が複数回定義されました: %s", name);
   }
   for (int i = 0; i < type->func_param->len; i++) {
     Param *param = type->func_param->data[i];
-    param->stack_var = register_stack(fctxt, param->name, param->type);
+    param->stack_var = register_stack(sctxt, param->name, param->type);
   }
 
-  Stmt *body = compound_statement(fctxt);
+  Stmt *body = compound_statement(sctxt);
 
   Function *func = malloc(sizeof(Function));
   func->name = name;
