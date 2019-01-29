@@ -1,4 +1,5 @@
 #include "gifcc.h"
+#include <assert.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -77,10 +78,8 @@ char *make_label(void) {
 
 static void gen_lval(Expr *expr) {
   if (expr->ty == EX_STACK_VAR) {
-    StackVar *var = get_stack_variable(func_ctxt, expr->name);
-    if (var == NULL) {
-      error("変数が定義されていません: %s", expr->name);
-    }
+    StackVar *var = expr->stack_var;
+    assert(var != NULL);
     printf("  lea rax, [rbp - %d]\n",
            align(func_ctxt->stack_size, 16) - var->offset);
     printf("  push rax\n");
@@ -107,10 +106,8 @@ static void gen_expr(Expr *expr) {
   }
 
   if (expr->ty == EX_STACK_VAR) {
-    StackVar *var = get_stack_variable(func_ctxt, expr->name);
-    if (var == NULL) {
-      error("変数が定義されていません: %s", expr->name);
-    }
+    StackVar *var = expr->stack_var;
+    assert(var != NULL);
     printf("  mov %s, [rbp - %d]\n", r->rax,
            align(func_ctxt->stack_size, 16) - var->offset);
     printf("  push rax\n");
@@ -626,10 +623,8 @@ static void gen_func(Function *func) {
   // 引数をスタックへコピー
   for (int i = 0; i < func->type->func_param->len; i++) {
     Param *param = func->type->func_param->data[i];
-    StackVar *var = get_stack_variable(func, param->name);
-    if (var == NULL) {
-      error("変数が定義されていません: %s", param->name);
-    }
+    StackVar *var = param->stack_var;
+    assert(var != NULL);
     const Reg *r = get_int_reg(var->type);
     printf("  lea rax, [rbp - %d]\n",
            align(func_ctxt->stack_size, 16) - var->offset);

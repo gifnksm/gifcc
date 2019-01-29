@@ -121,11 +121,6 @@ typedef struct Type {
   Vector *func_param;
 } Type;
 
-typedef struct Param {
-  char *name;
-  Type *type;
-} Param;
-
 typedef struct StackVar {
   int offset;
   Type *type;
@@ -135,6 +130,12 @@ typedef struct GlobalVar {
   char *name;
   Type *type;
 } GlobalVar;
+
+typedef struct Param {
+  char *name;
+  Type *type;
+  StackVar *stack_var;
+} Param;
 
 typedef struct StringLiteral {
   char *name;
@@ -155,6 +156,9 @@ typedef struct Expr {
   // EX_CALL: <callee>(<argument>...)
   struct Expr *callee;
   Vector *argument;
+
+  StackVar *stack_var;
+  GlobalVar *global_var;
 
   // EX_CAST: (<val_type>)<expr>
   struct Expr *expr;
@@ -197,7 +201,6 @@ typedef struct Function {
   char *name;
   Type *type;
   int stack_size;
-  Map *stack_map;
   Map *label_map;
   Stmt *body;
 } Function;
@@ -241,10 +244,6 @@ TranslationUnit *parse(const char *input);
 
 char *make_label(void);
 void gen(TranslationUnit *tunit);
-
-static inline StackVar *get_stack_variable(Function *func, char *name) {
-  return map_get(func->stack_map, name);
-}
 
 static inline char *get_label(Function *func, char *name) {
   return map_get(func->label_map, name);

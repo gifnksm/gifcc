@@ -24,7 +24,7 @@ typedef struct FuncCtxt {
 
 static GlobalCtxt *new_global_ctxt(Tokenizer *tokenizer);
 static FuncCtxt *new_func_ctxt(GlobalCtxt *gctxt);
-static bool register_stack(FuncCtxt *fctxt, char *name, Type *type);
+static StackVar *register_stack(FuncCtxt *fctxt, char *name, Type *type);
 static StackVar *get_stack(FuncCtxt *fctxt, char *name);
 static bool register_global(GlobalCtxt *gctxt, char *name, Type *type);
 static GlobalVar *get_global(GlobalCtxt *gctxt, char *name);
@@ -136,12 +136,13 @@ static FuncCtxt *new_func_ctxt(GlobalCtxt *gctxt) {
   return fctxt;
 }
 
-static bool register_stack(FuncCtxt *fctxt, char *name, Type *type) {
+static StackVar *register_stack(FuncCtxt *fctxt, char *name, Type *type) {
   if (type->ty == TY_VOID) {
-    error("void型の変数は定義できません");
+    error("void型の変数は定義できません: %s", name);
   }
   if (map_get(fctxt->stack_map, name)) {
-    return false;
+    error("同じ名前のローカル変数が複数あります: %s", name);
+    return NULL;
   }
 
   StackVar *var = malloc(sizeof(StackVar));
@@ -151,7 +152,7 @@ static bool register_stack(FuncCtxt *fctxt, char *name, Type *type) {
   map_put(fctxt->stack_map, name, var);
   fctxt->stack_size += get_val_size(type);
 
-  return true;
+  return var;
 }
 
 static StackVar *get_stack(FuncCtxt *fctxt, char *name) {
@@ -333,6 +334,11 @@ static Expr *new_expr_ident(FuncCtxt *fctxt, char *name) {
   }
   Expr *expr = new_expr(ty, type);
   expr->name = name;
+  if (svar != NULL) {
+    expr->stack_var = svar;
+  } else {
+    expr->global_var = gvar;
+  }
   return expr;
 }
 
@@ -982,10 +988,7 @@ static void declaration(FuncCtxt *fctxt) {
   Type *type;
   declarator(fctxt->tokenizer, base_type, &name, &type);
   token_expect(fctxt->tokenizer, ';');
-
-  if (!register_stack(fctxt, name, type)) {
-    error("同じ名前の変数が複数回宣言されました: %s", name);
-  }
+  (void)register_stack(fctxt, name, type);
 }
 
 static Type *type_specifier(Tokenizer *tokenizer) {
@@ -1235,9 +1238,7 @@ static Function *function_definition(GlobalCtxt *gctxt, Type *type,
   }
   for (int i = 0; i < type->func_param->len; i++) {
     Param *param = type->func_param->data[i];
-    if (!register_stack(fctxt, param->name, param->type)) {
-      error("同じ名前の引数が複数個あります: %s\n", name);
-    }
+    param->stack_var = register_stack(fctxt, param->name, param->type);
   }
 
   Stmt *body = compound_statement(fctxt);
@@ -1246,7 +1247,6 @@ static Function *function_definition(GlobalCtxt *gctxt, Type *type,
   func->name = name;
   func->type = type;
   func->stack_size = fctxt->stack_size;
-  func->stack_map = fctxt->stack_map;
   func->label_map = fctxt->label_map;
   func->body = body;
 
