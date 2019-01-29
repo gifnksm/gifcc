@@ -431,6 +431,25 @@ static Expr *new_expr_cast(Type *val_type, Expr *operand) {
     return operand;
   }
 
+  if (operand->ty == EX_NUM) {
+    switch (val_type->ty) {
+    case TY_VOID:
+      return operand;
+    case TY_INT:
+      operand->val_type = val_type;
+      operand->val = (int)operand->val;
+      return operand;
+    case TY_CHAR:
+      operand->val_type = val_type;
+      operand->val = (char)operand->val;
+      return operand;
+    case TY_PTR:
+    case TY_ARRAY:
+    case TY_FUNC:
+      break;
+    }
+  }
+
   Expr *expr = new_expr(EX_CAST, val_type);
   expr->expr = operand;
   return expr;
@@ -477,6 +496,21 @@ static Expr *new_expr_binop(int ty, Expr *lhs, Expr *rhs) {
     if (val_type == NULL) {
       binop_type_error(ty, lhs, rhs);
     }
+    assert(val_type->ty == TY_INT);
+    if (lhs->ty == EX_NUM && rhs->ty == EX_NUM) {
+      switch (ty) {
+      case '*':
+        lhs->val *= rhs->val;
+        return lhs;
+      case '/':
+        lhs->val /= rhs->val;
+        return lhs;
+      case '%':
+        lhs->val %= rhs->val;
+        return lhs;
+      }
+      assert(false);
+    }
     break;
   // additive
   case '+':
@@ -503,6 +537,11 @@ static Expr *new_expr_binop(int ty, Expr *lhs, Expr *rhs) {
     val_type = arith_converted(&lhs, &rhs);
     if (val_type == NULL) {
       binop_type_error(ty, lhs, rhs);
+    }
+    assert(val_type->ty == TY_INT);
+    if (lhs->ty == EX_NUM && rhs->ty == EX_NUM) {
+      lhs->val += rhs->val;
+      return lhs;
     }
     break;
   case '-':
@@ -534,6 +573,11 @@ static Expr *new_expr_binop(int ty, Expr *lhs, Expr *rhs) {
     if (val_type == NULL) {
       binop_type_error(ty, lhs, rhs);
     }
+    assert(val_type->ty == TY_INT);
+    if (lhs->ty == EX_NUM && rhs->ty == EX_NUM) {
+      lhs->val -= rhs->val;
+      return lhs;
+    }
     break;
   // shift
   case EX_LSHIFT:
@@ -544,6 +588,18 @@ static Expr *new_expr_binop(int ty, Expr *lhs, Expr *rhs) {
     val_type = integer_promoted(&lhs);
     if (val_type == NULL) {
       binop_type_error(ty, lhs, rhs);
+    }
+    assert(val_type->ty == TY_INT);
+    if (lhs->ty == EX_NUM && rhs->ty == EX_NUM) {
+      switch (ty) {
+      case EX_LSHIFT:
+        lhs->val <<= rhs->val;
+        return lhs;
+      case EX_RSHIFT:
+        lhs->val >>= rhs->val;
+        return lhs;
+      }
+      assert(false);
     }
     break;
 
@@ -563,6 +619,24 @@ static Expr *new_expr_binop(int ty, Expr *lhs, Expr *rhs) {
       binop_type_error(ty, lhs, rhs);
     }
     val_type = arith_converted(&lhs, &rhs);
+    if (val_type == NULL) {
+      binop_type_error(ty, lhs, rhs);
+    }
+    assert(val_type->ty == TY_INT);
+    if (lhs->ty == EX_NUM && rhs->ty == EX_NUM) {
+      switch (ty) {
+      case '&':
+        lhs->val &= rhs->val;
+        return lhs;
+      case '^':
+        lhs->val ^= rhs->val;
+        return lhs;
+      case '|':
+        lhs->val |= rhs->val;
+        return lhs;
+      }
+      assert(false);
+    }
     break;
   case EX_LOGAND:
   case EX_LOGOR:
