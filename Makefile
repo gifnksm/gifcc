@@ -1,7 +1,10 @@
+OUTDIR=./target
+
 CFLAGS=-Wall -Wextra -std=c11 -g3 -D_POSIX_C_SOURCE=201809L -MMD -fdiagnostics-color
+
 SRCS=$(wildcard src/*.c)
-OBJS=$(patsubst src/%.c,target/%.o,$(SRCS))
-DEPS=$(patsubst src/%.c,target/%.d,$(SRCS))
+OBJS=$(patsubst src/%.c,$(OUTDIR)/%.o,$(SRCS))
+DEPS=$(patsubst src/%.c,$(OUTDIR)/%.d,$(SRCS))
 
 ifdef ASAN
 CFLAGS  += -fsanitize=address
@@ -9,13 +12,24 @@ LDFLAGS += -fsanitize=address
 export ASAN_OPTIONS=detect_leaks=0
 endif
 
-target/gifcc: $(OBJS)
+all: $(OUTDIR)/gifcc
+.PHONY: all
+
+$(OUTDIR)/gifcc: $(OBJS)
 	$(CC) $(LDFLAGS) -o $@ $^
 
-test: target/gifcc
-	./target/gifcc --test
-	./test.sh
+test:
 .PHONY: test
+
+test-gifcc: $(OUTDIR)/gifcc
+	$(OUTDIR)/gifcc --test
+.PHONY: test-gifcc
+test:  test-gifcc
+
+test-compile: $(OUTDIR)/gifcc
+	$(MAKE) -C test
+.PHONY: test-compile
+test: test-compile
 
 clean:
 	$(RM) -r target
@@ -28,7 +42,7 @@ format:
 clang-tidy:
 	clang-tidy -fix -fix-errors $(SRCS) -- $(CFLAGS)
 
-target/%.o: src/%.c | target/
+$(OUTDIR)/%.o: src/%.c | $(OUTDIR)/
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 %/:
