@@ -1,0 +1,32 @@
+#!/bin/bash -eu
+
+CURDIR=$(readlink -f $(dirname $0))
+REPOROOT=$(readlink -f ${CURDIR}/..)
+PATH="$(readlink -f ${CURDIR}/../target):${PATH}"
+
+cd ${REPOROOT}
+git submodule update --init
+
+cd ${REPOROOT}/target
+ln -sf gifcc 9cc
+
+cd ${REPOROOT}/external/c-testsuite
+if ! [ -d ./.tmsu ]; then
+    ./scripts/make-search-index
+fi
+
+OUTPUT="${REPOROOT}/target/c-testsuite"
+./single-exec 9cc-x86_64 | tee ${OUTPUT} | grep -v '^#'
+
+PASS="$(grep '^ok' ${OUTPUT} | grep -v '# SKIP' | wc -l)"
+FAIL="$(grep '^not ok' ${OUTPUT} | wc -l)"
+SKIP="$(grep '^ok' ${OUTPUT} | grep '# SKIP' | wc -l)"
+TOTAL=$((PASS + FAIL + SKIP))
+
+echo
+printf "pass  %5d\n" ${PASS}
+printf "fail  %5d\n" ${FAIL}
+printf "skip  %5d\n" ${SKIP}
+echo "-----------"
+printf "total %5d\n" ${TOTAL}
+

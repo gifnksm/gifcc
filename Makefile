@@ -21,6 +21,9 @@ $(OUTDIR)/gifcc: $(OBJS)
 test:
 .PHONY: test
 
+test-full: test
+.PHONY: test-full
+
 test-gifcc: $(OUTDIR)/gifcc
 	$(OUTDIR)/gifcc --test
 .PHONY: test-gifcc
@@ -30,6 +33,11 @@ test-compile: $(OUTDIR)/gifcc
 	$(MAKE) -C test
 .PHONY: test-compile
 test: test-compile
+
+test-c-testsuite: $(OUTDIR)/gifcc
+	./scripts/run_c-testsuite
+.PHONY: test-c-testsuite
+test-full: test-c-testsuite
 
 clean:
 	$(RM) -r target
