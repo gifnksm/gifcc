@@ -2,7 +2,23 @@ version: 2
 jobs:
   build:
     docker:
-      - image: gcc:8
+      - image: base/devel
     steps:
       - checkout
-      - run: echo hello world
+      - run:
+          command: |
+            echo "Defaults        lecture = never" > /etc/sudoers.d/privacy
+            echo "%wheel ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/wheel
+            useradd -m -G wheel -s /bin/bash builder
+      - run:
+          command: |
+            cd /home/builder
+            sudo -u builder curl -O https://aur.archlinux.org/cgit/aur.git/snapshot/tmsu.tar.gz
+            sudo -u builder tar -xvf tmsu.tar.gz
+            cd tmsu
+            pacman -Sy
+            sudo -u builder makepkg -si --noconfirm
+      - run: pacman -S python3 --noconfirm
+      - run: make
+      - run: make test-full
+
