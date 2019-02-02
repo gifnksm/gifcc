@@ -111,6 +111,34 @@ static Token *read_token(const char **p, bool *read_eof) {
       continue;
     }
 
+    // コメントをスキップ
+    if (**p == '/') {
+      if (*(*p + 1) == '/') {
+        (*p) += 2;
+        while (true) {
+          if (**p == '\n' || **p == '\0') {
+            break;
+          }
+          (*p)++;
+        }
+        continue;
+      }
+      if (*(*p + 1) == '*') {
+        (*p) += 2;
+        while (true) {
+          if (**p == '*' && *(*p + 1) == '/') {
+            (*p) += 2;
+            break;
+          }
+          if (**p == '\0') {
+            break;
+          }
+          (*p)++;
+        }
+        continue;
+      }
+    }
+
     Token *token = NULL;
     if ((token = punctuator(p)) != NULL) {
       return token;

@@ -1024,6 +1024,14 @@ void test24(void) {
   check_int(256, (char)64 + (char)64 + (char)64 + (char)64);
   check_int(64, (char)320);
   check_int(256, (char)320 + (char)320 + (char)320 + (char)320);
+
+  test_ok("test24");
+}
+
+void test25(void) {
+  // comment
+  /* comment */
+  test_ok("test25");
 }
 
 int main(void) {
