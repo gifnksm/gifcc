@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stdbool.h>
+#include <stdio.h>
 #include <stdnoreturn.h>
 
 typedef struct {
@@ -13,6 +14,12 @@ typedef struct {
   Vector *keys;
   Vector *vals;
 } Map;
+
+typedef struct {
+  char *data;
+  int capacity;
+  int len;
+} String;
 
 // トークンの型を表す値
 enum {
@@ -211,6 +218,7 @@ typedef struct TranslationUnit {
   Vector *str_list;
 } TranslationUnit;
 
+typedef struct Reader Reader;
 typedef struct Tokenizer Tokenizer;
 
 #define error(fmt, ...) error_raw(__FILE__, __LINE__, fmt, ##__VA_ARGS__)
@@ -226,10 +234,19 @@ void *vec_pop(Vector *vec);
 Map *new_map(void);
 void map_put(Map *map, char *key, void *val);
 void *map_get(Map *map, char *key);
+String *new_string(void);
+void str_push(String *str, char elem);
 void print_string_literal(char *str);
 void runtest(void);
 
-Tokenizer *new_tokenizer(const char *input);
+Reader *new_reader(FILE *file, const char *filename);
+char reader_peek(Reader *reader);
+char reader_peek_ahead(Reader *reader, int n);
+void reader_succ(Reader *reader);
+void reader_succ_n(Reader *reader, int n);
+const char *reader_rest(Reader *reader);
+
+Tokenizer *new_tokenizer(Reader *reader);
 void token_succ(Tokenizer *tokenizer);
 Token *token_peek(Tokenizer *tokenizer);
 Token *token_peek_ahead(Tokenizer *tokenizer, int n);
@@ -240,7 +257,7 @@ Token *token_expect(Tokenizer *tokenizer, int ty);
 
 int get_val_size(Type *ty);
 int get_val_align(Type *ty);
-TranslationUnit *parse(const char *input);
+TranslationUnit *parse(Reader *reader);
 
 char *make_label(void);
 void gen(TranslationUnit *tunit);

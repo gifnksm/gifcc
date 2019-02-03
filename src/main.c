@@ -18,8 +18,8 @@ void error_raw(const char *file, int line, char *fmt, ...) {
   exit(1);
 }
 
-static void output_token(const char *input) {
-  Tokenizer *tokenizer = new_tokenizer(input);
+static void output_token(Reader *reader) {
+  Tokenizer *tokenizer = new_tokenizer(reader);
   for (int pos = 0;; pos++) {
     Token *token = token_pop(tokenizer);
     if (token->ty <= 255) {
@@ -541,30 +541,14 @@ int main(int argc, char **argv) {
     }
   }
 
-  const size_t BUF_SIZE = 10240;
-  size_t read_size = 0;
-  char *input = NULL;
-  while (true) {
-    input = realloc(input, read_size + BUF_SIZE + 1);
-    size_t nread = fread(&input[read_size], 1, BUF_SIZE, file);
-    read_size += nread;
-    if (nread < BUF_SIZE) {
-      if (!feof(file)) {
-        error("ファイルの読み込みに失敗しました: %s", filename);
-      }
-      assert(nread <= BUF_SIZE);
-      input[read_size] = '\0';
-      read_size++;
-      break;
-    }
-  }
+  Reader *reader = new_reader(file, filename);
 
   if (output_mode == OUTPUT_TOKEN) {
-    output_token(input);
+    output_token(reader);
     return 0;
   }
 
-  TranslationUnit *tunit = parse(input);
+  TranslationUnit *tunit = parse(reader);
 
   if (output_mode == OUTPUT_AST) {
     output_ast(tunit);

@@ -6,39 +6,40 @@
 #include <string.h>
 
 struct Tokenizer {
-  const char *input;
+  Reader *reader;
   Token *current;
   Token *next;
   bool read_eof;
 };
 
-static Token *read_token(const char **p, bool *read_eof);
-static Token *new_token(int ty, const char *input);
-static Token *new_token_num(const char *input, int val);
-static Token *new_token_ident(const char *input, char *name);
-static Token *punctuator(const char **input);
-static Token *identifier_or_keyword(const char **input);
-static Token *constant(const char **input);
-static Token *integer_constant(const char **input);
-static Token *hexadecimal_constant(const char **input);
-static Token *octal_constant(const char **input);
-static Token *decimal_constant(const char **input);
-static Token *character_constant(const char **input);
-static Token *string_literal(const char **input);
-static int c_char(const char **input);
+static Token *read_token(Reader *reader, bool *read_eof);
+static Token *new_token(int ty, Reader *reader);
+static Token *new_token_num(Reader *reader, int val);
+static Token *new_token_ident(Reader *reader, char *name);
+static Token *new_token_str(Reader *reader, char *str);
+static Token *punctuator(Reader *reader);
+static Token *identifier_or_keyword(Reader *reader);
+static Token *constant(Reader *reader);
+static Token *integer_constant(Reader *reader);
+static Token *hexadecimal_constant(Reader *reader);
+static Token *octal_constant(Reader *reader);
+static Token *decimal_constant(Reader *reader);
+static Token *character_constant(Reader *reader);
+static Token *string_literal(Reader *reader);
+static char c_char(Reader *reader);
 
-Tokenizer *new_tokenizer(const char *input) {
+Tokenizer *new_tokenizer(Reader *reader) {
   Tokenizer *tokenizer = malloc(sizeof(Tokenizer));
-  tokenizer->input = input;
+  tokenizer->reader = reader;
   tokenizer->read_eof = false;
-  tokenizer->current = read_token(&tokenizer->input, &tokenizer->read_eof);
-  tokenizer->next = read_token(&tokenizer->input, &tokenizer->read_eof);
+  tokenizer->current = read_token(tokenizer->reader, &tokenizer->read_eof);
+  tokenizer->next = read_token(tokenizer->reader, &tokenizer->read_eof);
   return tokenizer;
 }
 
 void token_succ(Tokenizer *tokenizer) {
   tokenizer->current = tokenizer->next;
-  tokenizer->next = read_token(&tokenizer->input, &tokenizer->read_eof);
+  tokenizer->next = read_token(tokenizer->reader, &tokenizer->read_eof);
 }
 
 Token *token_peek(Tokenizer *tokenizer) { return tokenizer->current; }
@@ -103,82 +104,86 @@ static inline int hex(int c) {
   return (c - 'A') + 0xa;
 }
 
-static Token *read_token(const char **p, bool *read_eof) {
-  while (**p != '\0') {
+static Token *read_token(Reader *reader, bool *read_eof) {
+  char ch;
+  while ((ch = reader_peek(reader)) != '\0') {
     // 空白文字をスキップ
-    if (isspace(**p)) {
-      (*p)++;
+    if (isspace(ch)) {
+      reader_succ(reader);
       continue;
     }
 
     // コメントをスキップ
-    if (**p == '/') {
-      if (*(*p + 1) == '/') {
-        (*p) += 2;
+    if (ch == '/') {
+      char ch2 = reader_peek_ahead(reader, 1);
+      if (ch2 == '/') {
+        reader_succ_n(reader, 2);
         while (true) {
-          if (**p == '\n' || **p == '\0') {
+          char ch = reader_peek(reader);
+          if (ch == '\n' || ch == '\0') {
             break;
           }
-          (*p)++;
+          reader_succ(reader);
         }
         continue;
       }
-      if (*(*p + 1) == '*') {
-        (*p) += 2;
+      if (ch2 == '*') {
+        reader_succ_n(reader, 2);
         while (true) {
-          if (**p == '*' && *(*p + 1) == '/') {
-            (*p) += 2;
+          if (reader_peek(reader) == '*' &&
+              reader_peek_ahead(reader, 1) == '/') {
+            reader_succ_n(reader, 2);
             break;
           }
-          if (**p == '\0') {
+          if (reader_peek(reader) == '\0') {
             break;
           }
-          (*p)++;
+          reader_succ(reader);
         }
         continue;
       }
     }
 
     Token *token = NULL;
-    if ((token = punctuator(p)) != NULL) {
+    if ((token = punctuator(reader)) != NULL) {
       return token;
     }
-    if ((token = identifier_or_keyword(p)) != NULL) {
+    if ((token = identifier_or_keyword(reader)) != NULL) {
       return token;
     }
-    if ((token = constant(p)) != NULL) {
+    if ((token = constant(reader)) != NULL) {
       return token;
     }
-    if ((token = string_literal(p)) != NULL) {
+    if ((token = string_literal(reader)) != NULL) {
       return token;
     }
 
-    error("トークナイズできません: %s", *p);
+    error("トークナイズできません: %s", reader_rest(reader));
   }
 
   if (!*read_eof) {
     *read_eof = true;
-    return new_token(TK_EOF, *p);
+    return new_token(TK_EOF, reader);
   }
   return NULL;
 }
 
-static Token *new_token(int ty, const char *input) {
+static Token *new_token(int ty, Reader *reader) {
   Token *token = malloc(sizeof(Token));
   token->ty = ty;
-  token->input = input;
+  token->input = reader_rest(reader);
   return token;
 }
 
-static Token *new_token_num(const char *input, int val) {
+static Token *new_token_num(Reader *reader, int val) {
   Token *token = malloc(sizeof(Token));
   token->ty = TK_NUM;
-  token->input = input;
+  token->input = reader_rest(reader);
   token->val = val;
   return token;
 }
 
-static Token *new_token_ident(const char *input, char *name) {
+static Token *new_token_ident(Reader *reader, char *name) {
   Token *token = malloc(sizeof(Token));
   if (strcmp(name, "void") == 0) {
     token->ty = TK_VOID;
@@ -213,181 +218,180 @@ static Token *new_token_ident(const char *input, char *name) {
   } else {
     token->ty = TK_IDENT;
   }
-  token->input = input;
+  token->input = reader_rest(reader);
   token->name = name;
   return token;
 }
 
-static Token *new_token_str(const char *input, char *str) {
+static Token *new_token_str(Reader *reader, char *str) {
   Token *token = malloc(sizeof(Token));
   token->ty = TK_STR;
-  token->input = input;
+  token->input = reader_rest(reader);
   token->str = str;
   return token;
 }
 
-static Token *punctuator(const char **input) {
+static Token *punctuator(Reader *reader) {
   Token *token = NULL;
-  const char *p = *input;
-  switch (*p) {
+  switch (reader_peek(reader)) {
   case '=': {
-    if (*(p + 1) == '=') {
-      token = new_token(TK_EQEQ, p);
-      p += 2;
+    if (reader_peek_ahead(reader, 1) == '=') {
+      token = new_token(TK_EQEQ, reader);
+      reader_succ_n(reader, 2);
       break;
     }
-    token = new_token(*p, p);
-    p++;
+    token = new_token(reader_peek(reader), reader);
+    reader_succ(reader);
     break;
   }
   case '!': {
-    if (*(p + 1) == '=') {
-      token = new_token(TK_NOTEQ, p);
-      p += 2;
+    if (reader_peek_ahead(reader, 1) == '=') {
+      token = new_token(TK_NOTEQ, reader);
+      reader_succ_n(reader, 2);
       break;
     }
-    token = new_token(*p, p);
-    p++;
+    token = new_token(reader_peek(reader), reader);
+    reader_succ(reader);
     break;
   }
   case '<': {
-    if (*(p + 1) == '<') {
-      if (*(p + 2) == '=') {
-        token = new_token(TK_LSHIFT_ASSIGN, p);
-        p += 3;
+    if (reader_peek_ahead(reader, 1) == '<') {
+      if (reader_peek_ahead(reader, 2) == '=') {
+        token = new_token(TK_LSHIFT_ASSIGN, reader);
+        reader_succ_n(reader, 3);
         break;
       }
-      token = new_token(TK_LSHIFT, p);
-      p += 2;
+      token = new_token(TK_LSHIFT, reader);
+      reader_succ_n(reader, 2);
       break;
     }
-    if (*(p + 1) == '=') {
-      token = new_token(TK_LTEQ, p);
-      p += 2;
+    if (reader_peek_ahead(reader, 1) == '=') {
+      token = new_token(TK_LTEQ, reader);
+      reader_succ_n(reader, 2);
       break;
     }
-    token = new_token(*p, p);
-    p++;
+    token = new_token(reader_peek(reader), reader);
+    reader_succ(reader);
     break;
   }
   case '>': {
-    if (*(p + 1) == '>') {
-      if (*(p + 2) == '=') {
-        token = new_token(TK_RSHIFT_ASSIGN, p);
-        p += 3;
+    if (reader_peek_ahead(reader, 1) == '>') {
+      if (reader_peek_ahead(reader, 2) == '=') {
+        token = new_token(TK_RSHIFT_ASSIGN, reader);
+        reader_succ_n(reader, 3);
         break;
       }
-      token = new_token(TK_RSHIFT, p);
-      p += 2;
+      token = new_token(TK_RSHIFT, reader);
+      reader_succ_n(reader, 2);
       break;
     }
-    if (*(p + 1) == '=') {
-      token = new_token(TK_GTEQ, p);
-      p += 2;
+    if (reader_peek_ahead(reader, 1) == '=') {
+      token = new_token(TK_GTEQ, reader);
+      reader_succ_n(reader, 2);
       break;
     }
-    token = new_token(*p, p);
-    p++;
+    token = new_token(reader_peek(reader), reader);
+    reader_succ(reader);
     break;
   }
   case '&': {
-    if (*(p + 1) == '&') {
-      token = new_token(TK_LOGAND, p);
-      p += 2;
+    if (reader_peek_ahead(reader, 1) == '&') {
+      token = new_token(TK_LOGAND, reader);
+      reader_succ_n(reader, 2);
       break;
     }
-    if (*(p + 1) == '=') {
-      token = new_token(TK_AND_ASSIGN, p);
-      p += 2;
+    if (reader_peek_ahead(reader, 1) == '=') {
+      token = new_token(TK_AND_ASSIGN, reader);
+      reader_succ_n(reader, 2);
       break;
     }
-    token = new_token(*p, p);
-    p++;
+    token = new_token(reader_peek(reader), reader);
+    reader_succ(reader);
     break;
   }
   case '|': {
-    if (*(p + 1) == '|') {
-      token = new_token(TK_LOGOR, p);
-      p += 2;
+    if (reader_peek_ahead(reader, 1) == '|') {
+      token = new_token(TK_LOGOR, reader);
+      reader_succ_n(reader, 2);
       break;
     }
-    if (*(p + 1) == '=') {
-      token = new_token(TK_OR_ASSIGN, p);
-      p += 2;
+    if (reader_peek_ahead(reader, 1) == '=') {
+      token = new_token(TK_OR_ASSIGN, reader);
+      reader_succ_n(reader, 2);
       break;
     }
-    token = new_token(*p, p);
-    p++;
+    token = new_token(reader_peek(reader), reader);
+    reader_succ(reader);
     break;
   }
   case '^': {
-    if (*(p + 1) == '=') {
-      token = new_token(TK_XOR_ASSIGN, p);
-      p += 2;
+    if (reader_peek_ahead(reader, 1) == '=') {
+      token = new_token(TK_XOR_ASSIGN, reader);
+      reader_succ_n(reader, 2);
       break;
     }
-    token = new_token(*p, p);
-    p++;
+    token = new_token(reader_peek(reader), reader);
+    reader_succ(reader);
     break;
   }
   case '+': {
-    if (*(p + 1) == '+') {
-      token = new_token(TK_INC, p);
-      p += 2;
+    if (reader_peek_ahead(reader, 1) == '+') {
+      token = new_token(TK_INC, reader);
+      reader_succ_n(reader, 2);
       break;
     }
-    if (*(p + 1) == '=') {
-      token = new_token(TK_ADD_ASSIGN, p);
-      p += 2;
+    if (reader_peek_ahead(reader, 1) == '=') {
+      token = new_token(TK_ADD_ASSIGN, reader);
+      reader_succ_n(reader, 2);
       break;
     }
-    token = new_token(*p, p);
-    p++;
+    token = new_token(reader_peek(reader), reader);
+    reader_succ(reader);
     break;
   }
   case '-': {
-    if (*(p + 1) == '-') {
-      token = new_token(TK_DEC, p);
-      p += 2;
+    if (reader_peek_ahead(reader, 1) == '-') {
+      token = new_token(TK_DEC, reader);
+      reader_succ_n(reader, 2);
       break;
     }
-    if (*(p + 1) == '=') {
-      token = new_token(TK_SUB_ASSIGN, p);
-      p += 2;
+    if (reader_peek_ahead(reader, 1) == '=') {
+      token = new_token(TK_SUB_ASSIGN, reader);
+      reader_succ_n(reader, 2);
       break;
     }
-    token = new_token(*p, p);
-    p++;
+    token = new_token(reader_peek(reader), reader);
+    reader_succ(reader);
     break;
   }
   case '*': {
-    if (*(p + 1) == '=') {
-      token = new_token(TK_MUL_ASSIGN, p);
-      p += 2;
+    if (reader_peek_ahead(reader, 1) == '=') {
+      token = new_token(TK_MUL_ASSIGN, reader);
+      reader_succ_n(reader, 2);
       break;
     }
-    token = new_token(*p, p);
-    p++;
+    token = new_token(reader_peek(reader), reader);
+    reader_succ(reader);
     break;
   }
   case '/': {
-    if (*(p + 1) == '=') {
-      token = new_token(TK_DIV_ASSIGN, p);
-      p += 2;
+    if (reader_peek_ahead(reader, 1) == '=') {
+      token = new_token(TK_DIV_ASSIGN, reader);
+      reader_succ_n(reader, 2);
       break;
     }
-    token = new_token(*p, p);
-    p++;
+    token = new_token(reader_peek(reader), reader);
+    reader_succ(reader);
     break;
   }
   case '%': {
-    if (*(p + 1) == '=') {
-      token = new_token(TK_MOD_ASSIGN, p);
-      p += 2;
+    if (reader_peek_ahead(reader, 1) == '=') {
+      token = new_token(TK_MOD_ASSIGN, reader);
+      reader_succ_n(reader, 2);
       break;
     }
-    token = new_token(*p, p);
-    p++;
+    token = new_token(reader_peek(reader), reader);
+    reader_succ(reader);
     break;
   }
   case '(':
@@ -401,240 +405,218 @@ static Token *punctuator(const char **input) {
   case '[':
   case ']':
   case ',': {
-    token = new_token(*p, p);
-    p++;
+    token = new_token(reader_peek(reader), reader);
+    reader_succ(reader);
     break;
   }
   }
 
-  *input = p;
   return token;
 }
 
-static Token *identifier_or_keyword(const char **input) {
-  Token *token = NULL;
-  const char *p = *input;
-  if (('a' <= *p && *p <= 'z') || ('A' <= *p && *p <= 'Z') || *p == '_') {
-    const char *q = p;
-    while (('a' <= *q && *q <= 'z') || ('A' <= *q && *q <= 'Z') || *q == '_' ||
-           ('0' <= *q && *q <= '9')) {
-      q++;
+static Token *identifier_or_keyword(Reader *reader) {
+  char ch = reader_peek(reader);
+  if ((ch < 'a' || 'z' < ch) && (ch < 'A' || 'Z' < ch) && ch != '_') {
+    return NULL;
+  }
+
+  String *str = new_string();
+  str_push(str, ch);
+  reader_succ(reader);
+
+  while (true) {
+    ch = reader_peek(reader);
+    if ((ch < 'a' || 'z' < ch) && (ch < 'A' || 'Z' < ch) && ch != '_' &&
+        (ch < '0' || '9' < ch)) {
+      break;
     }
-    token = new_token_ident(p, strndup(p, q - p));
-    p = q;
+    str_push(str, ch);
+    reader_succ(reader);
   }
+  str_push(str, '\0');
 
-  *input = p;
-  return token;
+  return new_token_ident(reader, str->data);
 }
 
-static Token *constant(const char **input) {
+static Token *constant(Reader *reader) {
   Token *token = NULL;
-  const char *p = *input;
 
-  if ((token = integer_constant(&p)) != NULL) {
-    goto SKIP;
+  if ((token = integer_constant(reader)) != NULL) {
+    return token;
   }
-  if ((token = character_constant(&p)) != NULL) {
-    goto SKIP;
+  if ((token = character_constant(reader)) != NULL) {
+    return token;
   }
 
-SKIP:
-  *input = p;
-  return token;
+  return NULL;
 }
 
-static Token *integer_constant(const char **input) {
+static Token *integer_constant(Reader *reader) {
   Token *token = NULL;
-  const char *p = *input;
-  if ((token = hexadecimal_constant(&p)) != NULL) {
-    goto SKIP;
+  if ((token = hexadecimal_constant(reader)) != NULL) {
+    return token;
   }
-  if ((token = octal_constant(&p)) != NULL) {
-    goto SKIP;
+  if ((token = octal_constant(reader)) != NULL) {
+    return token;
   }
-  if ((token = decimal_constant(&p)) != NULL) {
-    goto SKIP;
+  if ((token = decimal_constant(reader)) != NULL) {
+    return token;
   }
-
-SKIP:
-  *input = p;
-  return token;
+  return NULL;
 }
 
-static Token *hexadecimal_constant(const char **input) {
-  Token *token = NULL;
-  const char *p = *input;
-  if ((*p != '0') || ((*(p + 1) != 'x') && (*(p + 1)) != 'X')) {
+static Token *hexadecimal_constant(Reader *reader) {
+  char ch0 = reader_peek(reader);
+  char ch1 = reader_peek_ahead(reader, 1);
+  if ((ch0 != '0') || (ch1 != 'x' && ch1 != 'X')) {
     return NULL;
   }
-  p += 2;
+  reader_succ_n(reader, 2);
 
   int val = 0;
 
-  const char *q = p;
-  for (; isxdigit(*q); q++) {
-    val = val * 0x10 + hex(*q);
-  }
-
-  token = new_token_num(p, val);
-  p = q;
-
-  *input = p;
-  return token;
-}
-
-static Token *octal_constant(const char **input) {
-  Token *token = NULL;
-  const char *p = *input;
-  if (*p != '0') {
-    return NULL;
-  }
-  p += 1;
-
-  int val = 0;
-
-  const char *q = p;
-  for (; '0' <= *q && *q <= '7'; q++) {
-    val = val * 010 + (*q - '0');
-  }
-
-  token = new_token_num(p, val);
-  p = q;
-
-  *input = p;
-  return token;
-}
-
-static Token *decimal_constant(const char **input) {
-  Token *token = NULL;
-  const char *p = *input;
-  if (!isdigit(*p)) {
-    return NULL;
-  }
-  int val = 0;
-
-  const char *q = p;
-  for (; isdigit(*q); q++) {
-    val = val * 10 + (*q - '0');
-  }
-
-  token = new_token_num(p, val);
-  p = q;
-
-  *input = p;
-  return token;
-}
-
-static Token *character_constant(const char **input) {
-  Token *token = NULL;
-  const char *p = *input;
-  if (*p != '\'') {
-    return NULL;
-  }
-  p++;
-
-  token = new_token_num(p, c_char(&p));
-
-  if (*p != '\'') {
-    error("'\\'' がありません: %s", *input);
-  }
-  p++;
-
-  *input = p;
-  return token;
-}
-
-static Token *string_literal(const char **input) {
-  Token *token = NULL;
-  const char *p = *input;
-  if (*p != '"') {
-    return NULL;
-  }
-  const char *q = p;
-  q++;
-  int alloc = 0;
-  int len = 0;
-  char *str = NULL;
-  while (*q != '"' && *q != '\0') {
-    if (len == alloc) {
-      alloc = (alloc == 0) ? 8 : alloc * 2;
-      str = realloc(str, alloc);
+  while (true) {
+    char ch = reader_peek(reader);
+    if (!isxdigit(ch)) {
+      break;
     }
-    str[len] = c_char(&q);
-    len++;
+    val = val * 0x10 + hex(ch);
+    reader_succ(reader);
   }
-  if (len == alloc) {
-    alloc = (alloc == 0) ? 8 : alloc * 2;
-    str = realloc(str, alloc);
-  }
-  str[len] = '\0';
 
-  if (*q != '"') {
-    error("文字列の終端がありません: %s", p);
-  }
-  q++;
-  token = new_token_str(p, str);
-  p = q;
+  return new_token_num(reader, val);
+}
 
-  *input = p;
+static Token *octal_constant(Reader *reader) {
+  if (reader_peek(reader) != '0') {
+    return NULL;
+  }
+  reader_succ(reader);
+
+  int val = 0;
+
+  while (true) {
+    char ch = reader_peek(reader);
+    if (ch < '0' || '7' < ch) {
+      break;
+    }
+    val = val * 010 + (ch - '0');
+    reader_succ(reader);
+  }
+
+  return new_token_num(reader, val);
+}
+
+static Token *decimal_constant(Reader *reader) {
+  if (!isdigit(reader_peek(reader))) {
+    return NULL;
+  }
+  int val = 0;
+
+  while (true) {
+    char ch = reader_peek(reader);
+    if (!isdigit(ch)) {
+      break;
+    }
+    val = val * 10 + (ch - '0');
+    reader_succ(reader);
+  }
+
+  return new_token_num(reader, val);
+}
+
+static Token *character_constant(Reader *reader) {
+  Token *token = NULL;
+  if (reader_peek(reader) != '\'') {
+    return NULL;
+  }
+  reader_succ(reader);
+
+  token = new_token_num(reader, c_char(reader));
+
+  if (reader_peek(reader) != '\'') {
+    error("'\\'' がありません: %s", reader_rest(reader));
+  }
+  reader_succ(reader);
+
   return token;
 }
 
-static int c_char(const char **input) {
-  int val = 0;
-  const char *p = *input;
-  if (*p == '\'') {
-    error("空の文字リテラルです: %s", p);
+static Token *string_literal(Reader *reader) {
+  Token *token = NULL;
+  if (reader_peek(reader) != '"') {
+    return NULL;
   }
-  if (*p == '\n' || *p == '\r') {
-    error("改行文字を文字リテラル中に含めることはできません: %s", p);
+  reader_succ(reader);
+
+  String *str = new_string();
+  while (true) {
+    char ch = reader_peek(reader);
+    if (ch == '"' || ch == '\0') {
+      break;
+    }
+    str_push(str, c_char(reader));
+  }
+  str_push(str, '\0');
+
+  if (reader_peek(reader) != '"') {
+    error("文字列の終端がありません: %s", reader_rest(reader));
+  }
+  reader_succ(reader);
+  token = new_token_str(reader, str->data);
+
+  return token;
+}
+
+static char c_char(Reader *reader) {
+  int val = 0;
+  char ch = reader_peek(reader);
+  if (ch == '\'') {
+    error("空の文字リテラルです: %s", reader_rest(reader));
+  }
+  if (ch == '\n' || ch == '\r') {
+    error("改行文字を文字リテラル中に含めることはできません: %s",
+          reader_rest(reader));
   }
 
-  if (*p == '\\') {
-    switch (*(p + 1)) {
+  if (ch == '\\') {
+    const char *p = reader_rest(reader);
+    char ch1 = reader_peek_ahead(reader, 1);
+    switch (ch1) {
     case '\'':
     case '\"':
     case '\?':
     case '\\': {
-      val = (*(p + 1));
-      p += 2;
-      goto SKIP;
+      reader_succ_n(reader, 2);
+      return ch1;
     }
     case 'a': {
-      val = '\a';
-      p += 2;
-      goto SKIP;
+      reader_succ_n(reader, 2);
+      return '\a';
     }
     case 'b': {
-      val = '\b';
-      p += 2;
-      goto SKIP;
+      reader_succ_n(reader, 2);
+      return '\b';
     }
     case 'f': {
-      val = '\f';
-      p += 2;
-      goto SKIP;
+      reader_succ_n(reader, 2);
+      return '\f';
     }
     case 'n': {
-      val = '\n';
-      p += 2;
-      goto SKIP;
+      reader_succ_n(reader, 2);
+      return '\n';
     }
     case 'r': {
-      val = '\r';
-      p += 2;
-      goto SKIP;
+      reader_succ_n(reader, 2);
+      return '\r';
     }
     case 't': {
-      val = '\t';
-      p += 2;
-      goto SKIP;
+      reader_succ_n(reader, 2);
+      return '\t';
     }
     case 'v': {
-      val = '\v';
-      p += 2;
-      goto SKIP;
+      reader_succ_n(reader, 2);
+      return '\v';
     }
 
     case 'x': {
@@ -645,8 +627,8 @@ static int c_char(const char **input) {
       if (q == p + 2) {
         error("空の16進文字リテラルです: %s", p);
       }
-      p = q;
-      goto SKIP;
+      reader_succ_n(reader, q - p);
+      return val;
     }
     }
 
@@ -655,18 +637,13 @@ static int c_char(const char **input) {
       val = 010 * val + (*q - '0');
     }
     if (q - p >= 2) {
-      p = q;
-      goto SKIP;
+      reader_succ_n(reader, q - p);
+      return val;
     }
 
     error("不明なエスケープシーケンスです: %s", p);
   }
 
-  val = *p;
-  p++;
-  goto SKIP;
-
-SKIP:
-  *input = p;
-  return val;
+  reader_succ(reader);
+  return ch;
 }

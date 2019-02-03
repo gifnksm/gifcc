@@ -6,15 +6,15 @@
 
 Vector *new_vector(void) {
   Vector *vec = malloc(sizeof(Vector));
-  vec->data = malloc(sizeof(void *) * 16);
-  vec->capacity = 16;
+  vec->data = NULL;
+  vec->capacity = 0;
   vec->len = 0;
   return vec;
 }
 
 void vec_push(Vector *vec, void *elem) {
   if (vec->capacity == vec->len) {
-    vec->capacity *= 2;
+    vec->capacity = (vec->capacity == 0) ? 16 : vec->capacity * 2;
     vec->data = realloc(vec->data, sizeof(void *) * vec->capacity);
   }
   vec->data[vec->len++] = elem;
@@ -41,6 +41,21 @@ void *map_get(Map *map, char *key) {
     }
   }
   return NULL;
+}
+
+String *new_string(void) {
+  String *str = malloc(sizeof(String));
+  str->data = NULL;
+  str->capacity = 0;
+  str->len = 0;
+  return str;
+}
+void str_push(String *str, char elem) {
+  if (str->capacity == str->len) {
+    str->capacity = (str->capacity == 0) ? 16 : str->capacity * 2;
+    str->data = realloc(str->data, sizeof(void *) * str->capacity);
+  }
+  str->data[str->len++] = elem;
 }
 
 void print_string_literal(char *str) {

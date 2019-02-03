@@ -118,8 +118,8 @@ static Stmt null_stmt = {
     .ty = ST_NULL,
 };
 
-TranslationUnit *parse(const char *input) {
-  Tokenizer *tokenizer = new_tokenizer(input);
+TranslationUnit *parse(Reader *reader) {
+  Tokenizer *tokenizer = new_tokenizer(reader);
   return translation_unit(tokenizer);
 }
 
