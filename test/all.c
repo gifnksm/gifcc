@@ -21,7 +21,7 @@ void test01(void) {
   check_int(15, 5 * (9 - 6));
   check_int(4, (3 + 5) / 2);
 
-  test_ok("test01");
+  test_ok(__func__);
 }
 
 void test02_01(void) {
@@ -51,7 +51,7 @@ void test02(void) {
   check_int(10, 10 + (2 != 1 * 2));
   check_int(12, 10 + ((2 != 1) * 2));
 
-  test_ok("test02");
+  test_ok(__func__);
 }
 
 void test03_01(void) {
@@ -259,7 +259,7 @@ void test03(void) {
   test03_06();
   test03_07();
 
-  test_ok("test03");
+  test_ok(__func__);
 }
 
 void test04(void) {
@@ -297,7 +297,7 @@ void test04(void) {
   check_int(0, !3);
   check_int(1, !0);
 
-  test_ok("test04");
+  test_ok(__func__);
 }
 
 void test05(void) {
@@ -340,7 +340,7 @@ void test05(void) {
   b = a--;
   check_int(12, 10 * a + b);
 
-  test_ok("test05");
+  test_ok(__func__);
 }
 
 void test06(void) {
@@ -352,7 +352,7 @@ void test06(void) {
   ;
   check_int(3, 3);
 
-  test_ok("test06");
+  test_ok(__func__);
 }
 
 void test07(void) {
@@ -536,7 +536,7 @@ void test07(void) {
   }
   check_int(30, s);
 
-  test_ok("test07");
+  test_ok(__func__);
 }
 
 void test08(void) {
@@ -588,7 +588,7 @@ void test08(void) {
   *p += 3;
   check_int(8, a);
 
-  test_ok("test08");
+  test_ok(__func__);
 }
 
 int test09_01(int n) {
@@ -649,7 +649,7 @@ void test09(void) {
   test09_02();
   test09_03();
 
-  test_ok("test09");
+  test_ok(__func__);
 }
 
 void test10(void) {
@@ -668,7 +668,7 @@ void test10(void) {
   check_int(8, '\10');
   check_int(8, '\010');
 
-  test_ok("test10");
+  test_ok(__func__);
 }
 
 int test11_01(void) {
@@ -678,7 +678,7 @@ int test11_01(void) {
 }
 void test11(void) {
   check_int(3, test11_01());
-  test_ok("test11");
+  test_ok(__func__);
 }
 
 int ret3() { return 3; }
@@ -711,7 +711,7 @@ void test12(void) {
   check_int(89, fib(11));
   check_int(144, fib(12));
 
-  test_ok("test12");
+  test_ok(__func__);
 }
 
 int add6(int a, int b, int c, int d, int e, int f) {
@@ -742,7 +742,7 @@ void test13(void) {
   check_int(1234567890, digits10(1, 2, 3, 4, 5, 6, 7, 8, 9, 0));
   check_int(45, add10(1, 2, 3, 4, 5, 6, 7, 8, 9, 0));
 
-  test_ok("test13");
+  test_ok(__func__);
 }
 
 void test14(void) {
@@ -751,7 +751,7 @@ void test14(void) {
   int **c;
   int ***d;
 
-  test_ok("test14");
+  test_ok(__func__);
 }
 
 void test15(void) {
@@ -812,7 +812,7 @@ void test15(void) {
   i += (int **)p;
   check_int(50, i);
 
-  test_ok("test15");
+  test_ok(__func__);
 }
 
 void test16(void) {
@@ -832,7 +832,7 @@ void test16(void) {
 
   check_int(2, &a[2] - &a[0]);
 
-  test_ok("test16");
+  test_ok(__func__);
 }
 
 int *test17_01(int *x) { return x + 1; }
@@ -853,7 +853,7 @@ void test17(void) {
   q = test17_03(p);
   check_int(1, p == q);
 
-  test_ok("test17");
+  test_ok(__func__);
 }
 
 int test18_g;
@@ -882,7 +882,7 @@ void test18(void) {
   check_int(4, test18_h[1]);
   check_int(9, test18_h[2]);
 
-  test_ok("test18");
+  test_ok(__func__);
 }
 
 void test19(void) {
@@ -901,7 +901,7 @@ void test19(void) {
 
   check_int(1, &x[1] - &x[0]);
 
-  test_ok("test19");
+  test_ok(__func__);
 }
 
 void test20(void) {
@@ -911,7 +911,7 @@ void test20(void) {
 
   printf("%s %d\n", "abc", 456);
 
-  test_ok("test20");
+  test_ok(__func__);
 }
 
 void test21(void) {
@@ -942,7 +942,7 @@ void test21(void) {
     }
   }
 
-  test_ok("test21");
+  test_ok(__func__);
 }
 
 int test22_g;
@@ -968,7 +968,7 @@ void test22(void) {
   f(3);
   check_int(3, test22_g);
 
-  test_ok("test22");
+  test_ok(__func__);
 }
 
 void test23_fun(int a, int b) {
@@ -1007,7 +1007,7 @@ void test23_fun(int a, int b) {
 void test23(void) {
   test23_fun(1, 2);
 
-  test_ok("test23");
+  test_ok(__func__);
 }
 
 void test24(void) {
@@ -1025,13 +1025,13 @@ void test24(void) {
   check_int(64, (char)320);
   check_int(256, (char)320 + (char)320 + (char)320 + (char)320);
 
-  test_ok("test24");
+  test_ok(__func__);
 }
 
 void test25(void) {
   // comment
   /* comment */
-  test_ok("test25");
+  test_ok(__func__);
 }
 
 int main(void) {

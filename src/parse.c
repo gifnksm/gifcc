@@ -15,6 +15,7 @@ typedef struct GlobalCtxt {
 typedef struct FuncCtxt {
   GlobalCtxt *global;
   Tokenizer *tokenizer;
+  char *name;
   int stack_size;
   Vector *switches;
   Map *label_map;
@@ -29,7 +30,7 @@ typedef struct ScopeCtxt {
 } ScopeCtxt;
 
 static GlobalCtxt *new_global_ctxt(Tokenizer *tokenizer);
-static FuncCtxt *new_func_ctxt(GlobalCtxt *gctxt);
+static FuncCtxt *new_func_ctxt(GlobalCtxt *gctxt, char *name);
 static ScopeCtxt *new_root_scope_ctxt(FuncCtxt *fctxt);
 static ScopeCtxt *new_inner_scope_ctxt(ScopeCtxt *outer);
 static StackVar *register_stack(ScopeCtxt *sctxt, char *name, Type *type);
@@ -131,11 +132,12 @@ static GlobalCtxt *new_global_ctxt(Tokenizer *tokenizer) {
   return gctxt;
 }
 
-static FuncCtxt *new_func_ctxt(GlobalCtxt *gctxt) {
+static FuncCtxt *new_func_ctxt(GlobalCtxt *gctxt, char *name) {
   FuncCtxt *fctxt = malloc(sizeof(FuncCtxt));
 
   fctxt->global = gctxt;
   fctxt->tokenizer = gctxt->tokenizer;
+  fctxt->name = name;
   fctxt->stack_size = 0;
   fctxt->switches = new_vector();
   fctxt->label_map = new_map();
@@ -303,8 +305,8 @@ int get_val_align(Type *ty) {
 }
 
 static noreturn void binop_type_error(int ty, Expr *lhs, Expr *rhs) {
-  error("不正な型の値に対する演算です: 演算=%d, 左辺=%d, 右辺=%d", ty,
-        lhs->val_type->ty, rhs->val_type->ty);
+  error("不正な型の値に対する演算です: 演算=%d(%c), 左辺=%d, 右辺=%d", ty,
+        lhs->val_type->ty, lhs->val_type->ty, rhs->val_type->ty);
 }
 
 static Type *new_type(int ty) {
@@ -359,6 +361,12 @@ static Expr *new_expr_num(int val) {
 static Expr *new_expr_ident(ScopeCtxt *sctxt, char *name) {
   int ty;
   Type *type;
+  if (strcmp(name, "__func__") == 0) {
+    if (sctxt->func == NULL) {
+      error("関数外で__func__が使用されました");
+    }
+    return new_expr_str(sctxt, sctxt->func->name);
+  }
   StackVar *svar = get_stack(sctxt, name);
   GlobalVar *gvar = get_global(sctxt->global, name);
   if (svar != NULL) {
@@ -1350,7 +1358,7 @@ static Stmt *compound_statement(ScopeCtxt *sctxt) {
 
 static Function *function_definition(GlobalCtxt *gctxt, Type *type,
                                      char *name) {
-  FuncCtxt *fctxt = new_func_ctxt(gctxt);
+  FuncCtxt *fctxt = new_func_ctxt(gctxt, name);
   ScopeCtxt *sctxt = new_root_scope_ctxt(fctxt);
   if (!register_global(gctxt, name, type)) {
     error("同じ名前の関数またはグローバル変数が複数回定義されました: %s", name);
