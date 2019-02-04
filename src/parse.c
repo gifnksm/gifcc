@@ -1108,8 +1108,12 @@ static void declaration(ScopeCtxt *sctxt) {
   char *name;
   Type *type;
   declarator(sctxt->tokenizer, base_type, &name, &type);
-  token_expect(sctxt->tokenizer, ';');
   (void)register_stack(sctxt, name, type);
+  while (token_consume(sctxt->tokenizer, ',')) {
+    declarator(sctxt->tokenizer, base_type, &name, &type);
+    (void)register_stack(sctxt, name, type);
+  }
+  token_expect(sctxt->tokenizer, ';');
 }
 
 static Type *type_specifier(Tokenizer *tokenizer) {

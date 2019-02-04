@@ -25,21 +25,18 @@ void test01(void) {
 }
 
 void test02_01(void) {
-  int a;
-  int b;
+  int a, b;
   a = b = 2;
   check_int(4, a + b);
 }
 void test02_02(void) {
-  int a;
-  int b;
+  int a, b;
   a = 3;
   b = 5 * 6 - 8;
   check_int(14, a + b / 2);
 }
 void test02_03(void) {
-  int a;
-  int b;
+  int a, b;
   b = (a = 5);
   check_int(10, a + b);
 }
@@ -55,48 +52,20 @@ void test02(void) {
 }
 
 void test03_01(void) {
-  int a;
-  int b;
-  int c;
+  int a, b, c;
   a = 3;
   b = 5;
   check_int(0, c = a == b);
 }
 void test03_02(void) {
-  int a;
-  int b;
-  int c;
+  int a, b, c;
   a = 3;
   b = 5;
   check_int(0, c = a == b);
 }
 void test03_03(void) {
-  int a;
-  int b;
-  int c;
-  int d;
-  int e;
-  int f;
-  int g;
-  int h;
-  int i;
-  int j;
-  int k;
-  int l;
-  int m;
-  int n;
-  int o;
-  int p;
-  int q;
-  int r;
-  int s;
-  int t;
-  int u;
-  int v;
-  int w;
-  int x;
-  int y;
-  int z;
+  int a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u, v, w, x, y,
+      z;
   a = b = c = d = e = f = g = h = i = j = k = l = m = n = o = p = q = r = s =
       t = u = v = w = x = y = z = 1;
   check_int(a + b + c + d + e + f + g + h + i + j + k + l + m + n + o + p + q +
@@ -226,26 +195,21 @@ void test03_04(void) {
   check_int(120, 120);
 }
 void test03_05(void) {
-  int a;
-  int c;
-  int d;
+  int a, c, d;
   a = 1;
   c = 2;
   d = 3;
   check_int(6, a + c + d);
 }
 void test03_06(void) {
-  int a;
-  int ab;
-  int abc;
+  int a, ab, abc;
   a = 1;
   ab = 2;
   abc = 3;
   check_int(6, a + ab + abc);
 }
 void test03_07(void) {
-  int _;
-  int a_;
+  int _, a_;
   _ = 123;
   a_ = 1;
   check_int(124, _ + a_);
@@ -301,8 +265,7 @@ void test04(void) {
 }
 
 void test05(void) {
-  int a;
-  int b;
+  int a, b;
 
   a = +3;
   check_int(103, 100 + a);
@@ -356,10 +319,7 @@ void test06(void) {
 }
 
 void test07(void) {
-  int a;
-  int b;
-  int c;
-  int s;
+  int a, b, c, s;
 
   a = 1;
   b = 1;
@@ -540,8 +500,7 @@ void test07(void) {
 }
 
 void test08(void) {
-  int a;
-  int *p;
+  int a, *p;
 
   a = 4;
   a *= 3;
@@ -603,8 +562,7 @@ int test09_01(int n) {
   abort();
 }
 void test09_02(void) {
-  int c;
-  int i;
+  int c, i;
   c = 0;
   for (i = 0; i < 5; i++) {
     switch (i) {
@@ -631,8 +589,7 @@ void test09_02(void) {
   check_int(5, c);
 }
 void test09_03(void) {
-  int i;
-  int s;
+  int i, s;
   i = 3;
   s = 0;
   goto INIT;
@@ -689,8 +646,7 @@ int add(int a, int b) { return a + b; }
 int sub(int a, int b) { return a - b; }
 int fib(int n) { return (n <= 0) ? 0 : (n == 1) ? 1 : fib(n - 2) + fib(n - 1); }
 void test12(void) {
-  int a;
-  int b;
+  int a, b;
   a = add_38();
   b = ret3();
 
@@ -746,18 +702,13 @@ void test13(void) {
 }
 
 void test14(void) {
-  int a;
-  int *b;
-  int **c;
-  int ***d;
+  int a, *b, **c, ***d;
 
   test_ok(__func__);
 }
 
 void test15(void) {
-  int *p;
-  int *q;
-  int i;
+  int *p, *q, i;
 
   p = 30;
   q = 10;
@@ -847,8 +798,7 @@ void test17(void) {
   a[3] = 8;
   check_int(8, test17_01(a)[2]);
 
-  void *p;
-  void *q;
+  void *p, *q;
   p = 3;
   q = test17_03(p);
   check_int(1, p == q);
@@ -915,10 +865,7 @@ void test20(void) {
 }
 
 void test21(void) {
-  int a[3][5];
-
-  int i;
-  int j;
+  int a[3][5], i, j;
 
   for (i = 0; i < 3; i++) {
     for (j = 0; j < 5; j++) {
@@ -948,9 +895,7 @@ void test21(void) {
 int test22_g;
 void test22_func(int n) { test22_g = n; }
 void test22(void) {
-  int(*a)[3];
-  int b[3];
-  int(**c)[3];
+  int(*a)[3], b[3], (**c)[3];
 
   c = &a;
   a = &b;
@@ -972,9 +917,7 @@ void test22(void) {
 }
 
 void test23_fun(int a, int b) {
-  int c;
-  int d;
-  int e;
+  int c, d, e;
   c = 3;
   d = 4;
   e = 5;
@@ -985,8 +928,7 @@ void test23_fun(int a, int b) {
   check_int(5, e);
 
   {
-    int c;
-    int f;
+    int c, f;
     c = 6;
     e = 7;
     f = 8;
@@ -1011,10 +953,7 @@ void test23(void) {
 }
 
 void test24(void) {
-  char a;
-  char b;
-  char c;
-  char d;
+  char a, b, c, d;
   a = 64;
   b = 64;
   c = 64;
