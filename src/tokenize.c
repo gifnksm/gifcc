@@ -12,6 +12,30 @@ struct Tokenizer {
   bool read_eof;
 };
 
+typedef struct {
+  char *str;
+  int kind;
+} LongToken;
+
+static const LongToken LONG_IDENT_TOKENS[] = {
+    {"void", TK_VOID},   {"int", TK_INT},           {"char", TK_CHAR},
+    {"if", TK_IF},       {"else", TK_ELSE},         {"switch", TK_SWITCH},
+    {"case", TK_CASE},   {"default", TK_DEFAULT},   {"while", TK_WHILE},
+    {"do", TK_DO},       {"for", TK_FOR},           {"goto", TK_GOTO},
+    {"break", TK_BREAK}, {"continue", TK_CONTINUE}, {"return", TK_RETURN},
+    {NULL, '\0'},
+};
+static const LongToken LONG_PUNCT_TOKENS[] = {
+    {"==", TK_EQEQ},       {"!=", TK_NOTEQ},      {"<<=", TK_LSHIFT_ASSIGN},
+    {"<<", TK_LSHIFT},     {"<=", TK_LTEQ},       {">>=", TK_RSHIFT_ASSIGN},
+    {">>", TK_RSHIFT},     {">=", TK_GTEQ},       {"&&", TK_LOGAND},
+    {"&=", TK_AND_ASSIGN}, {"||", TK_LOGOR},      {"|=", TK_OR_ASSIGN},
+    {"^=", TK_XOR_ASSIGN}, {"++", TK_INC},        {"+=", TK_ADD_ASSIGN},
+    {"--", TK_DEC},        {"-=", TK_SUB_ASSIGN}, {"*=", TK_MUL_ASSIGN},
+    {"/=", TK_DIV_ASSIGN}, {"%=", TK_MOD_ASSIGN}, {NULL, '\0'},
+};
+static const char *SHORT_PUNCT_TOKENS = "=!<>&|^+-*/%();?:~{}[],";
+
 static Token *read_token(Reader *reader, bool *read_eof);
 static Token *new_token(int ty, Reader *reader);
 static Token *new_token_num(Reader *reader, int val);
@@ -75,25 +99,62 @@ bool token_consume2(Tokenizer *tokenizer, int ty1, int ty2) {
 Token *token_expect(Tokenizer *tokenizer, int ty) {
   Token *token = token_pop(tokenizer);
   if (token->ty != ty) {
-    if (ty <= 255) {
-      error("'%c' がありません: %s", ty, token->input);
-    }
-    switch (ty) {
-    case TK_IDENT:
-      error("'識別子' がありません: %s", token->input);
-    case TK_WHILE:
-      error("'while' がありません: %s", token->input);
-    case TK_INT:
-      error("'int' がありません: %s", token->input);
-    default:
-      error("%d がありません: %s", ty, token->input);
-    }
+    error("%sがありません: %s", token_kind_to_str(ty), token->input);
   }
   return token;
 }
 
-static inline int hex(int c) {
-  assert(isxdigit(c));
+static const char *quote(const char *s) {
+  int len = strlen(s);
+  char *str = calloc(len, sizeof(char));
+  strcat(str, "`");
+  strcat(str, s);
+  strcat(str, "`");
+  return str;
+}
+
+const char *token_kind_to_str(int kind) {
+  if (kind <= 255) {
+    char str[] = " ";
+    str[0] = kind;
+    return quote(str);
+  }
+
+  switch (kind) {
+  case TK_IDENT:
+    return "IDENT";
+  case TK_NUM:
+    return "NUM";
+  case TK_STR:
+    return "STR";
+  case TK_EOF:
+    return "EOF";
+  default: {
+    const LongToken *ltss[] = {LONG_IDENT_TOKENS, LONG_PUNCT_TOKENS, NULL};
+    for (int j = 0; ltss[j] != NULL; j++) {
+      const LongToken *lts = ltss[j];
+      for (int i = 0; lts[i].str != NULL; i++) {
+        const LongToken *tk = &lts[i];
+        if (tk->kind == kind) {
+          return quote(tk->str);
+        }
+      }
+    }
+    error("未知のトークン種別です: %d", kind);
+  }
+  }
+}
+
+static inline bool is_ident_head(int c) {
+  return ('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z') || c == '_';
+}
+static inline bool is_ident_tail(int c) {
+  return is_ident_head(c) || ('0' <= c && c <= '9');
+}
+
+static inline bool is_hex_digit(int c) { return isxdigit(c) != 0; }
+static inline int hex2num(int c) {
+  assert(is_hex_digit(c));
   if ('0' <= c && c <= '9') {
     return c - '0';
   }
@@ -103,7 +164,16 @@ static inline int hex(int c) {
   assert('A' <= c && c <= 'F');
   return (c - 'A') + 0xa;
 }
-
+static inline bool is_oct_digit(int c) { return '0' <= c && c <= '7'; }
+static inline int oct2num(int c) {
+  assert(is_oct_digit(c));
+  return c - '0';
+}
+static inline bool is_dec_digit(int c) { return isdigit(c) != 0; }
+static inline int dec2num(int c) {
+  assert(is_dec_digit(c));
+  return c - '0';
+}
 static Token *read_token(Reader *reader, bool *read_eof) {
   char ch;
   while ((ch = reader_peek(reader)) != '\0') {
@@ -114,34 +184,28 @@ static Token *read_token(Reader *reader, bool *read_eof) {
     }
 
     // コメントをスキップ
-    if (ch == '/') {
-      char ch2 = reader_peek_ahead(reader, 1);
-      if (ch2 == '/') {
-        reader_succ_n(reader, 2);
-        while (true) {
-          char ch = reader_peek(reader);
-          if (ch == '\n' || ch == '\0') {
-            break;
-          }
-          reader_succ(reader);
+    if (reader_consume_str(reader, "//")) {
+      while (true) {
+        char ch = reader_peek(reader);
+        if (ch == '\n' || ch == '\0') {
+          break;
         }
-        continue;
+        reader_succ(reader);
       }
-      if (ch2 == '*') {
-        reader_succ_n(reader, 2);
-        while (true) {
-          if (reader_peek(reader) == '*' &&
-              reader_peek_ahead(reader, 1) == '/') {
-            reader_succ_n(reader, 2);
-            break;
-          }
-          if (reader_peek(reader) == '\0') {
-            break;
-          }
-          reader_succ(reader);
+      continue;
+    }
+    if (reader_consume_str(reader, "/*")) {
+      while (true) {
+        if (reader_consume_str(reader, "*/")) {
+          break;
         }
-        continue;
+        if (reader_peek(reader) == '\0') {
+          error("コメントの終端文字列 `*/` がありません: %s",
+                reader_rest(reader));
+        }
+        reader_succ(reader);
       }
+      continue;
     }
 
     Token *token = NULL;
@@ -185,38 +249,13 @@ static Token *new_token_num(Reader *reader, int val) {
 
 static Token *new_token_ident(Reader *reader, char *name) {
   Token *token = malloc(sizeof(Token));
-  if (strcmp(name, "void") == 0) {
-    token->ty = TK_VOID;
-  } else if (strcmp(name, "int") == 0) {
-    token->ty = TK_INT;
-  } else if (strcmp(name, "char") == 0) {
-    token->ty = TK_CHAR;
-  } else if (strcmp(name, "if") == 0) {
-    token->ty = TK_IF;
-  } else if (strcmp(name, "else") == 0) {
-    token->ty = TK_ELSE;
-  } else if (strcmp(name, "switch") == 0) {
-    token->ty = TK_SWITCH;
-  } else if (strcmp(name, "case") == 0) {
-    token->ty = TK_CASE;
-  } else if (strcmp(name, "default") == 0) {
-    token->ty = TK_DEFAULT;
-  } else if (strcmp(name, "while") == 0) {
-    token->ty = TK_WHILE;
-  } else if (strcmp(name, "do") == 0) {
-    token->ty = TK_DO;
-  } else if (strcmp(name, "for") == 0) {
-    token->ty = TK_FOR;
-  } else if (strcmp(name, "goto") == 0) {
-    token->ty = TK_GOTO;
-  } else if (strcmp(name, "break") == 0) {
-    token->ty = TK_BREAK;
-  } else if (strcmp(name, "continue") == 0) {
-    token->ty = TK_CONTINUE;
-  } else if (strcmp(name, "return") == 0) {
-    token->ty = TK_RETURN;
-  } else {
-    token->ty = TK_IDENT;
+  token->ty = TK_IDENT;
+  for (int i = 0; LONG_IDENT_TOKENS[i].str != NULL; i++) {
+    const LongToken *tk = &LONG_IDENT_TOKENS[i];
+    if (strcmp(name, tk->str) == 0) {
+      token->ty = tk->kind;
+      break;
+    }
   }
   token->input = reader_rest(reader);
   token->name = name;
@@ -232,191 +271,25 @@ static Token *new_token_str(Reader *reader, char *str) {
 }
 
 static Token *punctuator(Reader *reader) {
-  Token *token = NULL;
-  switch (reader_peek(reader)) {
-  case '=': {
-    if (reader_peek_ahead(reader, 1) == '=') {
-      token = new_token(TK_EQEQ, reader);
-      reader_succ_n(reader, 2);
-      break;
+  for (int i = 0; LONG_PUNCT_TOKENS[i].str != NULL; i++) {
+    const LongToken *tk = &LONG_PUNCT_TOKENS[i];
+    if (reader_consume_str(reader, tk->str)) {
+      return new_token(tk->kind, reader);
     }
-    token = new_token(reader_peek(reader), reader);
-    reader_succ(reader);
-    break;
   }
-  case '!': {
-    if (reader_peek_ahead(reader, 1) == '=') {
-      token = new_token(TK_NOTEQ, reader);
-      reader_succ_n(reader, 2);
-      break;
+  for (int i = 0; SHORT_PUNCT_TOKENS[i] != '\0'; i++) {
+    char tk = SHORT_PUNCT_TOKENS[i];
+    if (reader_consume(reader, tk)) {
+      return new_token(tk, reader);
     }
-    token = new_token(reader_peek(reader), reader);
-    reader_succ(reader);
-    break;
-  }
-  case '<': {
-    if (reader_peek_ahead(reader, 1) == '<') {
-      if (reader_peek_ahead(reader, 2) == '=') {
-        token = new_token(TK_LSHIFT_ASSIGN, reader);
-        reader_succ_n(reader, 3);
-        break;
-      }
-      token = new_token(TK_LSHIFT, reader);
-      reader_succ_n(reader, 2);
-      break;
-    }
-    if (reader_peek_ahead(reader, 1) == '=') {
-      token = new_token(TK_LTEQ, reader);
-      reader_succ_n(reader, 2);
-      break;
-    }
-    token = new_token(reader_peek(reader), reader);
-    reader_succ(reader);
-    break;
-  }
-  case '>': {
-    if (reader_peek_ahead(reader, 1) == '>') {
-      if (reader_peek_ahead(reader, 2) == '=') {
-        token = new_token(TK_RSHIFT_ASSIGN, reader);
-        reader_succ_n(reader, 3);
-        break;
-      }
-      token = new_token(TK_RSHIFT, reader);
-      reader_succ_n(reader, 2);
-      break;
-    }
-    if (reader_peek_ahead(reader, 1) == '=') {
-      token = new_token(TK_GTEQ, reader);
-      reader_succ_n(reader, 2);
-      break;
-    }
-    token = new_token(reader_peek(reader), reader);
-    reader_succ(reader);
-    break;
-  }
-  case '&': {
-    if (reader_peek_ahead(reader, 1) == '&') {
-      token = new_token(TK_LOGAND, reader);
-      reader_succ_n(reader, 2);
-      break;
-    }
-    if (reader_peek_ahead(reader, 1) == '=') {
-      token = new_token(TK_AND_ASSIGN, reader);
-      reader_succ_n(reader, 2);
-      break;
-    }
-    token = new_token(reader_peek(reader), reader);
-    reader_succ(reader);
-    break;
-  }
-  case '|': {
-    if (reader_peek_ahead(reader, 1) == '|') {
-      token = new_token(TK_LOGOR, reader);
-      reader_succ_n(reader, 2);
-      break;
-    }
-    if (reader_peek_ahead(reader, 1) == '=') {
-      token = new_token(TK_OR_ASSIGN, reader);
-      reader_succ_n(reader, 2);
-      break;
-    }
-    token = new_token(reader_peek(reader), reader);
-    reader_succ(reader);
-    break;
-  }
-  case '^': {
-    if (reader_peek_ahead(reader, 1) == '=') {
-      token = new_token(TK_XOR_ASSIGN, reader);
-      reader_succ_n(reader, 2);
-      break;
-    }
-    token = new_token(reader_peek(reader), reader);
-    reader_succ(reader);
-    break;
-  }
-  case '+': {
-    if (reader_peek_ahead(reader, 1) == '+') {
-      token = new_token(TK_INC, reader);
-      reader_succ_n(reader, 2);
-      break;
-    }
-    if (reader_peek_ahead(reader, 1) == '=') {
-      token = new_token(TK_ADD_ASSIGN, reader);
-      reader_succ_n(reader, 2);
-      break;
-    }
-    token = new_token(reader_peek(reader), reader);
-    reader_succ(reader);
-    break;
-  }
-  case '-': {
-    if (reader_peek_ahead(reader, 1) == '-') {
-      token = new_token(TK_DEC, reader);
-      reader_succ_n(reader, 2);
-      break;
-    }
-    if (reader_peek_ahead(reader, 1) == '=') {
-      token = new_token(TK_SUB_ASSIGN, reader);
-      reader_succ_n(reader, 2);
-      break;
-    }
-    token = new_token(reader_peek(reader), reader);
-    reader_succ(reader);
-    break;
-  }
-  case '*': {
-    if (reader_peek_ahead(reader, 1) == '=') {
-      token = new_token(TK_MUL_ASSIGN, reader);
-      reader_succ_n(reader, 2);
-      break;
-    }
-    token = new_token(reader_peek(reader), reader);
-    reader_succ(reader);
-    break;
-  }
-  case '/': {
-    if (reader_peek_ahead(reader, 1) == '=') {
-      token = new_token(TK_DIV_ASSIGN, reader);
-      reader_succ_n(reader, 2);
-      break;
-    }
-    token = new_token(reader_peek(reader), reader);
-    reader_succ(reader);
-    break;
-  }
-  case '%': {
-    if (reader_peek_ahead(reader, 1) == '=') {
-      token = new_token(TK_MOD_ASSIGN, reader);
-      reader_succ_n(reader, 2);
-      break;
-    }
-    token = new_token(reader_peek(reader), reader);
-    reader_succ(reader);
-    break;
-  }
-  case '(':
-  case ')':
-  case ';':
-  case '?':
-  case ':':
-  case '~':
-  case '{':
-  case '}':
-  case '[':
-  case ']':
-  case ',': {
-    token = new_token(reader_peek(reader), reader);
-    reader_succ(reader);
-    break;
-  }
   }
 
-  return token;
+  return NULL;
 }
 
 static Token *identifier_or_keyword(Reader *reader) {
   char ch = reader_peek(reader);
-  if ((ch < 'a' || 'z' < ch) && (ch < 'A' || 'Z' < ch) && ch != '_') {
+  if (!is_ident_head(ch)) {
     return NULL;
   }
 
@@ -426,8 +299,7 @@ static Token *identifier_or_keyword(Reader *reader) {
 
   while (true) {
     ch = reader_peek(reader);
-    if ((ch < 'a' || 'z' < ch) && (ch < 'A' || 'Z' < ch) && ch != '_' &&
-        (ch < '0' || '9' < ch)) {
+    if (!is_ident_tail(ch)) {
       break;
     }
     str_push(str, ch);
@@ -466,21 +338,22 @@ static Token *integer_constant(Reader *reader) {
 }
 
 static Token *hexadecimal_constant(Reader *reader) {
-  char ch0 = reader_peek(reader);
-  char ch1 = reader_peek_ahead(reader, 1);
-  if ((ch0 != '0') || (ch1 != 'x' && ch1 != 'X')) {
+  if (!reader_consume_str(reader, "0x") && !reader_consume_str(reader, "0X")) {
     return NULL;
   }
-  reader_succ_n(reader, 2);
 
   int val = 0;
 
+  if (!is_hex_digit(reader_peek(reader))) {
+    error("空の16進文字リテラルです: %s", reader_rest(reader));
+  }
+
   while (true) {
     char ch = reader_peek(reader);
-    if (!isxdigit(ch)) {
+    if (!is_hex_digit(ch)) {
       break;
     }
-    val = val * 0x10 + hex(ch);
+    val = val * 0x10 + hex2num(ch);
     reader_succ(reader);
   }
 
@@ -488,19 +361,18 @@ static Token *hexadecimal_constant(Reader *reader) {
 }
 
 static Token *octal_constant(Reader *reader) {
-  if (reader_peek(reader) != '0') {
+  if (!reader_consume(reader, '0')) {
     return NULL;
   }
-  reader_succ(reader);
 
   int val = 0;
 
   while (true) {
     char ch = reader_peek(reader);
-    if (ch < '0' || '7' < ch) {
+    if (!is_oct_digit(ch)) {
       break;
     }
-    val = val * 010 + (ch - '0');
+    val = val * 010 + oct2num(ch);
     reader_succ(reader);
   }
 
@@ -515,10 +387,10 @@ static Token *decimal_constant(Reader *reader) {
 
   while (true) {
     char ch = reader_peek(reader);
-    if (!isdigit(ch)) {
+    if (!is_dec_digit(ch)) {
       break;
     }
-    val = val * 10 + (ch - '0');
+    val = val * 10 + dec2num(ch);
     reader_succ(reader);
   }
 
@@ -526,28 +398,21 @@ static Token *decimal_constant(Reader *reader) {
 }
 
 static Token *character_constant(Reader *reader) {
-  Token *token = NULL;
-  if (reader_peek(reader) != '\'') {
+  if (!reader_consume(reader, '\'')) {
     return NULL;
   }
-  reader_succ(reader);
-
-  token = new_token_num(reader, c_char(reader));
-
-  if (reader_peek(reader) != '\'') {
-    error("'\\'' がありません: %s", reader_rest(reader));
+  if (reader_peek(reader) == '\'') {
+    error("空の文字リテラルです: %s", reader_rest(reader));
   }
-  reader_succ(reader);
-
-  return token;
+  char ch = c_char(reader);
+  reader_expect(reader, '\'');
+  return new_token_num(reader, ch);
 }
 
 static Token *string_literal(Reader *reader) {
-  Token *token = NULL;
-  if (reader_peek(reader) != '"') {
+  if (!reader_consume(reader, '"')) {
     return NULL;
   }
-  reader_succ(reader);
 
   String *str = new_string();
   while (true) {
@@ -559,91 +424,71 @@ static Token *string_literal(Reader *reader) {
   }
   str_push(str, '\0');
 
-  if (reader_peek(reader) != '"') {
-    error("文字列の終端がありません: %s", reader_rest(reader));
-  }
-  reader_succ(reader);
-  token = new_token_str(reader, str->data);
-
-  return token;
+  reader_expect(reader, '"');
+  return new_token_str(reader, str->data);
 }
 
 static char c_char(Reader *reader) {
-  int val = 0;
-  char ch = reader_peek(reader);
-  if (ch == '\'') {
-    error("空の文字リテラルです: %s", reader_rest(reader));
+
+  if (reader_consume(reader, '\\')) {
+    const char ESCAPE_CHARS[] = {'\'', '"', '?', '\\', '\0'};
+    for (int i = 0; ESCAPE_CHARS[i] != '\0'; i++) {
+      if (reader_consume(reader, ESCAPE_CHARS[i])) {
+        return ESCAPE_CHARS[i];
+      }
+    }
+
+    typedef struct {
+      char raw;
+      char meta;
+    } MetaChar;
+
+    MetaChar META_CHARS[] = {
+        {'a', '\a'}, {'b', '\b'}, {'f', '\f'}, {'n', '\n'},
+        {'r', '\r'}, {'t', '\t'}, {'v', '\v'}, {'\0', '\0'},
+    };
+    for (int i = 0; META_CHARS[i].raw != '\0'; i++) {
+      if (reader_consume(reader, META_CHARS[i].raw)) {
+        return META_CHARS[i].meta;
+      }
+    }
+
+    if (reader_consume(reader, 'x')) {
+      if (!is_hex_digit(reader_peek(reader))) {
+        error("空の16進文字リテラルです: %s", reader_rest(reader));
+      }
+      int val = 0;
+      while (true) {
+        char ch = reader_peek(reader);
+        if (!is_hex_digit(ch)) {
+          break;
+        }
+        val = val * 0x10 + hex2num(ch);
+        reader_succ(reader);
+      }
+      return val;
+    }
+
+    if (is_oct_digit(reader_peek(reader))) {
+      int val = 0;
+      while (true) {
+        char ch = reader_peek(reader);
+        if (!is_oct_digit(ch)) {
+          break;
+        }
+        val = val * 010 + oct2num(ch);
+        reader_succ(reader);
+      }
+      return val;
+    }
+
+    error("不明なエスケープシーケンスです: %s", reader_rest(reader));
   }
-  if (ch == '\n' || ch == '\r') {
+
+  if (reader_consume(reader, '\n')) {
     error("改行文字を文字リテラル中に含めることはできません: %s",
           reader_rest(reader));
   }
 
-  if (ch == '\\') {
-    const char *p = reader_rest(reader);
-    char ch1 = reader_peek_ahead(reader, 1);
-    switch (ch1) {
-    case '\'':
-    case '\"':
-    case '\?':
-    case '\\': {
-      reader_succ_n(reader, 2);
-      return ch1;
-    }
-    case 'a': {
-      reader_succ_n(reader, 2);
-      return '\a';
-    }
-    case 'b': {
-      reader_succ_n(reader, 2);
-      return '\b';
-    }
-    case 'f': {
-      reader_succ_n(reader, 2);
-      return '\f';
-    }
-    case 'n': {
-      reader_succ_n(reader, 2);
-      return '\n';
-    }
-    case 'r': {
-      reader_succ_n(reader, 2);
-      return '\r';
-    }
-    case 't': {
-      reader_succ_n(reader, 2);
-      return '\t';
-    }
-    case 'v': {
-      reader_succ_n(reader, 2);
-      return '\v';
-    }
-
-    case 'x': {
-      const char *q = p + 2;
-      for (; isxdigit(*q); q++) {
-        val = val * 0x10 + hex(*q);
-      }
-      if (q == p + 2) {
-        error("空の16進文字リテラルです: %s", p);
-      }
-      reader_succ_n(reader, q - p);
-      return val;
-    }
-    }
-
-    const char *q = p + 1;
-    for (int i = 0; (i < 3) && ('0' <= *q && *q <= '7'); i++, q++) {
-      val = 010 * val + (*q - '0');
-    }
-    if (q - p >= 2) {
-      reader_succ_n(reader, q - p);
-      return val;
-    }
-
-    error("不明なエスケープシーケンスです: %s", p);
-  }
-
-  reader_succ(reader);
-  return ch;
+  return reader_pop(reader);
 }

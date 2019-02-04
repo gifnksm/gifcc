@@ -20,141 +20,26 @@ void error_raw(const char *file, int line, char *fmt, ...) {
 
 static void output_token(Reader *reader) {
   Tokenizer *tokenizer = new_tokenizer(reader);
-  for (int pos = 0;; pos++) {
-    Token *token = token_pop(tokenizer);
-    if (token->ty <= 255) {
-      printf("%03d [%c]\n", pos, token->ty);
-      continue;
-    }
-
+  Token *token;
+  do {
+    token = token_pop(tokenizer);
     switch (token->ty) {
     case TK_NUM:
-      printf("%03d NUM %d\n", pos, token->val);
+      printf("%s %d\n", token_kind_to_str(token->ty), token->val);
       break;
     case TK_IDENT:
-      printf("%03d IDENT %s\n", pos, token->name);
+      printf("%s %s\n", token_kind_to_str(token->ty), token->name);
       break;
     case TK_STR:
-      printf("%03d STR ", pos);
+      printf("%s ", token_kind_to_str(token->ty));
       print_string_literal(token->str);
       printf("\n");
       break;
-    case TK_EQEQ:
-      printf("%03d [==]\n", pos);
-      break;
-    case TK_NOTEQ:
-      printf("%03d [!=]\n", pos);
-      break;
-    case TK_LTEQ:
-      printf("%03d [<=]\n", pos);
-      break;
-    case TK_GTEQ:
-      printf("%03d [>=]\n", pos);
-      break;
-    case TK_LSHIFT:
-      printf("%03d [<<]\n", pos);
-      break;
-    case TK_RSHIFT:
-      printf("%03d [>>]\n", pos);
-      break;
-    case TK_LOGAND:
-      printf("%03d [&&]\n", pos);
-      break;
-    case TK_LOGOR:
-      printf("%03d [||]\n", pos);
-      break;
-    case TK_EOF:
-      printf("%03d EOF\n", pos);
-      break;
-    case TK_INC:
-      printf("%03d [++]\n", pos);
-      break;
-    case TK_DEC:
-      printf("%03d [--]\n", pos);
-      break;
-    case TK_MUL_ASSIGN:
-      printf("%03d [*=]\n", pos);
-      break;
-    case TK_DIV_ASSIGN:
-      printf("%03d [/=]\n", pos);
-      break;
-    case TK_MOD_ASSIGN:
-      printf("%03d [%%=]\n", pos);
-      break;
-    case TK_ADD_ASSIGN:
-      printf("%03d [+=]\n", pos);
-      break;
-    case TK_SUB_ASSIGN:
-      printf("%03d [-=]\n", pos);
-      break;
-    case TK_LSHIFT_ASSIGN:
-      printf("%03d [<<=]\n", pos);
-      break;
-    case TK_RSHIFT_ASSIGN:
-      printf("%03d [>>=]\n", pos);
-      break;
-    case TK_AND_ASSIGN:
-      printf("%03d [&=]\n", pos);
-      break;
-    case TK_OR_ASSIGN:
-      printf("%03d [|=]\n", pos);
-      break;
-    case TK_XOR_ASSIGN:
-      printf("%03d [^=]\n", pos);
-      break;
-    case TK_VOID:
-      printf("%03d [VOID]\n", pos);
-      break;
-    case TK_INT:
-      printf("%03d [INT]\n", pos);
-      break;
-    case TK_CHAR:
-      printf("%03d [CHAR]\n", pos);
-      break;
-    case TK_IF:
-      printf("%03d [IF]\n", pos);
-      break;
-    case TK_ELSE:
-      printf("%03d [ELSE]\n", pos);
-      break;
-    case TK_SWITCH:
-      printf("%03d [SWITCH]\n", pos);
-      break;
-    case TK_CASE:
-      printf("%03d [CASE]\n", pos);
-      break;
-    case TK_DEFAULT:
-      printf("%03d [DEFAULT]\n", pos);
-      break;
-    case TK_WHILE:
-      printf("%03d [WHILE]\n", pos);
-      break;
-    case TK_DO:
-      printf("%03d [DO]\n", pos);
-      break;
-    case TK_FOR:
-      printf("%03d [FOR]\n", pos);
-      break;
-    case TK_GOTO:
-      printf("%03d [GOTO]\n", pos);
-      break;
-    case TK_BREAK:
-      printf("%03d [BREAK]\n", pos);
-      break;
-    case TK_CONTINUE:
-      printf("%03d [CONTINUE]\n", pos);
-      break;
-    case TK_RETURN:
-      printf("%03d [RETURN]\n", pos);
-      break;
     default:
-      error("未知のトークンです: %d\n", token->ty);
-    }
-
-    if (token->ty == TK_EOF) {
+      printf("%s\n", token_kind_to_str(token->ty));
       break;
     }
-  }
+  } while (token->ty != TK_EOF);
 }
 
 static void dump_indent(int level) { printf("%*s", 2 * level, ""); }

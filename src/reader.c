@@ -2,6 +2,7 @@
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 struct Reader {
   const char *source;
@@ -29,8 +30,10 @@ Reader *new_reader(FILE *file, const char *filename) {
   return reader;
 }
 
-char reader_peek(Reader *reader) { return reader->source[reader->offset]; }
-char reader_peek_ahead(Reader *reader, int n) {
+char reader_peek(const Reader *reader) {
+  return reader->source[reader->offset];
+}
+char reader_peek_ahead(const Reader *reader, int n) {
   assert(n >= 0);
   assert(reader->offset + n < reader->size);
 
@@ -52,6 +55,37 @@ void reader_succ(Reader *reader) {
 void reader_succ_n(Reader *reader, int n) {
   for (int i = 0; i < n; i++) {
     reader_succ(reader);
+  }
+}
+
+char reader_pop(Reader *reader) {
+  char ch = reader_peek(reader);
+  reader_succ(reader);
+  return ch;
+}
+
+bool reader_consume(Reader *reader, char ch) {
+  if (reader_peek(reader) == ch) {
+    reader_succ(reader);
+    return true;
+  }
+  return false;
+}
+
+bool reader_consume_str(Reader *reader, const char *str) {
+  int len = strlen(str);
+  for (int i = 0; i < len; i++) {
+    if (reader_peek_ahead(reader, i) != str[i]) {
+      return false;
+    }
+  }
+  reader_succ_n(reader, len);
+  return true;
+}
+
+void reader_expect(Reader *reader, char ch) {
+  if (!reader_consume(reader, ch)) {
+    error("'%c' がありません: %s", ch, reader_rest(reader));
   }
 }
 

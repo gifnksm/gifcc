@@ -240,11 +240,15 @@ void print_string_literal(char *str);
 void runtest(void);
 
 Reader *new_reader(FILE *file, const char *filename);
-char reader_peek(Reader *reader);
-char reader_peek_ahead(Reader *reader, int n);
+char reader_peek(const Reader *reader);
+char reader_peek_ahead(const Reader *reader, int n);
 void reader_succ(Reader *reader);
 void reader_succ_n(Reader *reader, int n);
+char reader_pop(Reader *Reader);
 const char *reader_rest(Reader *reader);
+bool reader_consume(Reader *reader, char ch);
+bool reader_consume_str(Reader *reader, const char *str);
+void reader_expect(Reader *reader, char ch);
 
 Tokenizer *new_tokenizer(Reader *reader);
 void token_succ(Tokenizer *tokenizer);
@@ -254,6 +258,7 @@ Token *token_pop(Tokenizer *tokenizer);
 Token *token_consume(Tokenizer *tokenizer, int ty);
 bool token_consume2(Tokenizer *tokenizer, int ty1, int ty2);
 Token *token_expect(Tokenizer *tokenizer, int ty);
+const char *token_kind_to_str(int kind);
 
 int get_val_size(Type *ty);
 int get_val_align(Type *ty);
