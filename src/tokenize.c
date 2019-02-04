@@ -107,7 +107,7 @@ Token *token_expect(Tokenizer *tokenizer, int ty) {
 
 static const char *quote(const char *s) {
   int len = strlen(s);
-  char *str = calloc(len, sizeof(char));
+  char *str = calloc(len + 3, sizeof(char));
   strcat(str, "`");
   strcat(str, s);
   strcat(str, "`");
