@@ -82,7 +82,6 @@ typedef struct {
   char *name; // tyがTK_IDENTの場合、その名前
   char *str;  // tyがTK_STRの場合、その値
   Range range;
-  const char *input; // トークン文字列 (エラーメッセージ用)
 } Token;
 
 enum {
@@ -274,7 +273,6 @@ const char *reader_get_source(const Reader *reader, Range range);
 noreturn __attribute__((format(printf, 5, 6))) void
 reader_error_with_raw(const Reader *reader, int offset, const char *dbg_file,
                       int dbg_line, char *fmt, ...);
-const char *reader_rest(Reader *reader);
 
 Tokenizer *new_tokenizer(Reader *reader);
 void token_succ(Tokenizer *tokenizer);
@@ -285,6 +283,14 @@ Token *token_consume(Tokenizer *tokenizer, int ty);
 bool token_consume2(Tokenizer *tokenizer, int ty1, int ty2);
 Token *token_expect(Tokenizer *tokenizer, int ty);
 const char *token_kind_to_str(int kind);
+#define token_error(tokenizer, fmt, ...)                                       \
+  token_error_with_raw(tokenizer, token_peek(tokenizer), __FILE__, __LINE__,   \
+                       fmt, ##__VA_ARGS__)
+#define token_error_with(tokenizer, token, fmt, ...)                           \
+  token_error_with_raw(tokenizer, token, __FILE__, __LINE__, fmt, ##__VA_ARGS__)
+noreturn __attribute__((format(printf, 5, 6))) void
+token_error_with_raw(const Tokenizer *tokenizer, Token *token,
+                     const char *dbg_file, int dbg_line, char *fmt, ...);
 
 int get_val_size(Type *ty);
 int get_val_align(Type *ty);

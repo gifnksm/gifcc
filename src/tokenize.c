@@ -1,6 +1,7 @@
 #include "gifcc.h"
 #include <assert.h>
 #include <ctype.h>
+#include <stdarg.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
@@ -37,10 +38,10 @@ static const LongToken LONG_PUNCT_TOKENS[] = {
 static const char *SHORT_PUNCT_TOKENS = "=!<>&|^+-*/%();?:~{}[],";
 
 static Token *read_token(Reader *reader, bool *read_eof);
-static Token *new_token(int ty, Reader *reader);
-static Token *new_token_num(Reader *reader, int val);
-static Token *new_token_ident(Reader *reader, char *name);
-static Token *new_token_str(Reader *reader, char *str);
+static Token *new_token(int ty);
+static Token *new_token_num(int val);
+static Token *new_token_ident(char *name);
+static Token *new_token_str(char *str);
 static Token *punctuator(Reader *reader);
 static Token *identifier_or_keyword(Reader *reader);
 static Token *constant(Reader *reader);
@@ -99,7 +100,7 @@ bool token_consume2(Tokenizer *tokenizer, int ty1, int ty2) {
 Token *token_expect(Tokenizer *tokenizer, int ty) {
   Token *token = token_pop(tokenizer);
   if (token->ty != ty) {
-    error("%sがありません: %s", token_kind_to_str(ty), token->input);
+    token_error_with(tokenizer, token, "%sがありません", token_kind_to_str(ty));
   }
   return token;
 }
@@ -143,6 +144,25 @@ const char *token_kind_to_str(int kind) {
     abort();
   }
   }
+}
+
+noreturn __attribute__((format(printf, 5, 6))) void
+token_error_with_raw(const Tokenizer *tokenizer, Token *token,
+                     const char *dbg_file, int dbg_line, char *fmt, ...) {
+  int line, column;
+  reader_get_position(tokenizer->reader, token->range.start, &line, &column);
+  fprintf(stderr, "%s:%d:%d: error: ", reader_get_filename(tokenizer->reader),
+          line, column);
+
+  va_list ap;
+  va_start(ap, fmt);
+  vfprintf(stderr, fmt, ap);
+  va_end(ap);
+
+  fprintf(stderr, " (`%s`)",
+          reader_get_source(tokenizer->reader, token->range));
+  fprintf(stderr, " (DEBUG:%s:%d)\n", dbg_file, dbg_line);
+  exit(1);
 }
 
 static inline bool is_ident_head(int c) {
@@ -224,7 +244,7 @@ static Token *read_token(Reader *reader, bool *read_eof) {
 
   if (!*read_eof) {
     *read_eof = true;
-    Token *token = new_token(TK_EOF, reader);
+    Token *token = new_token(TK_EOF);
     token->range.start = reader_get_offset(reader);
     token->range.len = 0;
     return token;
@@ -233,22 +253,20 @@ static Token *read_token(Reader *reader, bool *read_eof) {
   return NULL;
 }
 
-static Token *new_token(int ty, Reader *reader) {
+static Token *new_token(int ty) {
   Token *token = malloc(sizeof(Token));
   token->ty = ty;
-  token->input = reader_rest(reader);
   return token;
 }
 
-static Token *new_token_num(Reader *reader, int val) {
+static Token *new_token_num(int val) {
   Token *token = malloc(sizeof(Token));
   token->ty = TK_NUM;
-  token->input = reader_rest(reader);
   token->val = val;
   return token;
 }
 
-static Token *new_token_ident(Reader *reader, char *name) {
+static Token *new_token_ident(char *name) {
   Token *token = malloc(sizeof(Token));
   token->ty = TK_IDENT;
   for (int i = 0; LONG_IDENT_TOKENS[i].str != NULL; i++) {
@@ -258,15 +276,13 @@ static Token *new_token_ident(Reader *reader, char *name) {
       break;
     }
   }
-  token->input = reader_rest(reader);
   token->name = name;
   return token;
 }
 
-static Token *new_token_str(Reader *reader, char *str) {
+static Token *new_token_str(char *str) {
   Token *token = malloc(sizeof(Token));
   token->ty = TK_STR;
-  token->input = reader_rest(reader);
   token->str = str;
   return token;
 }
@@ -275,13 +291,13 @@ static Token *punctuator(Reader *reader) {
   for (int i = 0; LONG_PUNCT_TOKENS[i].str != NULL; i++) {
     const LongToken *tk = &LONG_PUNCT_TOKENS[i];
     if (reader_consume_str(reader, tk->str)) {
-      return new_token(tk->kind, reader);
+      return new_token(tk->kind);
     }
   }
   for (int i = 0; SHORT_PUNCT_TOKENS[i] != '\0'; i++) {
     char tk = SHORT_PUNCT_TOKENS[i];
     if (reader_consume(reader, tk)) {
-      return new_token(tk, reader);
+      return new_token(tk);
     }
   }
 
@@ -308,7 +324,7 @@ static Token *identifier_or_keyword(Reader *reader) {
   }
   str_push(str, '\0');
 
-  return new_token_ident(reader, str->data);
+  return new_token_ident(str->data);
 }
 
 static Token *constant(Reader *reader) {
@@ -359,7 +375,7 @@ static Token *hexadecimal_constant(Reader *reader) {
     reader_succ(reader);
   }
 
-  return new_token_num(reader, val);
+  return new_token_num(val);
 }
 
 static Token *octal_constant(Reader *reader) {
@@ -378,7 +394,7 @@ static Token *octal_constant(Reader *reader) {
     reader_succ(reader);
   }
 
-  return new_token_num(reader, val);
+  return new_token_num(val);
 }
 
 static Token *decimal_constant(Reader *reader) {
@@ -396,7 +412,7 @@ static Token *decimal_constant(Reader *reader) {
     reader_succ(reader);
   }
 
-  return new_token_num(reader, val);
+  return new_token_num(val);
 }
 
 static Token *character_constant(Reader *reader) {
@@ -404,12 +420,14 @@ static Token *character_constant(Reader *reader) {
   if (!reader_consume(reader, '\'')) {
     return NULL;
   }
-  if (reader_peek(reader) == '\'') {
+  char ch;
+  ch = reader_peek(reader);
+  if (ch == '\'' || ch == '\0') {
     reader_error_with(reader, start, "空の文字リテラルです");
   }
-  char ch = c_char(reader);
+  ch = c_char(reader);
   reader_expect(reader, '\'');
-  return new_token_num(reader, ch);
+  return new_token_num(ch);
 }
 
 static Token *string_literal(Reader *reader) {
@@ -428,7 +446,7 @@ static Token *string_literal(Reader *reader) {
   str_push(str, '\0');
 
   reader_expect(reader, '"');
-  return new_token_str(reader, str->data);
+  return new_token_str(str->data);
 }
 
 static char c_char(Reader *reader) {

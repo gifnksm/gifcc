@@ -790,8 +790,7 @@ static Expr *primary_expression(ScopeCtxt *sctxt) {
     token_expect(sctxt->tokenizer, ')');
     return expr;
   }
-  error("数値でも開きカッコでもないトークンです: %s",
-        token_peek(sctxt->tokenizer)->input);
+  token_error(sctxt->tokenizer, "数値でも開きカッコでもないトークンです");
 }
 
 static Expr *postfix_expression(ScopeCtxt *sctxt) {
@@ -1123,7 +1122,7 @@ static Type *type_specifier(Tokenizer *tokenizer) {
   case TK_VOID:
     return new_type(TY_VOID);
   default:
-    error("型名がありません: %s", token->input);
+    token_error_with(tokenizer, token, "型名がありません");
   }
 }
 
@@ -1158,7 +1157,7 @@ static void direct_declarator(Tokenizer *tokenizer, Type *base_type,
     declarator(tokenizer, placeholder, name, type);
     token_expect(tokenizer, ')');
   } else {
-    error("識別子でも括弧でもありません: %s", token_peek(tokenizer)->input);
+    token_error(tokenizer, "識別子でも括弧でもありません");
   }
 
   while (true) {

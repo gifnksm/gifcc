@@ -83,7 +83,7 @@ bool reader_consume_str(Reader *reader, const char *str) {
 
 void reader_expect(Reader *reader, char ch) {
   if (!reader_consume(reader, ch)) {
-    error("'%c' がありません: %s", ch, reader_rest(reader));
+    reader_error(reader, "'%c' がありません", ch);
   }
 }
 
@@ -109,10 +109,6 @@ const char *reader_get_source(const Reader *reader, Range range) {
   assert(range.start < reader->size);
   assert(range.start + range.len <= reader->size);
   return strndup(&reader->source[range.start], range.len);
-}
-
-const char *reader_rest(Reader *reader) {
-  return &reader->source[reader->offset];
 }
 
 noreturn __attribute__((format(printf, 5, 6))) void
