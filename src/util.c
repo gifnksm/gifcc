@@ -53,7 +53,7 @@ String *new_string(void) {
 void str_push(String *str, char elem) {
   if (str->capacity == str->len) {
     str->capacity = (str->capacity == 0) ? 16 : str->capacity * 2;
-    str->data = realloc(str->data, sizeof(void *) * str->capacity);
+    str->data = realloc(str->data, sizeof(char) * str->capacity);
   }
   str->data[str->len++] = elem;
 }
@@ -68,7 +68,7 @@ IntVector *new_int_vector(void) {
 void int_vec_push(IntVector *vec, int elem) {
   if (vec->capacity == vec->len) {
     vec->capacity = (vec->capacity == 0) ? 16 : vec->capacity * 2;
-    vec->data = realloc(vec->data, sizeof(void *) * vec->capacity);
+    vec->data = realloc(vec->data, sizeof(int) * vec->capacity);
   }
   vec->data[vec->len++] = elem;
 }
