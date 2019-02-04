@@ -21,6 +21,12 @@ typedef struct {
   int len;
 } String;
 
+typedef struct {
+  int *data;
+  int capacity;
+  int len;
+} IntVector;
+
 // トークンの型を表す値
 enum {
   TK_NUM = 256,     // 整数トークン
@@ -64,12 +70,18 @@ enum {
   TK_EOF,           // 入力の終わりを表すトークン
 };
 
+typedef struct {
+  int start;
+  int len;
+} Range;
+
 // トークンの型
 typedef struct {
-  int ty;            // トークンの型
-  int val;           // tyがTK_NUMの場合、その数値
-  char *name;        // tyがTK_IDENTの場合、その名前
-  char *str;         // tyがTK_STRの場合、その値
+  int ty;     // トークンの型
+  int val;    // tyがTK_NUMの場合、その数値
+  char *name; // tyがTK_IDENTの場合、その名前
+  char *str;  // tyがTK_STRの場合、その値
+  Range range;
   const char *input; // トークン文字列 (エラーメッセージ用)
 } Token;
 
@@ -222,9 +234,8 @@ typedef struct Reader Reader;
 typedef struct Tokenizer Tokenizer;
 
 #define error(fmt, ...) error_raw(__FILE__, __LINE__, fmt, ##__VA_ARGS__)
-
 noreturn __attribute__((format(printf, 3, 4))) void
-error_raw(const char *file, int line, char *fmt, ...);
+error_raw(const char *dbg_file, int dbg_line, char *fmt, ...);
 
 static inline int align(int n, int s) { return ((n + (s - 1)) / s) * s; }
 
@@ -237,6 +248,8 @@ void *map_get(Map *map, char *key);
 String *new_string(void);
 void str_push(String *str, char elem);
 void print_string_literal(char *str);
+IntVector *new_int_vector(void);
+void int_vec_push(IntVector *vec, int elem);
 void runtest(void);
 
 Reader *new_reader(FILE *file, const char *filename);
@@ -245,10 +258,23 @@ char reader_peek_ahead(const Reader *reader, int n);
 void reader_succ(Reader *reader);
 void reader_succ_n(Reader *reader, int n);
 char reader_pop(Reader *Reader);
-const char *reader_rest(Reader *reader);
 bool reader_consume(Reader *reader, char ch);
 bool reader_consume_str(Reader *reader, const char *str);
 void reader_expect(Reader *reader, char ch);
+int reader_get_offset(const Reader *reader);
+const char *reader_get_filename(const Reader *reader);
+void reader_get_position(const Reader *reader, int offset, int *line,
+                         int *column);
+const char *reader_get_source(const Reader *reader, Range range);
+#define reader_error(reader, fmt, ...)                                         \
+  reader_error_with_raw(reader, reader_get_offset(reader), __FILE__, __LINE__, \
+                        fmt, ##__VA_ARGS__)
+#define reader_error_with(reader, offset, fmt, ...)                            \
+  reader_error_with_raw(reader, offset, __FILE__, __LINE__, fmt, ##__VA_ARGS__)
+noreturn __attribute__((format(printf, 5, 6))) void
+reader_error_with_raw(const Reader *reader, int offset, const char *dbg_file,
+                      int dbg_line, char *fmt, ...);
+const char *reader_rest(Reader *reader);
 
 Tokenizer *new_tokenizer(Reader *reader);
 void token_succ(Tokenizer *tokenizer);

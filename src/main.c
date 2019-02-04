@@ -8,13 +8,13 @@
 #include <string.h>
 
 // エラーを報告するための関数
-void error_raw(const char *file, int line, char *fmt, ...) {
+void error_raw(const char *dbg_file, int dbg_line, char *fmt, ...) {
   va_list ap;
   va_start(ap, fmt);
-  fprintf(stderr, "%s:%d:", file, line);
   vfprintf(stderr, fmt, ap);
-  fprintf(stderr, "\n");
   va_end(ap);
+
+  fprintf(stderr, " (DEBUG:%s:%d)\n", dbg_file, dbg_line);
   exit(1);
 }
 
@@ -23,22 +23,25 @@ static void output_token(Reader *reader) {
   Token *token;
   do {
     token = token_pop(tokenizer);
+    int line, column;
+    reader_get_position(reader, token->range.start, &line, &column);
+    printf("%s:%d:%d:\t%-8s", reader_get_filename(reader), line, column,
+           token_kind_to_str(token->ty));
     switch (token->ty) {
     case TK_NUM:
-      printf("%s %d\n", token_kind_to_str(token->ty), token->val);
+      printf("%-8d", token->val);
       break;
     case TK_IDENT:
-      printf("%s %s\n", token_kind_to_str(token->ty), token->name);
+      printf("%-8s", token->name);
       break;
     case TK_STR:
-      printf("%s ", token_kind_to_str(token->ty));
       print_string_literal(token->str);
-      printf("\n");
       break;
     default:
-      printf("%s\n", token_kind_to_str(token->ty));
+      printf("%8s", "");
       break;
     }
+    printf("\t// %s\n", reader_get_source(reader, token->range));
   } while (token->ty != TK_EOF);
 }
 

@@ -1,5 +1,6 @@
 #include "gifcc.h"
 #include <assert.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -9,8 +10,8 @@ struct Reader {
   const char *filename;
   int size;
   int offset;
-  int line;
   int column;
+  IntVector *line_offset;
 };
 
 static char *read_whole_file(Reader *reader, FILE *file);
@@ -22,8 +23,8 @@ Reader *new_reader(FILE *file, const char *filename) {
   reader->filename = filename;
   reader->size = 0;
   reader->offset = 0;
-  reader->line = 1;
-  reader->column = 1;
+  reader->line_offset = new_int_vector();
+  int_vec_push(reader->line_offset, reader->offset);
 
   read_whole_file(reader, file);
 
@@ -44,13 +45,10 @@ void reader_succ(Reader *reader) {
   assert(reader->offset < reader->size - 1);
 
   char cur = reader_peek(reader);
-  if (cur == '\n') {
-    reader->line++;
-    reader->column = 1;
-  } else {
-    reader->column++;
-  }
   reader->offset++;
+  if (cur == '\n') {
+    int_vec_push(reader->line_offset, reader->offset);
+  }
 }
 void reader_succ_n(Reader *reader, int n) {
   for (int i = 0; i < n; i++) {
@@ -89,8 +87,49 @@ void reader_expect(Reader *reader, char ch) {
   }
 }
 
+int reader_get_offset(const Reader *reader) { return reader->offset; }
+const char *reader_get_filename(const Reader *reader) {
+  return reader->filename;
+}
+void reader_get_position(const Reader *reader, int offset, int *line,
+                         int *column) {
+  assert(reader->line_offset->len > 0);
+  for (int i = reader->line_offset->len - 1; i >= 0; i--) {
+    int line_start = reader->line_offset->data[i];
+    if (line_start <= offset) {
+      *line = i + 1;
+      *column = offset - line_start + 1;
+      return;
+    }
+  }
+  assert(false);
+}
+
+const char *reader_get_source(const Reader *reader, Range range) {
+  assert(range.start < reader->size);
+  assert(range.start + range.len <= reader->size);
+  return strndup(&reader->source[range.start], range.len);
+}
+
 const char *reader_rest(Reader *reader) {
   return &reader->source[reader->offset];
+}
+
+noreturn __attribute__((format(printf, 5, 6))) void
+reader_error_with_raw(const Reader *reader, int offset, const char *dbg_file,
+                      int dbg_line, char *fmt, ...) {
+  int line, column;
+  reader_get_position(reader, offset, &line, &column);
+  fprintf(stderr, "%s:%d:%d: error: ", reader_get_filename(reader), line,
+          column);
+
+  va_list ap;
+  va_start(ap, fmt);
+  vfprintf(stderr, fmt, ap);
+  va_end(ap);
+
+  fprintf(stderr, " (DEBUG:%s:%d)\n", dbg_file, dbg_line);
+  exit(1);
 }
 
 static char *read_whole_file(Reader *reader, FILE *file) {

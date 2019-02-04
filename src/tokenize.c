@@ -140,7 +140,7 @@ const char *token_kind_to_str(int kind) {
         }
       }
     }
-    error("未知のトークン種別です: %d", kind);
+    abort();
   }
   }
 }
@@ -200,35 +200,36 @@ static Token *read_token(Reader *reader, bool *read_eof) {
           break;
         }
         if (reader_peek(reader) == '\0') {
-          error("コメントの終端文字列 `*/` がありません: %s",
-                reader_rest(reader));
+          reader_error(reader, "コメントの終端文字列 `*/` がありません");
         }
         reader_succ(reader);
       }
       continue;
     }
 
+    int start = reader_get_offset(reader);
     Token *token = NULL;
-    if ((token = punctuator(reader)) != NULL) {
-      return token;
-    }
-    if ((token = identifier_or_keyword(reader)) != NULL) {
-      return token;
-    }
-    if ((token = constant(reader)) != NULL) {
-      return token;
-    }
-    if ((token = string_literal(reader)) != NULL) {
-      return token;
+    if ((token = punctuator(reader)) == NULL &&
+        (token = identifier_or_keyword(reader)) == NULL &&
+        (token = constant(reader)) == NULL &&
+        (token = string_literal(reader)) == NULL) {
+      reader_error(reader, "トークナイズできません: `%c`", reader_peek(reader));
     }
 
-    error("トークナイズできません: %s", reader_rest(reader));
+    int end = reader_get_offset(reader);
+    token->range.start = start;
+    token->range.len = end - start;
+    return token;
   }
 
   if (!*read_eof) {
     *read_eof = true;
-    return new_token(TK_EOF, reader);
+    Token *token = new_token(TK_EOF, reader);
+    token->range.start = reader_get_offset(reader);
+    token->range.len = 0;
+    return token;
   }
+
   return NULL;
 }
 
@@ -338,6 +339,7 @@ static Token *integer_constant(Reader *reader) {
 }
 
 static Token *hexadecimal_constant(Reader *reader) {
+  int start = reader_get_offset(reader);
   if (!reader_consume_str(reader, "0x") && !reader_consume_str(reader, "0X")) {
     return NULL;
   }
@@ -345,7 +347,7 @@ static Token *hexadecimal_constant(Reader *reader) {
   int val = 0;
 
   if (!is_hex_digit(reader_peek(reader))) {
-    error("空の16進文字リテラルです: %s", reader_rest(reader));
+    reader_error_with(reader, start, "空の16進文字リテラルです");
   }
 
   while (true) {
@@ -398,11 +400,12 @@ static Token *decimal_constant(Reader *reader) {
 }
 
 static Token *character_constant(Reader *reader) {
+  int start = reader_get_offset(reader);
   if (!reader_consume(reader, '\'')) {
     return NULL;
   }
   if (reader_peek(reader) == '\'') {
-    error("空の文字リテラルです: %s", reader_rest(reader));
+    reader_error_with(reader, start, "空の文字リテラルです");
   }
   char ch = c_char(reader);
   reader_expect(reader, '\'');
@@ -429,6 +432,7 @@ static Token *string_literal(Reader *reader) {
 }
 
 static char c_char(Reader *reader) {
+  int start = reader_get_offset(reader);
 
   if (reader_consume(reader, '\\')) {
     const char ESCAPE_CHARS[] = {'\'', '"', '?', '\\', '\0'};
@@ -455,7 +459,7 @@ static char c_char(Reader *reader) {
 
     if (reader_consume(reader, 'x')) {
       if (!is_hex_digit(reader_peek(reader))) {
-        error("空の16進文字リテラルです: %s", reader_rest(reader));
+        reader_error_with(reader, start, "空の16進文字リテラルです");
       }
       int val = 0;
       while (true) {
@@ -482,12 +486,12 @@ static char c_char(Reader *reader) {
       return val;
     }
 
-    error("不明なエスケープシーケンスです: %s", reader_rest(reader));
+    reader_error_with(reader, start, "不明なエスケープシーケンスです");
   }
 
   if (reader_consume(reader, '\n')) {
-    error("改行文字を文字リテラル中に含めることはできません: %s",
-          reader_rest(reader));
+    reader_error_with(reader, start,
+                      "改行文字を文字リテラル中に含めることはできません");
   }
 
   return reader_pop(reader);

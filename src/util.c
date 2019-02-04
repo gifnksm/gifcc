@@ -58,6 +58,21 @@ void str_push(String *str, char elem) {
   str->data[str->len++] = elem;
 }
 
+IntVector *new_int_vector(void) {
+  IntVector *vec = malloc(sizeof(IntVector));
+  vec->data = NULL;
+  vec->capacity = 0;
+  vec->len = 0;
+  return vec;
+}
+void int_vec_push(IntVector *vec, int elem) {
+  if (vec->capacity == vec->len) {
+    vec->capacity = (vec->capacity == 0) ? 16 : vec->capacity * 2;
+    vec->data = realloc(vec->data, sizeof(void *) * vec->capacity);
+  }
+  vec->data[vec->len++] = elem;
+}
+
 void print_string_literal(char *str) {
   printf("\"");
   for (int i = 0; str[i] != '\0'; i++) {
