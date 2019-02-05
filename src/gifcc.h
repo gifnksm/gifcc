@@ -1,5 +1,6 @@
 #pragma once
 
+#include <assert.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdnoreturn.h>
@@ -163,6 +164,7 @@ typedef struct StringLiteral {
 typedef struct Expr {
   int ty;         // ノードの型
   Type *val_type; // 値の型
+  Range range;    // ソースコード中の位置
 
   struct Expr *lhs;  // 左辺
   struct Expr *rhs;  // 右辺
@@ -298,6 +300,16 @@ TranslationUnit *parse(Reader *reader);
 
 char *make_label(void);
 void gen(TranslationUnit *tunit);
+
+static inline Range range_join(Range a, Range b) {
+  assert(a.start > 0);
+  assert(b.start >= 0);
+  int aend = a.start + a.len;
+  int bend = b.start + b.len;
+  int start = a.start < b.start ? a.start : b.start;
+  int end = aend > bend ? aend : bend;
+  return (Range){.start = start, .len = (end - start)};
+}
 
 static inline char *get_label(Function *func, char *name) {
   return map_get(func->label_map, name);
