@@ -2,9 +2,13 @@ version: 2
 jobs:
   build:
     docker:
-      - image: base/devel
+      - image: archlinux/base
     steps:
       - checkout
+      - run: 
+          command: |
+            pacman -Sy
+            pacman -S base-devel --noconfirm
       - run:
           command: |
             echo "Defaults        lecture = never" > /etc/sudoers.d/privacy
@@ -16,7 +20,6 @@ jobs:
             sudo -u builder curl -O https://aur.archlinux.org/cgit/aur.git/snapshot/tmsu.tar.gz
             sudo -u builder tar -xvf tmsu.tar.gz
             cd tmsu
-            pacman -Sy
             sudo -u builder makepkg -si --noconfirm
       - run: pacman -S npm --noconfirm
       - run: npm install -g tap-xunit
