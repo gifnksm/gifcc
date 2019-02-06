@@ -143,16 +143,19 @@ typedef struct Type {
 typedef struct StackVar {
   int offset;
   Type *type;
+  Range range;
 } StackVar;
 
 typedef struct GlobalVar {
   char *name;
   Type *type;
+  Range range;
 } GlobalVar;
 
 typedef struct Param {
   char *name;
   Type *type;
+  Range range;
   StackVar *stack_var;
 } Param;
 
@@ -186,6 +189,7 @@ typedef struct Expr {
 
 typedef struct Stmt {
   stmt_t ty;
+  Range range;
 
   // ST_LABEL, ST_GOTO
   char *name;
@@ -214,12 +218,14 @@ typedef struct Stmt {
   // ST_RETURN: return <expr>:
   struct Expr *expr;
 
-  Vector *stmts; // tyがST_COMPOUNDの場合のみ使う
+  Map *stack_map; // tyがST_COMPOUNDの場合のみ使う
+  Vector *stmts;  // tyがST_COMPOUNDの場合のみ使う
 } Stmt;
 
 typedef struct Function {
   char *name;
   Type *type;
+  Range range;
   int stack_size;
   Map *label_map;
   Stmt *body;
@@ -282,7 +288,7 @@ Token *token_peek(Tokenizer *tokenizer);
 Token *token_peek_ahead(Tokenizer *tokenizer, int n);
 Token *token_pop(Tokenizer *tokenizer);
 Token *token_consume(Tokenizer *tokenizer, int ty);
-bool token_consume2(Tokenizer *tokenizer, int ty1, int ty2);
+Token *token_consume2(Tokenizer *tokenizer, int ty1, int ty2);
 Token *token_expect(Tokenizer *tokenizer, int ty);
 const char *token_kind_to_str(int kind);
 #define token_error(tokenizer, fmt, ...)                                       \
@@ -302,7 +308,7 @@ char *make_label(void);
 void gen(TranslationUnit *tunit);
 
 static inline Range range_join(Range a, Range b) {
-  assert(a.start > 0);
+  assert(a.start >= 0);
   assert(b.start >= 0);
   int aend = a.start + a.len;
   int bend = b.start + b.len;

@@ -262,114 +262,150 @@ static void dump_expr(const Reader *reader, Expr *expr, int level) {
 static void dump_stmt(const Reader *reader, Stmt *stmt, int level) {
   switch (stmt->ty) {
   case ST_EXPR:
+    dump_range_start(reader, stmt->range);
     dump_indent(level);
     printf("{EXPR\n");
     dump_expr(reader, stmt->expr, level + 1);
+    dump_range_end(reader, stmt->range);
     dump_indent(level);
     printf("}\n");
     return;
   case ST_COMPOUND:
+    dump_range_start(reader, stmt->range);
     dump_indent(level);
     printf("{COMPOUND\n");
+    for (int i = 0; i < stmt->stack_map->keys->len; i++) {
+      const char *name = stmt->stack_map->keys->data[i];
+      const StackVar *svar = stmt->stack_map->vals->data[i];
+      dump_range_start(reader, svar->range);
+      dump_indent(level);
+      printf("STACK ");
+      dump_type(svar->type);
+      printf(" %s (%d)\n", name, svar->offset);
+    }
     for (int i = 0; i < stmt->stmts->len; i++) {
       dump_stmt(reader, stmt->stmts->data[i], level + 1);
     }
+    dump_range_end(reader, stmt->range);
     dump_indent(level);
     printf("}\n");
     return;
   case ST_IF:
+    dump_range_start(reader, stmt->range);
     dump_indent(level);
     printf("{IF\n");
     dump_expr(reader, stmt->cond, level + 1);
     dump_stmt(reader, stmt->then_stmt, level + 1);
     dump_stmt(reader, stmt->else_stmt, level + 1);
+    dump_range_end(reader, stmt->range);
     dump_indent(level);
-    printf("\n");
+    printf("}\n");
     return;
   case ST_SWITCH:
+    dump_range_start(reader, stmt->range);
     dump_indent(level);
     printf("{SWITCH\n");
     dump_expr(reader, stmt->cond, level + 1);
     dump_stmt(reader, stmt->body, level + 1);
+    dump_range_end(reader, stmt->range);
     dump_indent(level);
-    printf("\n");
+    printf("}\n");
     return;
   case ST_CASE:
+    dump_range_start(reader, stmt->range);
     dump_indent(level);
     printf("{CASE\n");
     dump_expr(reader, stmt->expr, level + 1);
+    dump_range_end(reader, stmt->range);
     dump_indent(level);
-    printf("\n");
+    printf("}\n");
     return;
   case ST_DEFAULT:
+    dump_range_start(reader, stmt->range);
     dump_indent(level);
     printf("{DEFAULT}\n");
     return;
   case ST_LABEL:
+    dump_range_start(reader, stmt->range);
     dump_indent(level);
     printf("{LABEL %s}\n", stmt->name);
     return;
   case ST_WHILE:
+    dump_range_start(reader, stmt->range);
     dump_indent(level);
     printf("{WHILE\n");
     dump_expr(reader, stmt->cond, level + 1);
     dump_stmt(reader, stmt->body, level + 1);
+    dump_range_end(reader, stmt->range);
     dump_indent(level);
     printf("\n");
     return;
   case ST_DO_WHILE:
+    dump_range_start(reader, stmt->range);
     dump_indent(level);
     printf("{DO_WHILE\n");
     dump_expr(reader, stmt->cond, level + 1);
     dump_stmt(reader, stmt->body, level + 1);
+    dump_range_end(reader, stmt->range);
     dump_indent(level);
     printf("\n");
     return;
   case ST_FOR:
+    dump_range_start(reader, stmt->range);
     dump_indent(level);
     printf("{FOR\n");
     if (stmt->init != NULL) {
       dump_expr(reader, stmt->init, level + 1);
     } else {
+      dump_range_start(reader, stmt->range);
       dump_indent(level + 1);
       printf("<void>(NULL)\n");
     }
     if (stmt->cond != NULL) {
       dump_expr(reader, stmt->cond, level + 1);
     } else {
+      dump_range_start(reader, stmt->range);
       dump_indent(level + 1);
       printf("<void>(NULL)\n");
     }
     if (stmt->inc != NULL) {
       dump_expr(reader, stmt->inc, level + 1);
     } else {
+      dump_range_start(reader, stmt->range);
       dump_indent(level + 1);
       printf("<void>(NULL)\n");
     }
     dump_stmt(reader, stmt->body, level + 1);
+    dump_range_end(reader, stmt->range);
     dump_indent(level);
     printf("\n");
     return;
   case ST_GOTO:
+    dump_range_start(reader, stmt->range);
     dump_indent(level);
     printf("{GOTO %s}\n", stmt->name);
     return;
   case ST_BREAK:
+    dump_range_start(reader, stmt->range);
     dump_indent(level);
     printf("{BREAK}\n");
     return;
   case ST_CONTINUE:
+    dump_range_start(reader, stmt->range);
     dump_indent(level);
     printf("{CONTINUE}\n");
     return;
   case ST_RETURN:
+    dump_range_start(reader, stmt->range);
     dump_indent(level);
     printf("{RETURN\n");
     dump_expr(reader, stmt->expr, level + 1);
+    dump_range_end(reader, stmt->range);
     dump_indent(level);
-    printf("\n");
+    printf("}\n");
     return;
   case ST_NULL:
+    dump_range_start(reader, stmt->range);
     dump_indent(level);
     printf("{NULL}\n");
     return;
@@ -382,17 +418,20 @@ static void output_ast(const Reader *reader, TranslationUnit *tunit) {
   for (int i = 0; i < tunit->func_list->len; i++) {
     Function *func = tunit->func_list->data[i];
 
+    dump_range_start(reader, func->range);
     dump_indent(level);
     printf("FUNCTION ");
     dump_type(func->type);
     printf(" %s = {\n", func->name);
     dump_stmt(reader, func->body, level + 1);
+    dump_range_end(reader, func->range);
     dump_indent(level);
     printf("}\n");
   }
   for (int i = 0; i < tunit->gvar_list->len; i++) {
     GlobalVar *gvar = tunit->gvar_list->data[i];
 
+    dump_range_start(reader, gvar->range);
     dump_indent(level);
     printf("GLOBAL ");
     dump_type(gvar->type);

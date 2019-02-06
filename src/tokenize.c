@@ -87,12 +87,11 @@ Token *token_consume(Tokenizer *tokenizer, int ty) {
   return token_pop(tokenizer);
 }
 
-bool token_consume2(Tokenizer *tokenizer, int ty1, int ty2) {
+Token *token_consume2(Tokenizer *tokenizer, int ty1, int ty2) {
   if (token_peek(tokenizer)->ty == ty1 &&
       token_peek_ahead(tokenizer, 1)->ty == ty2) {
     (void)token_pop(tokenizer);
-    (void)token_pop(tokenizer);
-    return true;
+    return token_pop(tokenizer);
   }
   return false;
 }

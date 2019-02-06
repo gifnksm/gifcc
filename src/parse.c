@@ -33,9 +33,11 @@ static GlobalCtxt *new_global_ctxt(Tokenizer *tokenizer);
 static FuncCtxt *new_func_ctxt(GlobalCtxt *gctxt, char *name);
 static ScopeCtxt *new_root_scope_ctxt(FuncCtxt *fctxt);
 static ScopeCtxt *new_inner_scope_ctxt(ScopeCtxt *outer);
-static StackVar *register_stack(ScopeCtxt *sctxt, char *name, Type *type);
+static StackVar *register_stack(ScopeCtxt *sctxt, char *name, Type *type,
+                                Range range);
 static StackVar *get_stack(ScopeCtxt *sctxt, char *name);
-static bool register_global(GlobalCtxt *gctxt, char *name, Type *type);
+static bool register_global(GlobalCtxt *gctxt, char *name, Type *type,
+                            Range range);
 static GlobalVar *get_global(GlobalCtxt *gctxt, char *name);
 static bool is_sametype(Type *ty1, Type *ty2);
 static bool is_integer_type(Type *ty);
@@ -63,18 +65,21 @@ static Expr *new_expr_binop(int ty, Expr *lhs, Expr *rhs, Range range);
 static Expr *new_expr_cond(Expr *cond, Expr *then_expr, Expr *else_expr,
                            Range range);
 static Expr *new_expr_index(Expr *array, Expr *index, Range range);
-static Stmt *new_stmt(int ty);
-static Stmt *new_stmt_expr(Expr *expr);
-static Stmt *new_stmt_if(Expr *cond, Stmt *then_stmt, Stmt *else_stmt);
-static Stmt *new_stmt_switch(Expr *cond, Stmt *body);
-static Stmt *new_stmt_case(Expr *expr);
-static Stmt *new_stmt_default(void);
-static Stmt *new_stmt_label(FuncCtxt *fctxt, char *name);
-static Stmt *new_stmt_while(Expr *cond, Stmt *body);
-static Stmt *new_stmt_do_while(Expr *cond, Stmt *body);
-static Stmt *new_stmt_for(Expr *init, Expr *cond, Expr *inc, Stmt *body);
-static Stmt *new_stmt_goto(char *name);
-static Stmt *new_stmt_return(Expr *expr);
+static Stmt *new_stmt(int ty, Range range);
+static Stmt *new_stmt_expr(Expr *expr, Range range);
+static Stmt *new_stmt_if(Expr *cond, Stmt *then_stmt, Stmt *else_stmt,
+                         Range range);
+static Stmt *new_stmt_switch(Expr *cond, Stmt *body, Range range);
+static Stmt *new_stmt_case(Expr *expr, Range range);
+static Stmt *new_stmt_default(Range range);
+static Stmt *new_stmt_label(FuncCtxt *fctxt, char *name, Range range);
+static Stmt *new_stmt_while(Expr *cond, Stmt *body, Range range);
+static Stmt *new_stmt_do_while(Expr *cond, Stmt *body, Range range);
+static Stmt *new_stmt_for(Expr *init, Expr *cond, Expr *inc, Stmt *body,
+                          Range range);
+static Stmt *new_stmt_goto(char *name, Range range);
+static Stmt *new_stmt_return(Expr *expr, Range range);
+static Stmt *new_stmt_compound(Map *stack_map, Vector *stmts, Range range);
 
 // expression
 static Expr *primary_expression(ScopeCtxt *sctxt);
@@ -102,17 +107,19 @@ static void declaration(ScopeCtxt *sctxt);
 static Type *type_specifier(Tokenizer *tokenizer);
 static Type *type_name(Tokenizer *tokenizer);
 static void declarator(Tokenizer *tokenizer, Type *base_type, char **name,
-                       Type **type);
+                       Type **type, Range *range);
 static void direct_declarator(Tokenizer *tokenizer, Type *base_type,
-                              char **name, Type **type);
+                              char **name, Type **type, Range *range);
 
 // statement
 static Stmt *statement(ScopeCtxt *sctxt);
 static Stmt *compound_statement(ScopeCtxt *sctxt);
 
 // top-level
-static Function *function_definition(GlobalCtxt *gctxt, Type *type, char *name);
-static GlobalVar *global_variable(GlobalCtxt *gctxt, Type *type, char *name);
+static Function *function_definition(GlobalCtxt *gctxt, Type *type, char *name,
+                                     Range start);
+static GlobalVar *global_variable(GlobalCtxt *gctxt, Type *type, char *name,
+                                  Range start);
 static TranslationUnit *translation_unit(Tokenizer *tokenizer);
 
 static Stmt null_stmt = {
@@ -170,7 +177,8 @@ static ScopeCtxt *new_inner_scope_ctxt(ScopeCtxt *outer) {
   return inner;
 }
 
-static StackVar *register_stack(ScopeCtxt *sctxt, char *name, Type *type) {
+static StackVar *register_stack(ScopeCtxt *sctxt, char *name, Type *type,
+                                Range range) {
   if (type->ty == TY_VOID) {
     error("void型の変数は定義できません: %s", name);
   }
@@ -185,6 +193,7 @@ static StackVar *register_stack(ScopeCtxt *sctxt, char *name, Type *type) {
   fctxt->stack_size = align(fctxt->stack_size, get_val_align(type));
   var->offset = fctxt->stack_size;
   var->type = type;
+  var->range = range;
   map_put(sctxt->stack_map, name, var);
   fctxt->stack_size += get_val_size(type);
 
@@ -202,7 +211,8 @@ static StackVar *get_stack(ScopeCtxt *sctxt, char *name) {
   return NULL;
 }
 
-static bool register_global(GlobalCtxt *gctxt, char *name, Type *type) {
+static bool register_global(GlobalCtxt *gctxt, char *name, Type *type,
+                            Range range) {
   if (type->ty == TY_VOID) {
     error("void型の変数は定義できません");
   }
@@ -213,6 +223,7 @@ static bool register_global(GlobalCtxt *gctxt, char *name, Type *type) {
   GlobalVar *var = malloc(sizeof(GlobalVar));
   var->type = type;
   var->name = name;
+  var->range = range;
   map_put(gctxt->var_map, name, var);
   return true;
 }
@@ -696,28 +707,30 @@ static Expr *new_expr_index(Expr *array, Expr *index, Range range) {
   return new_expr_unary('*', new_expr_binop('+', array, index, range), range);
 }
 
-static Stmt *new_stmt(int ty) {
+static Stmt *new_stmt(int ty, Range range) {
   Stmt *stmt = malloc(sizeof(Stmt));
   stmt->ty = ty;
+  stmt->range = range;
   return stmt;
 }
 
-static Stmt *new_stmt_expr(Expr *expr) {
-  Stmt *stmt = new_stmt(ST_EXPR);
+static Stmt *new_stmt_expr(Expr *expr, Range range) {
+  Stmt *stmt = new_stmt(ST_EXPR, range);
   stmt->expr = expr;
   return stmt;
 }
 
-static Stmt *new_stmt_if(Expr *cond, Stmt *then_stmt, Stmt *else_stmt) {
-  Stmt *stmt = new_stmt(ST_IF);
+static Stmt *new_stmt_if(Expr *cond, Stmt *then_stmt, Stmt *else_stmt,
+                         Range range) {
+  Stmt *stmt = new_stmt(ST_IF, range);
   stmt->cond = cond;
   stmt->then_stmt = then_stmt;
   stmt->else_stmt = else_stmt;
   return stmt;
 }
 
-static Stmt *new_stmt_switch(Expr *cond, Stmt *body) {
-  Stmt *stmt = new_stmt(ST_SWITCH);
+static Stmt *new_stmt_switch(Expr *cond, Stmt *body, Range range) {
+  Stmt *stmt = new_stmt(ST_SWITCH, range);
   stmt->cond = cond;
   stmt->body = body;
   stmt->cases = new_vector();
@@ -725,43 +738,44 @@ static Stmt *new_stmt_switch(Expr *cond, Stmt *body) {
   return stmt;
 }
 
-static Stmt *new_stmt_case(Expr *expr) {
-  Stmt *stmt = new_stmt(ST_CASE);
+static Stmt *new_stmt_case(Expr *expr, Range range) {
+  Stmt *stmt = new_stmt(ST_CASE, range);
   stmt->expr = expr;
   stmt->label = make_label();
   return stmt;
 }
 
-static Stmt *new_stmt_default(void) {
-  Stmt *stmt = new_stmt(ST_DEFAULT);
+static Stmt *new_stmt_default(Range range) {
+  Stmt *stmt = new_stmt(ST_DEFAULT, range);
   stmt->label = make_label();
   return stmt;
 }
 
-static Stmt *new_stmt_label(FuncCtxt *fctxt, char *name) {
-  Stmt *stmt = new_stmt(ST_LABEL);
+static Stmt *new_stmt_label(FuncCtxt *fctxt, char *name, Range range) {
+  Stmt *stmt = new_stmt(ST_LABEL, range);
   stmt->name = name;
   stmt->label = make_label();
   map_put(fctxt->label_map, stmt->name, stmt->label);
   return stmt;
 }
 
-static Stmt *new_stmt_while(Expr *cond, Stmt *body) {
-  Stmt *stmt = new_stmt(ST_WHILE);
+static Stmt *new_stmt_while(Expr *cond, Stmt *body, Range range) {
+  Stmt *stmt = new_stmt(ST_WHILE, range);
   stmt->cond = cond;
   stmt->body = body;
   return stmt;
 }
 
-static Stmt *new_stmt_do_while(Expr *cond, Stmt *body) {
-  Stmt *stmt = new_stmt(ST_DO_WHILE);
+static Stmt *new_stmt_do_while(Expr *cond, Stmt *body, Range range) {
+  Stmt *stmt = new_stmt(ST_DO_WHILE, range);
   stmt->cond = cond;
   stmt->body = body;
   return stmt;
 }
 
-static Stmt *new_stmt_for(Expr *init, Expr *cond, Expr *inc, Stmt *body) {
-  Stmt *stmt = new_stmt(ST_FOR);
+static Stmt *new_stmt_for(Expr *init, Expr *cond, Expr *inc, Stmt *body,
+                          Range range) {
+  Stmt *stmt = new_stmt(ST_FOR, range);
   stmt->init = init;
   stmt->cond = cond;
   stmt->inc = inc;
@@ -769,15 +783,22 @@ static Stmt *new_stmt_for(Expr *init, Expr *cond, Expr *inc, Stmt *body) {
   return stmt;
 }
 
-static Stmt *new_stmt_goto(char *name) {
-  Stmt *stmt = new_stmt(ST_GOTO);
+static Stmt *new_stmt_goto(char *name, Range range) {
+  Stmt *stmt = new_stmt(ST_GOTO, range);
   stmt->name = name;
   return stmt;
 }
 
-static Stmt *new_stmt_return(Expr *expr) {
-  Stmt *stmt = new_stmt(ST_RETURN);
+static Stmt *new_stmt_return(Expr *expr, Range range) {
+  Stmt *stmt = new_stmt(ST_RETURN, range);
   stmt->expr = expr;
+  return stmt;
+}
+
+static Stmt *new_stmt_compound(Map *stack_map, Vector *stmts, Range range) {
+  Stmt *stmt = new_stmt(ST_COMPOUND, range);
+  stmt->stack_map = stack_map;
+  stmt->stmts = stmts;
   return stmt;
 }
 
@@ -1072,11 +1093,12 @@ static void declaration(ScopeCtxt *sctxt) {
   Type *base_type = type_specifier(sctxt->tokenizer);
   char *name;
   Type *type;
-  declarator(sctxt->tokenizer, base_type, &name, &type);
-  (void)register_stack(sctxt, name, type);
+  Range range;
+  declarator(sctxt->tokenizer, base_type, &name, &type, &range);
+  (void)register_stack(sctxt, name, type, range);
   while (token_consume(sctxt->tokenizer, ',')) {
-    declarator(sctxt->tokenizer, base_type, &name, &type);
-    (void)register_stack(sctxt, name, type);
+    declarator(sctxt->tokenizer, base_type, &name, &type, &range);
+    (void)register_stack(sctxt, name, type, range);
   }
   token_expect(sctxt->tokenizer, ';');
 }
@@ -1108,25 +1130,35 @@ static Type *type_name(Tokenizer *tokenizer) {
 }
 
 static void declarator(Tokenizer *tokenizer, Type *base_type, char **name,
-                       Type **type) {
+                       Type **type, Range *range) {
+  Range start = token_peek(tokenizer)->range;
   while (token_consume(tokenizer, '*')) {
     base_type = new_type_ptr(base_type);
   }
-  direct_declarator(tokenizer, base_type, name, type);
+  Range end;
+  direct_declarator(tokenizer, base_type, name, type, &end);
+  *range = range_join(start, end);
 }
 
 static void direct_declarator(Tokenizer *tokenizer, Type *base_type,
-                              char **name, Type **type) {
+                              char **name, Type **type, Range *range) {
   Type *placeholder = malloc(sizeof(Type));
-  Token *token;
-  if ((token = token_consume(tokenizer, TK_IDENT)) != NULL) {
-    *name = token->name;
-    *type = placeholder;
-  } else if (token_consume(tokenizer, '(')) {
-    declarator(tokenizer, placeholder, name, type);
-    token_expect(tokenizer, ')');
-  } else {
-    token_error(tokenizer, "識別子でも括弧でもありません");
+  *range = token_peek(tokenizer)->range;
+
+  {
+    Token *token;
+    if ((token = token_consume(tokenizer, TK_IDENT)) != NULL) {
+      *name = token->name;
+      *type = placeholder;
+      *range = range_join(*range, token->range);
+    } else if (token_consume(tokenizer, '(')) {
+      Range mid;
+      declarator(tokenizer, placeholder, name, type, &mid);
+      Token *token = token_expect(tokenizer, ')');
+      *range = range_join(*range, token->range);
+    } else {
+      token_error(tokenizer, "識別子でも括弧でもありません");
+    }
   }
 
   while (true) {
@@ -1135,28 +1167,33 @@ static void direct_declarator(Tokenizer *tokenizer, Type *base_type,
       *placeholder =
           *new_type_array(inner, token_expect(tokenizer, TK_NUM)->val);
       placeholder = inner;
-      token_expect(tokenizer, ']');
+      Token *end = token_expect(tokenizer, ']');
+      *range = range_join(*range, end->range);
       continue;
     }
 
     if (token_consume(tokenizer, '(')) {
       Vector *params = new_vector();
-      if (token_consume(tokenizer, ')') ||
-          token_consume2(tokenizer, TK_VOID, ')')) {
+      Token *end;
+      if ((end = token_consume(tokenizer, ')')) ||
+          (end = token_consume2(tokenizer, TK_VOID, ')'))) {
         // do nothing
       } else {
         while (true) {
           Type *base_type = type_specifier(tokenizer);
           Param *param = malloc(sizeof(Param));
-          declarator(tokenizer, base_type, &param->name, &param->type);
+          declarator(tokenizer, base_type, &param->name, &param->type,
+                     &param->range);
           vec_push(params, param);
           if (token_peek(tokenizer)->ty == ')') {
             break;
           }
           token_expect(tokenizer, ',');
         }
-        token_expect(tokenizer, ')');
+        end = token_expect(tokenizer, ')');
       }
+
+      *range = range_join(*range, end->range);
 
       Type *inner = malloc(sizeof(Type));
       *placeholder = *new_type_func(inner, params);
@@ -1171,7 +1208,8 @@ static void direct_declarator(Tokenizer *tokenizer, Type *base_type,
 }
 
 static Stmt *statement(ScopeCtxt *sctxt) {
-  switch (token_peek(sctxt->tokenizer)->ty) {
+  Token *start = token_peek(sctxt->tokenizer);
+  switch (start->ty) {
   case TK_IF: {
     token_succ(sctxt->tokenizer);
     token_expect(sctxt->tokenizer, '(');
@@ -1179,27 +1217,32 @@ static Stmt *statement(ScopeCtxt *sctxt) {
     token_expect(sctxt->tokenizer, ')');
     Stmt *then_stmt = statement(sctxt);
     Stmt *else_stmt = &null_stmt;
+    Range range;
     if (token_consume(sctxt->tokenizer, TK_ELSE)) {
       else_stmt = statement(sctxt);
+      range = range_join(start->range, else_stmt->range);
+    } else {
+      range = range_join(start->range, then_stmt->range);
     }
-    return new_stmt_if(cond, then_stmt, else_stmt);
+    return new_stmt_if(cond, then_stmt, else_stmt, range);
   }
   case TK_SWITCH: {
     token_succ(sctxt->tokenizer);
     token_expect(sctxt->tokenizer, '(');
     Expr *cond = expression(sctxt);
     token_expect(sctxt->tokenizer, ')');
-    Stmt *stmt = new_stmt_switch(cond, NULL);
+    Stmt *stmt = new_stmt_switch(cond, NULL, start->range);
     vec_push(sctxt->func->switches, stmt);
     stmt->body = statement(sctxt);
+    stmt->range = range_join(stmt->range, stmt->body->range);
     vec_pop(sctxt->func->switches);
     return stmt;
   }
   case TK_CASE: {
     token_succ(sctxt->tokenizer);
     Expr *expr = constant_expression(sctxt);
-    token_expect(sctxt->tokenizer, ':');
-    Stmt *stmt = new_stmt_case(expr);
+    Token *end = token_expect(sctxt->tokenizer, ':');
+    Stmt *stmt = new_stmt_case(expr, range_join(start->range, end->range));
     if (sctxt->func->switches->len <= 0) {
       error("switch文中でない箇所にcase文があります");
     }
@@ -1210,8 +1253,8 @@ static Stmt *statement(ScopeCtxt *sctxt) {
   }
   case TK_DEFAULT: {
     token_succ(sctxt->tokenizer);
-    token_expect(sctxt->tokenizer, ':');
-    Stmt *stmt = new_stmt_default();
+    Token *end = token_expect(sctxt->tokenizer, ':');
+    Stmt *stmt = new_stmt_default(range_join(start->range, end->range));
     if (sctxt->func->switches->len <= 0) {
       error("switch文中でない箇所にcase文があります");
     }
@@ -1226,7 +1269,7 @@ static Stmt *statement(ScopeCtxt *sctxt) {
     Expr *cond = expression(sctxt);
     token_expect(sctxt->tokenizer, ')');
     Stmt *body = statement(sctxt);
-    return new_stmt_while(cond, body);
+    return new_stmt_while(cond, body, range_join(start->range, body->range));
   }
   case TK_DO: {
     token_succ(sctxt->tokenizer);
@@ -1235,8 +1278,8 @@ static Stmt *statement(ScopeCtxt *sctxt) {
     token_expect(sctxt->tokenizer, '(');
     Expr *cond = expression(sctxt);
     token_expect(sctxt->tokenizer, ')');
-    token_expect(sctxt->tokenizer, ';');
-    return new_stmt_do_while(cond, body);
+    Token *end = token_expect(sctxt->tokenizer, ';');
+    return new_stmt_do_while(cond, body, range_join(start->range, end->range));
   }
   case TK_FOR: {
     token_succ(sctxt->tokenizer);
@@ -1257,23 +1300,24 @@ static Stmt *statement(ScopeCtxt *sctxt) {
     }
     token_expect(sctxt->tokenizer, ')');
     Stmt *body = statement(sctxt);
-    return new_stmt_for(init, cond, inc, body);
+    return new_stmt_for(init, cond, inc, body,
+                        range_join(start->range, body->range));
   }
   case TK_GOTO: {
     token_succ(sctxt->tokenizer);
     char *name = token_expect(sctxt->tokenizer, TK_IDENT)->name;
-    token_expect(sctxt->tokenizer, ';');
-    return new_stmt_goto(name);
+    Token *end = token_expect(sctxt->tokenizer, ';');
+    return new_stmt_goto(name, range_join(start->range, end->range));
   }
   case TK_BREAK: {
     token_succ(sctxt->tokenizer);
-    token_expect(sctxt->tokenizer, ';');
-    return new_stmt(ST_BREAK);
+    Token *end = token_expect(sctxt->tokenizer, ';');
+    return new_stmt(ST_BREAK, range_join(start->range, end->range));
   }
   case TK_CONTINUE: {
     token_succ(sctxt->tokenizer);
-    token_expect(sctxt->tokenizer, ';');
-    return new_stmt(ST_CONTINUE);
+    Token *end = token_expect(sctxt->tokenizer, ';');
+    return new_stmt(ST_CONTINUE, range_join(start->range, end->range));
   }
   case TK_RETURN: {
     token_succ(sctxt->tokenizer);
@@ -1281,8 +1325,8 @@ static Stmt *statement(ScopeCtxt *sctxt) {
     if (token_peek(sctxt->tokenizer)->ty != ';') {
       expr = expression(sctxt);
     }
-    token_expect(sctxt->tokenizer, ';');
-    return new_stmt_return(expr);
+    Token *end = token_expect(sctxt->tokenizer, ';');
+    return new_stmt_return(expr, range_join(start->range, end->range));
   }
   case '{': {
     ScopeCtxt *inner = new_inner_scope_ctxt(sctxt);
@@ -1294,46 +1338,50 @@ static Stmt *statement(ScopeCtxt *sctxt) {
   }
   case TK_IDENT: {
     if (token_peek_ahead(sctxt->tokenizer, 1)->ty == ':') {
-      Stmt *stmt =
-          new_stmt_label(sctxt->func, token_pop(sctxt->tokenizer)->name);
-      token_succ(sctxt->tokenizer);
+      Token *ident = token_pop(sctxt->tokenizer);
+      Token *end = token_pop(sctxt->tokenizer);
+      Stmt *stmt = new_stmt_label(sctxt->func, ident->name,
+                                  range_join(start->range, end->range));
       return stmt;
     }
   }
   // fall through
   default: {
     Expr *expr = expression(sctxt);
-    token_expect(sctxt->tokenizer, ';');
-    return new_stmt_expr(expr);
+    Token *end = token_expect(sctxt->tokenizer, ';');
+    return new_stmt_expr(expr, range_join(expr->range, end->range));
   }
   }
 }
 
 static Stmt *compound_statement(ScopeCtxt *sctxt) {
-  token_expect(sctxt->tokenizer, '{');
+  Token *start = token_expect(sctxt->tokenizer, '{');
 
-  Stmt *stmt = new_stmt(ST_COMPOUND);
-  stmt->stmts = new_vector();
+  Range range = start->range;
+  Vector *stmts = new_vector();
   while (!token_consume(sctxt->tokenizer, '}')) {
     if (token_is_typename(token_peek(sctxt->tokenizer))) {
       declaration(sctxt);
       continue;
     }
-    vec_push(stmt->stmts, statement(sctxt));
+    Stmt *s = statement(sctxt);
+    range = range_join(range, s->range);
+    vec_push(stmts, s);
   }
-  return stmt;
+  return new_stmt_compound(sctxt->stack_map, stmts, range);
 }
 
-static Function *function_definition(GlobalCtxt *gctxt, Type *type,
-                                     char *name) {
+static Function *function_definition(GlobalCtxt *gctxt, Type *type, char *name,
+                                     Range start) {
   FuncCtxt *fctxt = new_func_ctxt(gctxt, name);
   ScopeCtxt *sctxt = new_root_scope_ctxt(fctxt);
-  if (!register_global(gctxt, name, type)) {
+  if (!register_global(gctxt, name, type, start)) {
     error("同じ名前の関数またはグローバル変数が複数回定義されました: %s", name);
   }
   for (int i = 0; i < type->func_param->len; i++) {
     Param *param = type->func_param->data[i];
-    param->stack_var = register_stack(sctxt, param->name, param->type);
+    param->stack_var =
+        register_stack(sctxt, param->name, param->type, param->range);
   }
 
   Stmt *body = compound_statement(sctxt);
@@ -1341,6 +1389,7 @@ static Function *function_definition(GlobalCtxt *gctxt, Type *type,
   Function *func = malloc(sizeof(Function));
   func->name = name;
   func->type = type;
+  func->range = range_join(start, body->range);
   func->stack_size = fctxt->stack_size;
   func->label_map = fctxt->label_map;
   func->body = body;
@@ -1348,10 +1397,11 @@ static Function *function_definition(GlobalCtxt *gctxt, Type *type,
   return func;
 }
 
-static GlobalVar *global_variable(GlobalCtxt *gctxt, Type *type, char *name) {
-  token_expect(gctxt->tokenizer, ';');
+static GlobalVar *global_variable(GlobalCtxt *gctxt, Type *type, char *name,
+                                  Range start) {
+  Token *end = token_expect(gctxt->tokenizer, ';');
 
-  if (!register_global(gctxt, name, type)) {
+  if (!register_global(gctxt, name, type, range_join(start, end->range))) {
     error("同じ名前の関数またはグローバル変数が複数回定義されました: %s", name);
   }
 
@@ -1368,14 +1418,15 @@ static TranslationUnit *translation_unit(Tokenizer *tokenizer) {
     Type *base_type = type_specifier(gctxt->tokenizer);
     char *name;
     Type *type;
-    declarator(gctxt->tokenizer, base_type, &name, &type);
+    Range range;
+    declarator(gctxt->tokenizer, base_type, &name, &type, &range);
 
     if (is_func_type(type)) {
-      vec_push(func_list, function_definition(gctxt, type, name));
+      vec_push(func_list, function_definition(gctxt, type, name, range));
       continue;
     }
 
-    vec_push(gvar_list, global_variable(gctxt, type, name));
+    vec_push(gvar_list, global_variable(gctxt, type, name, range));
   }
 
   TranslationUnit *tunit = malloc(sizeof(TranslationUnit));
