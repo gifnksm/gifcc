@@ -148,20 +148,10 @@ const char *token_kind_to_str(int kind) {
 noreturn __attribute__((format(printf, 5, 6))) void
 token_error_with_raw(const Tokenizer *tokenizer, Token *token,
                      const char *dbg_file, int dbg_line, char *fmt, ...) {
-  int line, column;
-  reader_get_position(tokenizer->reader, token->range.start, &line, &column);
-  fprintf(stderr, "%s:%d:%d: error: ", reader_get_filename(tokenizer->reader),
-          line, column);
-
   va_list ap;
   va_start(ap, fmt);
-  vfprintf(stderr, fmt, ap);
-  va_end(ap);
-
-  fprintf(stderr, " (`%s`)",
-          reader_get_source(tokenizer->reader, token->range));
-  fprintf(stderr, " (DEBUG:%s:%d)\n", dbg_file, dbg_line);
-  exit(1);
+  reader_error_range_raw_v(tokenizer->reader, token->range, dbg_file, dbg_line,
+                           fmt, ap);
 }
 
 const Reader *token_get_reader(const Tokenizer *tokenizer) {
@@ -223,7 +213,7 @@ static Token *read_token(Reader *reader, bool *read_eof) {
           break;
         }
         if (reader_peek(reader) == '\0') {
-          reader_error(reader, "コメントの終端文字列 `*/` がありません");
+          reader_error_here(reader, "コメントの終端文字列 `*/` がありません");
         }
         reader_succ(reader);
       }
@@ -236,7 +226,8 @@ static Token *read_token(Reader *reader, bool *read_eof) {
         (token = identifier_or_keyword(reader)) == NULL &&
         (token = constant(reader)) == NULL &&
         (token = string_literal(reader)) == NULL) {
-      reader_error(reader, "トークナイズできません: `%c`", reader_peek(reader));
+      reader_error_here(reader, "トークナイズできません: `%c`",
+                        reader_peek(reader));
     }
 
     int end = reader_get_offset(reader);
@@ -366,7 +357,7 @@ static Token *hexadecimal_constant(Reader *reader) {
   int val = 0;
 
   if (!is_hex_digit(reader_peek(reader))) {
-    reader_error_with(reader, start, "空の16進文字リテラルです");
+    reader_error_offset(reader, start, "空の16進文字リテラルです");
   }
 
   while (true) {
@@ -426,7 +417,7 @@ static Token *character_constant(Reader *reader) {
   char ch;
   ch = reader_peek(reader);
   if (ch == '\'' || ch == '\0') {
-    reader_error_with(reader, start, "空の文字リテラルです");
+    reader_error_offset(reader, start, "空の文字リテラルです");
   }
   ch = c_char(reader);
   reader_expect(reader, '\'');
@@ -480,7 +471,7 @@ static char c_char(Reader *reader) {
 
     if (reader_consume(reader, 'x')) {
       if (!is_hex_digit(reader_peek(reader))) {
-        reader_error_with(reader, start, "空の16進文字リテラルです");
+        reader_error_offset(reader, start, "空の16進文字リテラルです");
       }
       int val = 0;
       while (true) {
@@ -507,11 +498,11 @@ static char c_char(Reader *reader) {
       return val;
     }
 
-    reader_error_with(reader, start, "不明なエスケープシーケンスです");
+    reader_error_offset(reader, start, "不明なエスケープシーケンスです");
   }
 
   if (reader_consume(reader, '\n')) {
-    reader_error_with(reader, start,
+    reader_error_here(reader,
                       "改行文字を文字リテラル中に含めることはできません");
   }
 

@@ -43,13 +43,9 @@ char reader_peek_ahead(const Reader *reader, int n) {
 
 void reader_succ(Reader *reader) {
   assert(reader->offset < reader->size - 1);
-
-  char cur = reader_peek(reader);
   reader->offset++;
-  if (cur == '\n') {
-    int_vec_push(reader->line_offset, reader->offset);
-  }
 }
+
 void reader_succ_n(Reader *reader, int n) {
   for (int i = 0; i < n; i++) {
     reader_succ(reader);
@@ -83,7 +79,7 @@ bool reader_consume_str(Reader *reader, const char *str) {
 
 void reader_expect(Reader *reader, char ch) {
   if (!reader_consume(reader, ch)) {
-    reader_error(reader, "'%c' がありません", ch);
+    reader_error_here(reader, "'%c' がありません", ch);
   }
 }
 
@@ -105,29 +101,65 @@ void reader_get_position(const Reader *reader, int offset, int *line,
   assert(false);
 }
 
-const char *reader_get_source(const Reader *reader, Range range) {
+char *reader_get_source(const Reader *reader, Range range) {
   assert(range.start < reader->size);
   assert(range.start + range.len <= reader->size);
   return strndup(&reader->source[range.start], range.len);
 }
 
-noreturn __attribute__((format(printf, 5, 6))) void
-reader_error_with_raw(const Reader *reader, int offset, const char *dbg_file,
-                      int dbg_line, const char *fmt, ...) {
-  va_list ap;
-  va_start(ap, fmt);
-  reader_error_with_raw_v(reader, offset, dbg_file, dbg_line, fmt, ap);
+char *reader_get_line(const Reader *reader, int line) {
+  assert(1 <= line && line < reader->line_offset->len);
+  int start = reader->line_offset->data[line - 1];
+  int end = reader->line_offset->data[line];
+  return reader_get_source(reader, (Range){.start = start, .len = end - start});
 }
 
-noreturn void reader_error_with_raw_v(const Reader *reader, int offset,
-                                      const char *dbg_file, int dbg_line,
-                                      const char *fmt, va_list ap) {
-  int line, column;
-  reader_get_position(reader, offset, &line, &column);
-  fprintf(stderr, "%s:%d:%d: error: ", reader_get_filename(reader), line,
-          column);
+noreturn __attribute__((format(printf, 5, 6))) void
+reader_error_offset_raw(const Reader *reader, int offset, const char *dbg_file,
+                        int dbg_line, const char *fmt, ...) {
+  va_list ap;
+  va_start(ap, fmt);
+  reader_error_range_raw_v(reader, (Range){.start = offset, .len = 1}, dbg_file,
+                           dbg_line, fmt, ap);
+}
 
-  error_raw_v(dbg_file, dbg_line, fmt, ap);
+noreturn void reader_error_range_raw_v(const Reader *reader, Range range,
+                                       const char *dbg_file, int dbg_line,
+                                       const char *fmt, va_list ap) {
+  int start_line, start_column;
+  reader_get_position(reader, range.start, &start_line, &start_column);
+  int end_line, end_column;
+  reader_get_position(reader, range.start + range.len - 1, &end_line,
+                      &end_column);
+  fprintf(stderr, "%s:%d:%d: error: ", reader_get_filename(reader), start_line,
+          start_column);
+  vfprintf(stderr, fmt, ap);
+  fprintf(stderr, " (DEBUG:%s:%d)\n", dbg_file, dbg_line);
+
+  for (int line = start_line; line <= end_line; line++) {
+    char *line_str = reader_get_line(reader, line);
+    int line_len = strlen(line_str);
+    int sc = (line == start_line) ? start_column - 1 : 0;
+    int ec = (line == end_line) ? end_column - 1 : line_len;
+
+    for (int i = 0; i < line_len; i++) {
+      if (line_str[i] == '\t') {
+        line_str[i] = ' ';
+      }
+    }
+
+    fprintf(stderr, "%s", line_str);
+    for (int i = 0; i < sc; i++) {
+      fprintf(stderr, " ");
+    }
+    fprintf(stderr, "^");
+    for (int i = sc + 1; i <= ec; i++) {
+      fprintf(stderr, "~");
+    }
+    fprintf(stderr, "\n");
+  }
+
+  exit(1);
 }
 
 static char *read_whole_file(Reader *reader, FILE *file) {
@@ -152,6 +184,13 @@ static char *read_whole_file(Reader *reader, FILE *file) {
 
   reader->source = source;
   reader->size = size;
+
+  for (size_t i = 0; i < size; i++) {
+    if (source[i] == '\n') {
+      int_vec_push(reader->line_offset, i + 1);
+    }
+  }
+  int_vec_push(reader->line_offset, size - 1);
 
   return source;
 }

@@ -274,18 +274,20 @@ int reader_get_offset(const Reader *reader);
 const char *reader_get_filename(const Reader *reader);
 void reader_get_position(const Reader *reader, int offset, int *line,
                          int *column);
-const char *reader_get_source(const Reader *reader, Range range);
-#define reader_error(reader, fmt, ...)                                         \
-  reader_error_with_raw(reader, reader_get_offset(reader), __FILE__, __LINE__, \
-                        (fmt), ##__VA_ARGS__)
-#define reader_error_with(reader, offset, fmt, ...)                            \
-  reader_error_with_raw(reader, offset, __FILE__, __LINE__, fmt, ##__VA_ARGS__)
+char *reader_get_source(const Reader *reader, Range range);
+char *reader_get_line(const Reader *reader, int line);
+#define reader_error_here(reader, fmt, ...)                                    \
+  reader_error_offset_raw(reader, reader_get_offset(reader), __FILE__,         \
+                          __LINE__, (fmt), ##__VA_ARGS__)
+#define reader_error_offset(reader, offset, fmt, ...)                          \
+  reader_error_offset_raw(reader, offset, __FILE__, __LINE__, fmt,             \
+                          ##__VA_ARGS__)
 noreturn __attribute__((format(printf, 5, 6))) void
-reader_error_with_raw(const Reader *reader, int offset, const char *dbg_file,
-                      int dbg_line, const char *fmt, ...);
-noreturn void reader_error_with_raw_v(const Reader *reader, int offset,
-                                      const char *dbg_file, int dbg_line,
-                                      const char *fmt, va_list ap);
+reader_error_offset_raw(const Reader *reader, int offset, const char *dbg_file,
+                        int dbg_line, const char *fmt, ...);
+noreturn void reader_error_range_raw_v(const Reader *reader, Range range,
+                                       const char *dbg_file, int dbg_line,
+                                       const char *fmt, va_list ap);
 Tokenizer *new_tokenizer(Reader *reader);
 void token_succ(Tokenizer *tokenizer);
 Token *token_peek(Tokenizer *tokenizer);

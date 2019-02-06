@@ -145,8 +145,7 @@ noreturn void expr_error_raw(const Reader *reader, const Expr *expr,
                              ...) {
   va_list ap;
   va_start(ap, fmt);
-  reader_error_with_raw_v(reader, expr->range.start, dbg_file, dbg_line, fmt,
-                          ap);
+  reader_error_range_raw_v(reader, expr->range, dbg_file, dbg_line, fmt, ap);
 }
 
 noreturn void stmt_error_raw(const Reader *reader, const Stmt *stmt,
@@ -154,8 +153,7 @@ noreturn void stmt_error_raw(const Reader *reader, const Stmt *stmt,
                              ...) {
   va_list ap;
   va_start(ap, fmt);
-  reader_error_with_raw_v(reader, stmt->range.start, dbg_file, dbg_line, fmt,
-                          ap);
+  reader_error_range_raw_v(reader, stmt->range, dbg_file, dbg_line, fmt, ap);
 }
 
 #define scope_error(sctxt, range, fmt, ...)                                    \
@@ -165,8 +163,8 @@ static noreturn void scope_error_raw(const ScopeCtxt *sctxt, Range range,
                                      char *fmt, ...) {
   va_list ap;
   va_start(ap, fmt);
-  reader_error_with_raw_v(token_get_reader(sctxt->tokenizer), range.start,
-                          dbg_file, dbg_line, fmt, ap);
+  reader_error_range_raw_v(token_get_reader(sctxt->tokenizer), range, dbg_file,
+                           dbg_line, fmt, ap);
 }
 
 #define global_error(gctxt, range, fmt, ...)                                   \
@@ -176,8 +174,8 @@ static noreturn void global_error_raw(const GlobalCtxt *gctxt, Range range,
                                       char *fmt, ...) {
   va_list ap;
   va_start(ap, fmt);
-  reader_error_with_raw_v(token_get_reader(gctxt->tokenizer), range.start,
-                          dbg_file, dbg_line, fmt, ap);
+  reader_error_range_raw_v(token_get_reader(gctxt->tokenizer), range, dbg_file,
+                           dbg_line, fmt, ap);
 }
 
 static GlobalCtxt *new_global_ctxt(Tokenizer *tokenizer) {
@@ -1226,8 +1224,8 @@ static void direct_declarator(Tokenizer *tokenizer, Type *base_type,
       Token *token = token_expect(tokenizer, ')');
       *range = range_join(*range, token->range);
     } else {
-      reader_error_with(token_get_reader(tokenizer), range->start,
-                        "識別子でも括弧でもありません");
+      reader_error_offset(token_get_reader(tokenizer), range->start,
+                          "識別子でも括弧でもありません");
     }
   }
 
