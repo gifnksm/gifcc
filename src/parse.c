@@ -140,6 +140,24 @@ TranslationUnit *parse(Reader *reader) {
   return translation_unit(tokenizer);
 }
 
+noreturn void expr_error_raw(const Reader *reader, const Expr *expr,
+                             const char *dbg_file, int dbg_line, char *fmt,
+                             ...) {
+  va_list ap;
+  va_start(ap, fmt);
+  reader_error_with_raw_v(reader, expr->range.start, dbg_file, dbg_line, fmt,
+                          ap);
+}
+
+noreturn void stmt_error_raw(const Reader *reader, const Stmt *stmt,
+                             const char *dbg_file, int dbg_line, char *fmt,
+                             ...) {
+  va_list ap;
+  va_start(ap, fmt);
+  reader_error_with_raw_v(reader, stmt->range.start, dbg_file, dbg_line, fmt,
+                          ap);
+}
+
 #define scope_error(sctxt, range, fmt, ...)                                    \
   scope_error_raw((sctxt), (range), __FILE__, __LINE__, (fmt), ##__VA_ARGS__)
 static noreturn void scope_error_raw(const ScopeCtxt *sctxt, Range range,

@@ -308,9 +308,19 @@ const Reader *token_get_reader(const Tokenizer *tokenizer);
 int get_val_size(Type *ty);
 int get_val_align(Type *ty);
 TranslationUnit *parse(Reader *reader);
+#define expr_error(reader, expr, fmt, ...)                                     \
+  expr_error_raw((reader), (expr), __FILE__, __LINE__, fmt, ##__VA_ARGS__)
+noreturn void expr_error_raw(const Reader *reader, const Expr *expr,
+                             const char *dbg_file, int dbg_line, char *fmt,
+                             ...);
+#define stmt_error(reader, stmt, fmt, ...)                                     \
+  stmt_error_raw((reader), (stmt), __FILE__, __LINE__, fmt, ##__VA_ARGS__)
+noreturn void stmt_error_raw(const Reader *reader, const Stmt *stmt,
+                             const char *dbg_file, int dbg_line, char *fmt,
+                             ...);
 
 char *make_label(void);
-void gen(TranslationUnit *tunit);
+void gen(const Reader *reader, TranslationUnit *tunit);
 
 static inline Range range_join(Range a, Range b) {
   assert(a.start >= 0);

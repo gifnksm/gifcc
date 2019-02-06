@@ -8,7 +8,7 @@ static Function *func_ctxt = NULL;
 static Vector *break_labels = NULL;
 static Vector *continue_labels = NULL;
 
-static void gen_expr(Expr *expr);
+static void gen_expr(const Reader *reader, Expr *expr);
 
 typedef struct {
   const char *rax;
@@ -76,7 +76,7 @@ char *make_label(void) {
   return strdup(buf);
 }
 
-static void gen_lval(Expr *expr) {
+static void gen_lval(const Reader *reader, Expr *expr) {
   if (expr->ty == EX_STACK_VAR) {
     StackVar *var = expr->stack_var;
     assert(var != NULL);
@@ -91,13 +91,14 @@ static void gen_lval(Expr *expr) {
     return;
   }
   if (expr->ty == '*' && expr->lhs == NULL) {
-    gen_expr(expr->rhs);
+    gen_expr(reader, expr->rhs);
     return;
   }
-  error("左辺値が変数ではありません");
+
+  expr_error(reader, expr, "左辺値が変数ではありません");
 }
 
-static void gen_expr(Expr *expr) {
+static void gen_expr(const Reader *reader, Expr *expr) {
   const Reg *r = get_int_reg(expr->val_type);
 
   if (expr->ty == EX_NUM) {
@@ -138,17 +139,18 @@ static void gen_expr(Expr *expr) {
     } else if (expr->callee->ty == EX_GLOBAL_VAR) {
       call_direct = true;
     } else {
-      error("関数または関数ポインタ以外を呼び出そうとしました: %d",
-            expr->callee->val_type->ty);
+      expr_error(reader, expr->callee,
+                 "関数または関数ポインタ以外を呼び出そうとしました: %d",
+                 expr->callee->val_type->ty);
     }
     if (arg && arg->len > 0) {
       // 引数をスタックに積む
       for (int i = arg->len - 1; i >= 0; i--) {
-        gen_expr(arg->data[i]);
+        gen_expr(reader, arg->data[i]);
       }
     }
     if (!call_direct) {
-      gen_expr(expr->callee);
+      gen_expr(reader, expr->callee);
       printf("  pop r10\n");
     }
     if (arg && arg->len > 0) {
@@ -195,7 +197,7 @@ static void gen_expr(Expr *expr) {
   }
 
   if (expr->ty == EX_CAST) {
-    gen_expr(expr->expr);
+    gen_expr(reader, expr->expr);
     if (expr->expr->val_type->ty == TY_CHAR && expr->val_type->ty == TY_INT) {
       printf("  pop rax\n");
       printf("  movsx rax, al\n");
@@ -205,8 +207,8 @@ static void gen_expr(Expr *expr) {
   }
 
   if (expr->ty == '=') {
-    gen_lval(expr->lhs);
-    gen_expr(expr->rhs);
+    gen_lval(reader, expr->lhs);
+    gen_expr(reader, expr->rhs);
     printf("  pop rdi\n");
     printf("  pop rax\n");
     printf("  mov [rax], %s\n", r->rdi);
@@ -216,11 +218,11 @@ static void gen_expr(Expr *expr) {
   if (expr->ty == EX_LOGAND) {
     char *false_label = make_label();
     char *end_label = make_label();
-    gen_expr(expr->lhs);
+    gen_expr(reader, expr->lhs);
     printf("  pop rax\n");
     printf("  cmp %s, 0\n", r->rax);
     printf("  je %s\n", false_label);
-    gen_expr(expr->rhs);
+    gen_expr(reader, expr->rhs);
     printf("  pop rax\n");
     printf("  cmp %s, 0\n", r->rax);
     printf("  je %s\n", false_label);
@@ -235,11 +237,11 @@ static void gen_expr(Expr *expr) {
   if (expr->ty == EX_LOGOR) {
     char *true_label = make_label();
     char *end_label = make_label();
-    gen_expr(expr->lhs);
+    gen_expr(reader, expr->lhs);
     printf("  pop rax\n");
     printf("  cmp %s, 0\n", r->rax);
     printf("  jne %s\n", true_label);
-    gen_expr(expr->rhs);
+    gen_expr(reader, expr->rhs);
     printf("  pop rax\n");
     printf("  cmp %s, 0\n", r->rax);
     printf("  jne %s\n", true_label);
@@ -254,26 +256,26 @@ static void gen_expr(Expr *expr) {
   if (expr->ty == EX_COND) {
     char *else_label = make_label();
     char *end_label = make_label();
-    gen_expr(expr->cond);
+    gen_expr(reader, expr->cond);
     printf("  pop rax\n");
     printf("  cmp %s, 0\n", r->rax);
     printf("  je %s\n", else_label);
-    gen_expr(expr->lhs);
+    gen_expr(reader, expr->lhs);
     printf("  jmp %s\n", end_label);
     printf("%s:\n", else_label);
-    gen_expr(expr->rhs);
+    gen_expr(reader, expr->rhs);
     printf("%s:\n", end_label);
     return;
   }
 
   if (expr->ty == '&' && expr->lhs == NULL) {
     // 単項の `&`
-    gen_lval(expr->rhs);
+    gen_lval(reader, expr->rhs);
     return;
   }
   if (expr->ty == '*' && expr->lhs == NULL) {
     // 単項の `*`
-    gen_expr(expr->rhs);
+    gen_expr(reader, expr->rhs);
     printf("  pop rax\n");
     printf("  mov %s, [rax]\n", r->rax);
     printf("  push rax\n");
@@ -281,12 +283,12 @@ static void gen_expr(Expr *expr) {
   }
   if (expr->ty == '+' && expr->lhs == NULL) {
     // 単項の `+`
-    gen_expr(expr->rhs);
+    gen_expr(reader, expr->rhs);
     return;
   }
   if (expr->ty == '-' && expr->lhs == NULL) {
     // 単項の `-`
-    gen_expr(expr->rhs);
+    gen_expr(reader, expr->rhs);
     printf("  pop rax\n");
     printf("  neg %s\n", r->rax);
     printf("  push rax\n");
@@ -294,7 +296,7 @@ static void gen_expr(Expr *expr) {
   }
   if (expr->ty == '~') {
     // `~`
-    gen_expr(expr->rhs);
+    gen_expr(reader, expr->rhs);
     printf("  pop rax\n");
     printf("  not %s\n", r->rax);
     printf("  push rax\n");
@@ -302,7 +304,7 @@ static void gen_expr(Expr *expr) {
   }
   if (expr->ty == '!') {
     // `!`
-    gen_expr(expr->rhs);
+    gen_expr(reader, expr->rhs);
     printf("  pop rax\n");
     printf("  cmp %s, 0\n", r->rax);
     printf("  sete al\n");
@@ -313,7 +315,7 @@ static void gen_expr(Expr *expr) {
   if (expr->ty == EX_INC) {
     if (expr->lhs == NULL) {
       // 前置の `++`
-      gen_lval(expr->rhs);
+      gen_lval(reader, expr->rhs);
       printf("  pop rax\n");
       printf("  mov %s, [rax]\n", r->rdi);
       printf("  add %s, %d\n", r->rdi, expr->val);
@@ -322,7 +324,7 @@ static void gen_expr(Expr *expr) {
       return;
     }
     // 後置の `++`
-    gen_lval(expr->lhs);
+    gen_lval(reader, expr->lhs);
     printf("  pop rax\n");
     printf("  mov %s, [rax]\n", r->rdi);
     printf("  push rdi\n");
@@ -334,7 +336,7 @@ static void gen_expr(Expr *expr) {
   if (expr->ty == EX_DEC) {
     if (expr->lhs == NULL) {
       // 前置の `--`
-      gen_lval(expr->rhs);
+      gen_lval(reader, expr->rhs);
       printf("  pop rax\n");
       printf("  mov %s, [rax]\n", r->rdi);
       printf("  sub %s, %d\n", r->rdi, expr->val);
@@ -343,7 +345,7 @@ static void gen_expr(Expr *expr) {
       return;
     }
     // 後置の `--`
-    gen_lval(expr->lhs);
+    gen_lval(reader, expr->lhs);
     printf("  pop rax\n");
     printf("  mov %s, [rax]\n", r->rdi);
     printf("  push rdi\n");
@@ -353,12 +355,11 @@ static void gen_expr(Expr *expr) {
   }
 
   // 二項演算子
-  if (expr->lhs == NULL || expr->rhs == NULL) {
-    error("lhs, rhsのいずれかまたは両方が空です: %p %p", expr->lhs, expr->rhs);
-  }
+  assert(expr->lhs != NULL);
+  assert(expr->rhs != NULL);
 
-  gen_expr(expr->lhs);
-  gen_expr(expr->rhs);
+  gen_expr(reader, expr->lhs);
+  gen_expr(reader, expr->rhs);
 
   printf("  pop rdi\n");
   printf("  pop rax\n");
@@ -433,19 +434,19 @@ static void gen_expr(Expr *expr) {
     printf("  mov %s, %s\n", r->rax, r->rdi);
     break;
   default:
-    error("未知のノード種別です: %d", expr->ty);
+    assert(false);
   }
 
   printf("  push rax\n");
 }
 
-static void gen_stmt(Stmt *stmt) {
+static void gen_stmt(const Reader *reader, Stmt *stmt) {
   switch (stmt->ty) {
   case ST_NULL: {
     return;
   }
   case ST_EXPR: {
-    gen_expr(stmt->expr);
+    gen_expr(reader, stmt->expr);
 
     // 式の評価結果としてスタックに一つの値が残っている
     // はずなので、スタックが溢れないようにポップしておく
@@ -454,30 +455,30 @@ static void gen_stmt(Stmt *stmt) {
   }
   case ST_COMPOUND: {
     for (int i = 0; i < stmt->stmts->len; i++) {
-      gen_stmt(stmt->stmts->data[i]);
+      gen_stmt(reader, stmt->stmts->data[i]);
     }
     return;
   }
   case ST_IF: {
     char *else_label = make_label();
     char *end_label = make_label();
-    gen_expr(stmt->cond);
+    gen_expr(reader, stmt->cond);
     printf("  pop rax\n");
     printf("  cmp rax, 0\n");
     printf("  je %s\n", else_label);
-    gen_stmt(stmt->then_stmt);
+    gen_stmt(reader, stmt->then_stmt);
     printf("  jmp %s\n", end_label);
     printf("%s:\n", else_label);
-    gen_stmt(stmt->else_stmt);
+    gen_stmt(reader, stmt->else_stmt);
     printf("%s:\n", end_label);
     return;
   }
   case ST_SWITCH: {
     char *end_label = make_label();
-    gen_expr(stmt->cond);
+    gen_expr(reader, stmt->cond);
     for (int i = 0; i < stmt->cases->len; i++) {
       Stmt *case_expr = stmt->cases->data[i];
-      gen_expr(case_expr->expr);
+      gen_expr(reader, case_expr->expr);
       printf("  pop rax\n");
       printf("  pop rdi\n");
       printf("  cmp rax, rdi\n");
@@ -491,7 +492,7 @@ static void gen_stmt(Stmt *stmt) {
       printf("  jmp %s\n", end_label);
     }
     vec_push(break_labels, end_label);
-    gen_stmt(stmt->body);
+    gen_stmt(reader, stmt->body);
     vec_pop(break_labels);
     printf("%s:", end_label);
     return;
@@ -506,14 +507,14 @@ static void gen_stmt(Stmt *stmt) {
     char *cond_label = make_label();
     char *end_label = make_label();
     printf("%s:\n", cond_label);
-    gen_expr(stmt->cond);
+    gen_expr(reader, stmt->cond);
     printf("  pop rax\n");
     printf("  cmp rax, 0\n");
     printf("  je %s\n", end_label);
 
     vec_push(break_labels, end_label);
     vec_push(continue_labels, cond_label);
-    gen_stmt(stmt->body);
+    gen_stmt(reader, stmt->body);
     vec_pop(break_labels);
     vec_pop(continue_labels);
 
@@ -529,12 +530,12 @@ static void gen_stmt(Stmt *stmt) {
 
     vec_push(break_labels, end_label);
     vec_push(continue_labels, cond_label);
-    gen_stmt(stmt->body);
+    gen_stmt(reader, stmt->body);
     vec_pop(break_labels);
     vec_pop(continue_labels);
 
     printf("%s:\n", cond_label);
-    gen_expr(stmt->cond);
+    gen_expr(reader, stmt->cond);
     printf("  pop rax\n");
     printf("  cmp rax, 0\n");
     printf("  jne %s\n", loop_label);
@@ -546,11 +547,11 @@ static void gen_stmt(Stmt *stmt) {
     char *inc_label = make_label();
     char *end_label = make_label();
     if (stmt->init != NULL) {
-      gen_expr(stmt->init);
+      gen_expr(reader, stmt->init);
     }
     printf("%s:\n", cond_label);
     if (stmt->cond != NULL) {
-      gen_expr(stmt->cond);
+      gen_expr(reader, stmt->cond);
       printf("  pop rax\n");
       printf("  cmp rax, 0\n");
       printf("  je %s\n", end_label);
@@ -558,13 +559,13 @@ static void gen_stmt(Stmt *stmt) {
 
     vec_push(break_labels, end_label);
     vec_push(continue_labels, inc_label);
-    gen_stmt(stmt->body);
+    gen_stmt(reader, stmt->body);
     vec_pop(break_labels);
     vec_pop(continue_labels);
 
     printf("%s:\n", inc_label);
     if (stmt->inc != NULL) {
-      gen_expr(stmt->inc);
+      gen_expr(reader, stmt->inc);
     }
     printf("  jmp %s\n", cond_label);
     printf("%s:\n", end_label);
@@ -573,21 +574,22 @@ static void gen_stmt(Stmt *stmt) {
   case ST_GOTO: {
     char *label = get_label(func_ctxt, stmt->name);
     if (label == NULL) {
-      error("未知のラベルへのgotoです: %s", stmt->name);
+      stmt_error(reader, stmt, "未知のラベルへのgotoです: %s", stmt->name);
     }
     printf("  jmp %s\n", label);
     return;
   }
   case ST_BREAK: {
     if (break_labels->len <= 0) {
-      error("ループでもswitch文中でもない箇所にbreakがあります");
+      stmt_error(reader, stmt,
+                 "ループでもswitch文中でもない箇所にbreakがあります");
     }
     printf("  jmp %s\n", (char *)break_labels->data[break_labels->len - 1]);
     return;
   }
   case ST_CONTINUE: {
     if (continue_labels->len <= 0) {
-      error("ループ中でない箇所にcontinueがあります");
+      stmt_error(reader, stmt, "ループ中でない箇所にcontinueがあります");
     }
     printf("  jmp %s\n",
            (char *)continue_labels->data[continue_labels->len - 1]);
@@ -595,17 +597,17 @@ static void gen_stmt(Stmt *stmt) {
   }
   case ST_RETURN: {
     if (stmt->expr != NULL) {
-      gen_expr(stmt->expr);
+      gen_expr(reader, stmt->expr);
       printf("  pop rax\n");
     }
     printf("  jmp %s\n", epilogue_label);
     return;
   }
   }
-  error("未知のノード種別です: %d", stmt->ty);
+  assert(false);
 }
 
-static void gen_func(Function *func) {
+static void gen_func(const Reader *reader, Function *func) {
   epilogue_label = make_label();
   func_ctxt = func;
   break_labels = new_vector();
@@ -655,7 +657,7 @@ static void gen_func(Function *func) {
     }
   }
 
-  gen_stmt(func->body);
+  gen_stmt(reader, func->body);
 
   // エピローグ
   // 最後の式の結果がRAXに残っているのでそれが返り値になる
@@ -678,12 +680,12 @@ static void gen_str(StringLiteral *str) {
   printf("\n");
 }
 
-void gen(TranslationUnit *tunit) {
+void gen(const Reader *reader, TranslationUnit *tunit) {
   printf(".intel_syntax noprefix\n");
 
   printf("  .text\n");
   for (int i = 0; i < tunit->func_list->len; i++) {
-    gen_func(tunit->func_list->data[i]);
+    gen_func(reader, tunit->func_list->data[i]);
   }
   printf("  .bss\n");
   for (int i = 0; i < tunit->gvar_list->len; i++) {

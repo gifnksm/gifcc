@@ -520,7 +520,7 @@ int main(int argc, char **argv) {
     return 0;
   }
 
-  gen(tunit);
+  gen(reader, tunit);
 
   return 0;
 }
