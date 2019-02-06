@@ -164,6 +164,10 @@ token_error_with_raw(const Tokenizer *tokenizer, Token *token,
   exit(1);
 }
 
+const Reader *token_get_reader(const Tokenizer *tokenizer) {
+  return tokenizer->reader;
+}
+
 static inline bool is_ident_head(int c) {
   return ('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z') || c == '_';
 }

@@ -240,9 +240,11 @@ typedef struct TranslationUnit {
 typedef struct Reader Reader;
 typedef struct Tokenizer Tokenizer;
 
-#define error(fmt, ...) error_raw(__FILE__, __LINE__, fmt, ##__VA_ARGS__)
+#define error(fmt, ...) error_raw(__FILE__, __LINE__, (fmt), ##__VA_ARGS__)
 noreturn __attribute__((format(printf, 3, 4))) void
-error_raw(const char *dbg_file, int dbg_line, char *fmt, ...);
+error_raw(const char *dbg_file, int dbg_line, const char *fmt, ...);
+noreturn void error_raw_v(const char *dbg_file, int dbg_line, const char *fmt,
+                          va_list ap);
 
 static inline int align(int n, int s) { return ((n + (s - 1)) / s) * s; }
 
@@ -275,13 +277,15 @@ void reader_get_position(const Reader *reader, int offset, int *line,
 const char *reader_get_source(const Reader *reader, Range range);
 #define reader_error(reader, fmt, ...)                                         \
   reader_error_with_raw(reader, reader_get_offset(reader), __FILE__, __LINE__, \
-                        fmt, ##__VA_ARGS__)
+                        (fmt), ##__VA_ARGS__)
 #define reader_error_with(reader, offset, fmt, ...)                            \
   reader_error_with_raw(reader, offset, __FILE__, __LINE__, fmt, ##__VA_ARGS__)
 noreturn __attribute__((format(printf, 5, 6))) void
 reader_error_with_raw(const Reader *reader, int offset, const char *dbg_file,
-                      int dbg_line, char *fmt, ...);
-
+                      int dbg_line, const char *fmt, ...);
+noreturn void reader_error_with_raw_v(const Reader *reader, int offset,
+                                      const char *dbg_file, int dbg_line,
+                                      const char *fmt, va_list ap);
 Tokenizer *new_tokenizer(Reader *reader);
 void token_succ(Tokenizer *tokenizer);
 Token *token_peek(Tokenizer *tokenizer);
@@ -299,6 +303,7 @@ const char *token_kind_to_str(int kind);
 noreturn __attribute__((format(printf, 5, 6))) void
 token_error_with_raw(const Tokenizer *tokenizer, Token *token,
                      const char *dbg_file, int dbg_line, char *fmt, ...);
+const Reader *token_get_reader(const Tokenizer *tokenizer);
 
 int get_val_size(Type *ty);
 int get_val_align(Type *ty);

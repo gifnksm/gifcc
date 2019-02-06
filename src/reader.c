@@ -113,19 +113,21 @@ const char *reader_get_source(const Reader *reader, Range range) {
 
 noreturn __attribute__((format(printf, 5, 6))) void
 reader_error_with_raw(const Reader *reader, int offset, const char *dbg_file,
-                      int dbg_line, char *fmt, ...) {
+                      int dbg_line, const char *fmt, ...) {
+  va_list ap;
+  va_start(ap, fmt);
+  reader_error_with_raw_v(reader, offset, dbg_file, dbg_line, fmt, ap);
+}
+
+noreturn void reader_error_with_raw_v(const Reader *reader, int offset,
+                                      const char *dbg_file, int dbg_line,
+                                      const char *fmt, va_list ap) {
   int line, column;
   reader_get_position(reader, offset, &line, &column);
   fprintf(stderr, "%s:%d:%d: error: ", reader_get_filename(reader), line,
           column);
 
-  va_list ap;
-  va_start(ap, fmt);
-  vfprintf(stderr, fmt, ap);
-  va_end(ap);
-
-  fprintf(stderr, " (DEBUG:%s:%d)\n", dbg_file, dbg_line);
-  exit(1);
+  error_raw_v(dbg_file, dbg_line, fmt, ap);
 }
 
 static char *read_whole_file(Reader *reader, FILE *file) {

@@ -8,12 +8,16 @@
 #include <string.h>
 
 // エラーを報告するための関数
-void error_raw(const char *dbg_file, int dbg_line, char *fmt, ...) {
+noreturn void error_raw(const char *dbg_file, int dbg_line, const char *fmt,
+                        ...) {
   va_list ap;
   va_start(ap, fmt);
-  vfprintf(stderr, fmt, ap);
-  va_end(ap);
+  error_raw_v(dbg_file, dbg_line, fmt, ap);
+}
 
+noreturn void error_raw_v(const char *dbg_file, int dbg_line, const char *fmt,
+                          va_list ap) {
+  vfprintf(stderr, fmt, ap);
   fprintf(stderr, " (DEBUG:%s:%d)\n", dbg_file, dbg_line);
   exit(1);
 }

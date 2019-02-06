@@ -1,6 +1,7 @@
 #include "gifcc.h"
 #include <assert.h>
 #include <stdalign.h>
+#include <stdarg.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -44,27 +45,35 @@ static bool is_integer_type(Type *ty);
 static bool is_arith_type(Type *ty);
 static bool is_ptr_type(Type *ty);
 static bool is_array_type(Type *ty);
-static Type *integer_promoted(Expr **e);
-static Type *arith_converted(Expr **e1, Expr **e2);
+static Type *integer_promoted(ScopeCtxt *sctxt, Expr **e);
+static Type *arith_converted(ScopeCtxt *sctxt, Expr **e1, Expr **e2);
 static bool token_is_typename(Token *token);
-static noreturn void binop_type_error(int ty, Expr *lhs, Expr *rhs);
+static noreturn void binop_type_error_raw(ScopeCtxt *sctxt, int ty, Expr *lhs,
+                                          Expr *rhs, const char *dbg_file,
+                                          int dbg_line);
 static Type *new_type(int ty);
 static Type *new_type_ptr(Type *base_type);
 static Type *new_type_array(Type *base_type, int len);
 static Type *new_type_func(Type *ret_type, Vector *func_param);
-static Expr *coerce_array2ptr(Expr *expr);
+static Expr *coerce_array2ptr(ScopeCtxt *sctxt, Expr *expr);
 static Expr *new_expr(int ty, Type *val_type, Range range);
 static Expr *new_expr_num(int val, Range range);
 static Expr *new_expr_ident(ScopeCtxt *sctxt, char *name, Range range);
 static Expr *new_expr_str(ScopeCtxt *sctxt, char *val, Range range);
-static Expr *new_expr_call(Expr *callee, Vector *argument, Range range);
-static Expr *new_expr_postfix(int ty, Expr *operand, Range range);
-static Expr *new_expr_cast(Type *val_type, Expr *operand, Range range);
-static Expr *new_expr_unary(int ty, Expr *operand, Range range);
-static Expr *new_expr_binop(int ty, Expr *lhs, Expr *rhs, Range range);
-static Expr *new_expr_cond(Expr *cond, Expr *then_expr, Expr *else_expr,
+static Expr *new_expr_call(ScopeCtxt *sctxt, Expr *callee, Vector *argument,
                            Range range);
-static Expr *new_expr_index(Expr *array, Expr *index, Range range);
+static Expr *new_expr_postfix(ScopeCtxt *sctxt, int ty, Expr *operand,
+                              Range range);
+static Expr *new_expr_cast(ScopeCtxt *sctxt, Type *val_type, Expr *operand,
+                           Range range);
+static Expr *new_expr_unary(ScopeCtxt *sctxt, int ty, Expr *operand,
+                            Range range);
+static Expr *new_expr_binop(ScopeCtxt *sctxt, int ty, Expr *lhs, Expr *rhs,
+                            Range range);
+static Expr *new_expr_cond(ScopeCtxt *sctxt, Expr *cond, Expr *then_expr,
+                           Expr *else_expr, Range range);
+static Expr *new_expr_index(ScopeCtxt *sctxt, Expr *array, Expr *index,
+                            Range range);
 static Stmt *new_stmt(int ty, Range range);
 static Stmt *new_stmt_expr(Expr *expr, Range range);
 static Stmt *new_stmt_if(Expr *cond, Stmt *then_stmt, Stmt *else_stmt,
@@ -131,6 +140,28 @@ TranslationUnit *parse(Reader *reader) {
   return translation_unit(tokenizer);
 }
 
+#define scope_error(sctxt, range, fmt, ...)                                    \
+  scope_error_raw((sctxt), (range), __FILE__, __LINE__, (fmt), ##__VA_ARGS__)
+static noreturn void scope_error_raw(const ScopeCtxt *sctxt, Range range,
+                                     const char *dbg_file, int dbg_line,
+                                     char *fmt, ...) {
+  va_list ap;
+  va_start(ap, fmt);
+  reader_error_with_raw_v(token_get_reader(sctxt->tokenizer), range.start,
+                          dbg_file, dbg_line, fmt, ap);
+}
+
+#define global_error(gctxt, range, fmt, ...)                                   \
+  global_error_raw((gctxt), (range), __FILE__, __LINE__, (fmt), ##__VA_ARGS__)
+static noreturn void global_error_raw(const GlobalCtxt *gctxt, Range range,
+                                      const char *dbg_file, int dbg_line,
+                                      char *fmt, ...) {
+  va_list ap;
+  va_start(ap, fmt);
+  reader_error_with_raw_v(token_get_reader(gctxt->tokenizer), range.start,
+                          dbg_file, dbg_line, fmt, ap);
+}
+
 static GlobalCtxt *new_global_ctxt(Tokenizer *tokenizer) {
   GlobalCtxt *gctxt = malloc(sizeof(GlobalCtxt));
   gctxt->tokenizer = tokenizer;
@@ -180,10 +211,10 @@ static ScopeCtxt *new_inner_scope_ctxt(ScopeCtxt *outer) {
 static StackVar *register_stack(ScopeCtxt *sctxt, char *name, Type *type,
                                 Range range) {
   if (type->ty == TY_VOID) {
-    error("void型の変数は定義できません: %s", name);
+    scope_error(sctxt, range, "void型の変数は定義できません: %s", name);
   }
   if (map_get(sctxt->stack_map, name)) {
-    error("同じ名前のローカル変数が複数あります: %s", name);
+    scope_error(sctxt, range, "同じ名前のローカル変数が複数あります: %s", name);
     return NULL;
   }
 
@@ -214,7 +245,7 @@ static StackVar *get_stack(ScopeCtxt *sctxt, char *name) {
 static bool register_global(GlobalCtxt *gctxt, char *name, Type *type,
                             Range range) {
   if (type->ty == TY_VOID) {
-    error("void型の変数は定義できません");
+    global_error(gctxt, range, "void型の変数は定義できません: %s", name);
   }
   if (map_get(gctxt->var_map, name)) {
     return false;
@@ -249,22 +280,22 @@ static bool is_arith_type(Type *ty) { return is_integer_type(ty); }
 static bool is_ptr_type(Type *ty) { return ty->ty == TY_PTR; }
 static bool is_array_type(Type *ty) { return ty->ty == TY_ARRAY; }
 static bool is_func_type(Type *ty) { return ty->ty == TY_FUNC; }
-static Type *integer_promoted(Expr **e) {
+static Type *integer_promoted(ScopeCtxt *sctxt, Expr **e) {
   if (!is_integer_type((*e)->val_type)) {
     return NULL;
   }
   // CHAR は INT へ昇格する
   if ((*e)->val_type->ty == TY_CHAR) {
-    *e = new_expr_cast(new_type(TY_INT), *e, (*e)->range);
+    *e = new_expr_cast(sctxt, new_type(TY_INT), *e, (*e)->range);
   }
   return (*e)->val_type;
 }
-static Type *arith_converted(Expr **e1, Expr **e2) {
+static Type *arith_converted(ScopeCtxt *sctxt, Expr **e1, Expr **e2) {
   if (!is_arith_type((*e1)->val_type) || !is_arith_type((*e2)->val_type)) {
     return NULL;
   }
-  Type *ty1 = integer_promoted(e2);
-  Type *ty2 = integer_promoted(e1);
+  Type *ty1 = integer_promoted(sctxt, e2);
+  Type *ty2 = integer_promoted(sctxt, e1);
   assert(is_sametype(ty1, ty2));
   return ty1;
 }
@@ -316,9 +347,14 @@ int get_val_align(Type *ty) {
   error("不明な型の値アラインメントを取得しようとしました");
 }
 
-static noreturn void binop_type_error(int ty, Expr *lhs, Expr *rhs) {
-  error("不正な型の値に対する演算です: 演算=%d(%c), 左辺=%d, 右辺=%d", ty,
-        lhs->val_type->ty, lhs->val_type->ty, rhs->val_type->ty);
+#define binop_type_error(sctxt, ty, lhs, rhs)                                  \
+  binop_type_error_raw((sctxt), (ty), (lhs), (rhs), __FILE__, __LINE__)
+static noreturn void binop_type_error_raw(ScopeCtxt *sctxt, int ty, Expr *lhs,
+                                          Expr *rhs, const char *dbg_file,
+                                          int dbg_line) {
+  scope_error_raw(sctxt, range_join(lhs->range, rhs->range), dbg_file, dbg_line,
+                  "不正な型の値に対する演算です: 演算=%d(%c), 左辺=%d, 右辺=%d",
+                  ty, ty, lhs->val_type->ty, rhs->val_type->ty);
 }
 
 static Type *new_type(int ty) {
@@ -350,9 +386,9 @@ static Type *new_type_func(Type *ret_type, Vector *func_param) {
   return funtype;
 }
 
-static Expr *coerce_array2ptr(Expr *expr) {
+static Expr *coerce_array2ptr(ScopeCtxt *sctxt, Expr *expr) {
   if (is_array_type(expr->val_type)) {
-    return new_expr_unary('&', expr, expr->range);
+    return new_expr_unary(sctxt, '&', expr, expr->range);
   }
   return expr;
 }
@@ -376,7 +412,7 @@ static Expr *new_expr_ident(ScopeCtxt *sctxt, char *name, Range range) {
   Type *type;
   if (strcmp(name, "__func__") == 0) {
     if (sctxt->func == NULL) {
-      error("関数外で__func__が使用されました");
+      scope_error(sctxt, range, "関数外で__func__が使用されました");
     }
     return new_expr_str(sctxt, sctxt->func->name, range);
   }
@@ -415,11 +451,12 @@ static Expr *new_expr_str(ScopeCtxt *sctxt, char *val, Range range) {
   return expr;
 }
 
-static Expr *new_expr_call(Expr *callee, Vector *argument, Range range) {
-  callee = coerce_array2ptr(callee);
+static Expr *new_expr_call(ScopeCtxt *sctxt, Expr *callee, Vector *argument,
+                           Range range) {
+  callee = coerce_array2ptr(sctxt, callee);
   if (argument != NULL) {
     for (int i = 0; i < argument->len; i++) {
-      argument->data[i] = coerce_array2ptr(argument->data[i]);
+      argument->data[i] = coerce_array2ptr(sctxt, argument->data[i]);
     }
   }
 
@@ -436,8 +473,9 @@ static Expr *new_expr_call(Expr *callee, Vector *argument, Range range) {
   return expr;
 }
 
-static Expr *new_expr_postfix(int ty, Expr *operand, Range range) {
-  operand = coerce_array2ptr(operand);
+static Expr *new_expr_postfix(ScopeCtxt *sctxt, int ty, Expr *operand,
+                              Range range) {
+  operand = coerce_array2ptr(sctxt, operand);
 
   Expr *expr = new_expr(ty, operand->val_type, range);
   expr->lhs = operand;
@@ -445,8 +483,9 @@ static Expr *new_expr_postfix(int ty, Expr *operand, Range range) {
   return expr;
 }
 
-static Expr *new_expr_cast(Type *val_type, Expr *operand, Range range) {
-  operand = coerce_array2ptr(operand);
+static Expr *new_expr_cast(ScopeCtxt *sctxt, Type *val_type, Expr *operand,
+                           Range range) {
+  operand = coerce_array2ptr(sctxt, operand);
 
   if (is_sametype(operand->val_type, val_type)) {
     return operand;
@@ -476,10 +515,11 @@ static Expr *new_expr_cast(Type *val_type, Expr *operand, Range range) {
   return expr;
 }
 
-static Expr *new_expr_unary(int ty, Expr *operand, Range range) {
+static Expr *new_expr_unary(ScopeCtxt *sctxt, int ty, Expr *operand,
+                            Range range) {
   if (ty != '&') {
     // & 以外は array は ptr とみなす
-    operand = coerce_array2ptr(operand);
+    operand = coerce_array2ptr(sctxt, operand);
   }
 
   Type *val_type;
@@ -491,7 +531,7 @@ static Expr *new_expr_unary(int ty, Expr *operand, Range range) {
     }
   } else if (ty == '*') {
     if (operand->val_type->ty != TY_PTR) {
-      error("ポインタ型でない値に対するデリファレンスです");
+      scope_error(sctxt, range, "ポインタ型でない値に対するデリファレンスです");
     }
     val_type = operand->val_type->ptrof;
   } else {
@@ -503,9 +543,10 @@ static Expr *new_expr_unary(int ty, Expr *operand, Range range) {
   return expr;
 }
 
-static Expr *new_expr_binop(int ty, Expr *lhs, Expr *rhs, Range range) {
-  lhs = coerce_array2ptr(lhs);
-  rhs = coerce_array2ptr(rhs);
+static Expr *new_expr_binop(ScopeCtxt *sctxt, int ty, Expr *lhs, Expr *rhs,
+                            Range range) {
+  lhs = coerce_array2ptr(sctxt, lhs);
+  rhs = coerce_array2ptr(sctxt, rhs);
 
   Type *val_type;
   switch (ty) {
@@ -513,9 +554,9 @@ static Expr *new_expr_binop(int ty, Expr *lhs, Expr *rhs, Range range) {
   case '*':
   case '/':
   case '%':
-    val_type = arith_converted(&lhs, &rhs);
+    val_type = arith_converted(sctxt, &lhs, &rhs);
     if (val_type == NULL) {
-      binop_type_error(ty, lhs, rhs);
+      binop_type_error(sctxt, ty, lhs, rhs);
     }
     assert(val_type->ty == TY_INT);
     if (lhs->ty == EX_NUM && rhs->ty == EX_NUM) {
@@ -537,29 +578,29 @@ static Expr *new_expr_binop(int ty, Expr *lhs, Expr *rhs, Range range) {
   case '+':
     if (is_ptr_type(lhs->val_type)) {
       if (is_ptr_type(rhs->val_type) || !is_integer_type(rhs->val_type)) {
-        binop_type_error(ty, lhs, rhs);
+        binop_type_error(sctxt, ty, lhs, rhs);
       }
       rhs = new_expr_binop(
-          '*', rhs, new_expr_num(get_val_size(lhs->val_type->ptrof), range),
-          range);
+          sctxt, '*', rhs,
+          new_expr_num(get_val_size(lhs->val_type->ptrof), range), range);
       val_type = lhs->val_type;
       break;
     }
 
     if (is_ptr_type(rhs->val_type)) {
       if (!is_integer_type(lhs->val_type)) {
-        binop_type_error(ty, lhs, rhs);
+        binop_type_error(sctxt, ty, lhs, rhs);
       }
       lhs = new_expr_binop(
-          '*', lhs, new_expr_num(get_val_size(rhs->val_type->ptrof), range),
-          range);
+          sctxt, '*', lhs,
+          new_expr_num(get_val_size(rhs->val_type->ptrof), range), range);
       val_type = rhs->val_type;
       break;
     }
 
-    val_type = arith_converted(&lhs, &rhs);
+    val_type = arith_converted(sctxt, &lhs, &rhs);
     if (val_type == NULL) {
-      binop_type_error(ty, lhs, rhs);
+      binop_type_error(sctxt, ty, lhs, rhs);
     }
     assert(val_type->ty == TY_INT);
     if (lhs->ty == EX_NUM && rhs->ty == EX_NUM) {
@@ -571,32 +612,32 @@ static Expr *new_expr_binop(int ty, Expr *lhs, Expr *rhs, Range range) {
     if (is_ptr_type(lhs->val_type)) {
       if (is_ptr_type(rhs->val_type)) {
         if (!is_sametype(lhs->val_type, rhs->val_type)) {
-          binop_type_error(ty, lhs, rhs);
+          binop_type_error(sctxt, ty, lhs, rhs);
         }
         Expr *sub = new_expr('-', new_type(TY_INT), range);
         sub->lhs = lhs;
         sub->rhs = rhs;
         return new_expr_binop(
-            '/', sub, new_expr_num(get_val_size(lhs->val_type->ptrof), range),
-            range);
+            sctxt, '/', sub,
+            new_expr_num(get_val_size(lhs->val_type->ptrof), range), range);
       }
       if (is_integer_type(rhs->val_type)) {
         rhs = new_expr_binop(
-            '*', rhs, new_expr_num(get_val_size(lhs->val_type->ptrof), range),
-            range);
+            sctxt, '*', rhs,
+            new_expr_num(get_val_size(lhs->val_type->ptrof), range), range);
         val_type = lhs->val_type;
         break;
       }
-      binop_type_error(ty, lhs, rhs);
+      binop_type_error(sctxt, ty, lhs, rhs);
     }
 
     if (is_ptr_type(rhs->val_type)) {
-      binop_type_error(ty, lhs, rhs);
+      binop_type_error(sctxt, ty, lhs, rhs);
     }
 
-    val_type = arith_converted(&lhs, &rhs);
+    val_type = arith_converted(sctxt, &lhs, &rhs);
     if (val_type == NULL) {
-      binop_type_error(ty, lhs, rhs);
+      binop_type_error(sctxt, ty, lhs, rhs);
     }
     assert(val_type->ty == TY_INT);
     if (lhs->ty == EX_NUM && rhs->ty == EX_NUM) {
@@ -608,11 +649,11 @@ static Expr *new_expr_binop(int ty, Expr *lhs, Expr *rhs, Range range) {
   case EX_LSHIFT:
   case EX_RSHIFT:
     if (!is_integer_type(lhs->val_type) || !is_integer_type(rhs->val_type)) {
-      binop_type_error(ty, lhs, rhs);
+      binop_type_error(sctxt, ty, lhs, rhs);
     }
-    val_type = integer_promoted(&lhs);
+    val_type = integer_promoted(sctxt, &lhs);
     if (val_type == NULL) {
-      binop_type_error(ty, lhs, rhs);
+      binop_type_error(sctxt, ty, lhs, rhs);
     }
     assert(val_type->ty == TY_INT);
     if (lhs->ty == EX_NUM && rhs->ty == EX_NUM) {
@@ -641,11 +682,11 @@ static Expr *new_expr_binop(int ty, Expr *lhs, Expr *rhs, Range range) {
   case '^':
   case '|':
     if (!is_integer_type(lhs->val_type) || !is_integer_type(rhs->val_type)) {
-      binop_type_error(ty, lhs, rhs);
+      binop_type_error(sctxt, ty, lhs, rhs);
     }
-    val_type = arith_converted(&lhs, &rhs);
+    val_type = arith_converted(sctxt, &lhs, &rhs);
     if (val_type == NULL) {
-      binop_type_error(ty, lhs, rhs);
+      binop_type_error(sctxt, ty, lhs, rhs);
     }
     assert(val_type->ty == TY_INT);
     if (lhs->ty == EX_NUM && rhs->ty == EX_NUM) {
@@ -683,15 +724,15 @@ static Expr *new_expr_binop(int ty, Expr *lhs, Expr *rhs, Range range) {
   return expr;
 }
 
-static Expr *new_expr_cond(Expr *cond, Expr *then_expr, Expr *else_expr,
-                           Range range) {
-  cond = coerce_array2ptr(cond);
-  then_expr = coerce_array2ptr(then_expr);
-  else_expr = coerce_array2ptr(else_expr);
+static Expr *new_expr_cond(ScopeCtxt *sctxt, Expr *cond, Expr *then_expr,
+                           Expr *else_expr, Range range) {
+  cond = coerce_array2ptr(sctxt, cond);
+  then_expr = coerce_array2ptr(sctxt, then_expr);
+  else_expr = coerce_array2ptr(sctxt, else_expr);
 
   if (!is_sametype(then_expr->val_type, else_expr->val_type)) {
-    error("条件演算子の両辺の型が異なります: %d, %d", then_expr->val_type->ty,
-          else_expr->val_type->ty);
+    scope_error(sctxt, range, "条件演算子の両辺の型が異なります: %d, %d",
+                then_expr->val_type->ty, else_expr->val_type->ty);
   }
   Expr *expr = new_expr(EX_COND, then_expr->val_type, range);
   expr->cond = cond;
@@ -700,11 +741,13 @@ static Expr *new_expr_cond(Expr *cond, Expr *then_expr, Expr *else_expr,
   return expr;
 }
 
-static Expr *new_expr_index(Expr *array, Expr *index, Range range) {
-  array = coerce_array2ptr(array);
-  index = coerce_array2ptr(index);
+static Expr *new_expr_index(ScopeCtxt *sctxt, Expr *array, Expr *index,
+                            Range range) {
+  array = coerce_array2ptr(sctxt, array);
+  index = coerce_array2ptr(sctxt, index);
 
-  return new_expr_unary('*', new_expr_binop('+', array, index, range), range);
+  return new_expr_unary(sctxt, '*',
+                        new_expr_binop(sctxt, '+', array, index, range), range);
 }
 
 static Stmt *new_stmt(int ty, Range range) {
@@ -828,14 +871,16 @@ static Expr *postfix_expression(ScopeCtxt *sctxt) {
     if (token_consume(sctxt->tokenizer, '[')) {
       Expr *operand = expression(sctxt);
       Token *end = token_expect(sctxt->tokenizer, ']');
-      expr = new_expr_index(expr, operand, range_join(expr->range, end->range));
+      expr = new_expr_index(sctxt, expr, operand,
+                            range_join(expr->range, end->range));
     } else if (token_consume(sctxt->tokenizer, '(')) {
       Vector *argument = NULL;
       if (token_peek(sctxt->tokenizer)->ty != ')') {
         argument = argument_expression_list(sctxt);
       }
       Token *end = token_expect(sctxt->tokenizer, ')');
-      expr = new_expr_call(expr, argument, range_join(expr->range, end->range));
+      expr = new_expr_call(sctxt, expr, argument,
+                           range_join(expr->range, end->range));
     } else if ((token = token_consume(sctxt->tokenizer, TK_INC)) != NULL) {
       int val;
       if (is_ptr_type(expr->val_type)) {
@@ -843,8 +888,8 @@ static Expr *postfix_expression(ScopeCtxt *sctxt) {
       } else {
         val = 1;
       }
-      expr =
-          new_expr_postfix(EX_INC, expr, range_join(expr->range, token->range));
+      expr = new_expr_postfix(sctxt, EX_INC, expr,
+                              range_join(expr->range, token->range));
       expr->val = val;
     } else if ((token = token_consume(sctxt->tokenizer, TK_DEC)) != NULL) {
       int val;
@@ -853,7 +898,7 @@ static Expr *postfix_expression(ScopeCtxt *sctxt) {
       } else {
         val = 1;
       }
-      expr = new_expr_postfix(EX_DEC, expr, token->range);
+      expr = new_expr_postfix(sctxt, EX_DEC, expr, token->range);
       expr->val = val;
     } else {
       return expr;
@@ -879,7 +924,7 @@ static Expr *unary_expression(ScopeCtxt *sctxt) {
     Token *token;
     if ((token = token_consume(sctxt->tokenizer, op)) != NULL) {
       Expr *operand = cast_expression(sctxt);
-      return new_expr_unary(op, operand,
+      return new_expr_unary(sctxt, op, operand,
                             range_join(token->range, operand->range));
     }
   }
@@ -893,7 +938,8 @@ static Expr *unary_expression(ScopeCtxt *sctxt) {
     } else {
       val = 1;
     }
-    expr = new_expr_unary(EX_INC, expr, range_join(token->range, expr->range));
+    expr = new_expr_unary(sctxt, EX_INC, expr,
+                          range_join(token->range, expr->range));
     expr->val = val;
     return expr;
   }
@@ -905,7 +951,8 @@ static Expr *unary_expression(ScopeCtxt *sctxt) {
     } else {
       val = 1;
     }
-    expr = new_expr_unary(EX_DEC, expr, range_join(token->range, expr->range));
+    expr = new_expr_unary(sctxt, EX_DEC, expr,
+                          range_join(token->range, expr->range));
     expr->val = val;
     return expr;
   }
@@ -921,7 +968,8 @@ static Expr *cast_expression(ScopeCtxt *sctxt) {
     Type *val_type = type_name(sctxt->tokenizer);
     token_expect(sctxt->tokenizer, ')');
     Expr *operand = cast_expression(sctxt);
-    return new_expr_cast(val_type, operand, range_join(start, operand->range));
+    return new_expr_cast(sctxt, val_type, operand,
+                         range_join(start, operand->range));
   }
   return unary_expression(sctxt);
 }
@@ -938,7 +986,7 @@ static Expr *binary_expression(ScopeCtxt *sctxt, const int *tks, const int *exs,
       Token *token;
       if ((token = token_consume(sctxt->tokenizer, tk)) != NULL) {
         Expr *operand = op_parser(sctxt);
-        expr = new_expr_binop(ex, expr, operand,
+        expr = new_expr_binop(sctxt, ex, expr, operand,
                               range_join(expr->range, operand->range));
         found = true;
         break;
@@ -1005,7 +1053,7 @@ static Expr *conditional_expression(ScopeCtxt *sctxt) {
     Expr *then_expr = expression(sctxt);
     token_expect(sctxt->tokenizer, ':');
     Expr *else_expr = conditional_expression(sctxt);
-    return new_expr_cond(cond, then_expr, else_expr,
+    return new_expr_cond(sctxt, cond, then_expr, else_expr,
                          range_join(cond->range, else_expr->range));
   }
   return cond;
@@ -1015,67 +1063,70 @@ static Expr *assignment_expression(ScopeCtxt *sctxt) {
   Expr *lhs = conditional_expression(sctxt);
   if (token_consume(sctxt->tokenizer, '=')) {
     Expr *rhs = assignment_expression(sctxt);
-    return new_expr_binop('=', lhs, rhs, range_join(lhs->range, rhs->range));
+    return new_expr_binop(sctxt, '=', lhs, rhs,
+                          range_join(lhs->range, rhs->range));
   }
   if (token_consume(sctxt->tokenizer, TK_MUL_ASSIGN)) {
     Expr *rhs = assignment_expression(sctxt);
     Range range = range_join(lhs->range, rhs->range);
-    return new_expr_binop('=', lhs, new_expr_binop('*', lhs, rhs, range),
-                          range);
+    return new_expr_binop(sctxt, '=', lhs,
+                          new_expr_binop(sctxt, '*', lhs, rhs, range), range);
   }
   if (token_consume(sctxt->tokenizer, TK_DIV_ASSIGN)) {
     Expr *rhs = assignment_expression(sctxt);
     Range range = range_join(lhs->range, rhs->range);
-    return new_expr_binop('=', lhs, new_expr_binop('/', lhs, rhs, range),
-                          range);
+    return new_expr_binop(sctxt, '=', lhs,
+                          new_expr_binop(sctxt, '/', lhs, rhs, range), range);
   }
   if (token_consume(sctxt->tokenizer, TK_MOD_ASSIGN)) {
     Expr *rhs = assignment_expression(sctxt);
     Range range = range_join(lhs->range, rhs->range);
-    return new_expr_binop('=', lhs, new_expr_binop('%', lhs, rhs, range),
-                          range);
+    return new_expr_binop(sctxt, '=', lhs,
+                          new_expr_binop(sctxt, '%', lhs, rhs, range), range);
   }
   if (token_consume(sctxt->tokenizer, TK_ADD_ASSIGN)) {
     Expr *rhs = assignment_expression(sctxt);
     Range range = range_join(lhs->range, rhs->range);
-    return new_expr_binop('=', lhs, new_expr_binop('+', lhs, rhs, range),
-                          range);
+    return new_expr_binop(sctxt, '=', lhs,
+                          new_expr_binop(sctxt, '+', lhs, rhs, range), range);
   }
   if (token_consume(sctxt->tokenizer, TK_SUB_ASSIGN)) {
     Expr *rhs = assignment_expression(sctxt);
     Range range = range_join(lhs->range, rhs->range);
-    return new_expr_binop('=', lhs, new_expr_binop('-', lhs, rhs, range),
-                          range);
+    return new_expr_binop(sctxt, '=', lhs,
+                          new_expr_binop(sctxt, '-', lhs, rhs, range), range);
   }
   if (token_consume(sctxt->tokenizer, TK_LSHIFT_ASSIGN)) {
     Expr *rhs = assignment_expression(sctxt);
     Range range = range_join(lhs->range, rhs->range);
-    return new_expr_binop('=', lhs, new_expr_binop(EX_LSHIFT, lhs, rhs, range),
+    return new_expr_binop(sctxt, '=', lhs,
+                          new_expr_binop(sctxt, EX_LSHIFT, lhs, rhs, range),
                           range);
   }
   if (token_consume(sctxt->tokenizer, TK_RSHIFT_ASSIGN)) {
     Expr *rhs = assignment_expression(sctxt);
     Range range = range_join(lhs->range, rhs->range);
-    return new_expr_binop('=', lhs, new_expr_binop(EX_RSHIFT, lhs, rhs, range),
+    return new_expr_binop(sctxt, '=', lhs,
+                          new_expr_binop(sctxt, EX_RSHIFT, lhs, rhs, range),
                           range);
   }
   if (token_consume(sctxt->tokenizer, TK_AND_ASSIGN)) {
     Expr *rhs = assignment_expression(sctxt);
     Range range = range_join(lhs->range, rhs->range);
-    return new_expr_binop('=', lhs, new_expr_binop('&', lhs, rhs, range),
-                          range);
+    return new_expr_binop(sctxt, '=', lhs,
+                          new_expr_binop(sctxt, '&', lhs, rhs, range), range);
   }
   if (token_consume(sctxt->tokenizer, TK_OR_ASSIGN)) {
     Expr *rhs = assignment_expression(sctxt);
     Range range = range_join(lhs->range, rhs->range);
-    return new_expr_binop('=', lhs, new_expr_binop('|', lhs, rhs, range),
-                          range);
+    return new_expr_binop(sctxt, '=', lhs,
+                          new_expr_binop(sctxt, '|', lhs, rhs, range), range);
   }
   if (token_consume(sctxt->tokenizer, TK_XOR_ASSIGN)) {
     Expr *rhs = assignment_expression(sctxt);
     Range range = range_join(lhs->range, rhs->range);
-    return new_expr_binop('=', lhs, new_expr_binop('^', lhs, rhs, range),
-                          range);
+    return new_expr_binop(sctxt, '=', lhs,
+                          new_expr_binop(sctxt, '^', lhs, rhs, range), range);
   }
   return lhs;
 }
@@ -1157,7 +1208,8 @@ static void direct_declarator(Tokenizer *tokenizer, Type *base_type,
       Token *token = token_expect(tokenizer, ')');
       *range = range_join(*range, token->range);
     } else {
-      token_error(tokenizer, "識別子でも括弧でもありません");
+      reader_error_with(token_get_reader(tokenizer), range->start,
+                        "識別子でも括弧でもありません");
     }
   }
 
@@ -1244,7 +1296,7 @@ static Stmt *statement(ScopeCtxt *sctxt) {
     Token *end = token_expect(sctxt->tokenizer, ':');
     Stmt *stmt = new_stmt_case(expr, range_join(start->range, end->range));
     if (sctxt->func->switches->len <= 0) {
-      error("switch文中でない箇所にcase文があります");
+      scope_error(sctxt, stmt->range, "switch文中でない箇所にcase文があります");
     }
     Stmt *switch_stmt =
         sctxt->func->switches->data[sctxt->func->switches->len - 1];
@@ -1256,7 +1308,7 @@ static Stmt *statement(ScopeCtxt *sctxt) {
     Token *end = token_expect(sctxt->tokenizer, ':');
     Stmt *stmt = new_stmt_default(range_join(start->range, end->range));
     if (sctxt->func->switches->len <= 0) {
-      error("switch文中でない箇所にcase文があります");
+      scope_error(sctxt, stmt->range, "switch文中でない箇所にcase文があります");
     }
     Stmt *switch_expr =
         sctxt->func->switches->data[sctxt->func->switches->len - 1];
@@ -1376,7 +1428,9 @@ static Function *function_definition(GlobalCtxt *gctxt, Type *type, char *name,
   FuncCtxt *fctxt = new_func_ctxt(gctxt, name);
   ScopeCtxt *sctxt = new_root_scope_ctxt(fctxt);
   if (!register_global(gctxt, name, type, start)) {
-    error("同じ名前の関数またはグローバル変数が複数回定義されました: %s", name);
+    global_error(gctxt, start,
+                 "同じ名前の関数またはグローバル変数が複数回定義されました: %s",
+                 name);
   }
   for (int i = 0; i < type->func_param->len; i++) {
     Param *param = type->func_param->data[i];
@@ -1400,9 +1454,11 @@ static Function *function_definition(GlobalCtxt *gctxt, Type *type, char *name,
 static GlobalVar *global_variable(GlobalCtxt *gctxt, Type *type, char *name,
                                   Range start) {
   Token *end = token_expect(gctxt->tokenizer, ';');
-
-  if (!register_global(gctxt, name, type, range_join(start, end->range))) {
-    error("同じ名前の関数またはグローバル変数が複数回定義されました: %s", name);
+  Range range = range_join(start, end->range);
+  if (!register_global(gctxt, name, type, range)) {
+    global_error(gctxt, range,
+                 "同じ名前の関数またはグローバル変数が複数回定義されました: %s",
+                 name);
   }
 
   return get_global(gctxt, name);
