@@ -1032,6 +1032,24 @@ void test26(void) {
   test26_y.y = 100;
   test26_z.y = 200;
   check_int(305, test26_x.z + test26_y.y + test26_z.y);
+  test_ok(__func__);
+}
+
+typedef int test27_type;
+void test27(void) {
+  typedef int x;
+  typedef int y(int x);
+  typedef int z[3];
+
+  x a;
+  y *b;
+  z c[5];
+
+  a = 3;
+  b = 0;
+  c[0][0] = 1;
+
+  test_ok(__func__);
 }
 
 int main(void) {
@@ -1061,6 +1079,7 @@ int main(void) {
   test24();
   test25();
   test26();
+  test27();
 
   return 0;
 }

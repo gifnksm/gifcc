@@ -70,6 +70,7 @@ enum {
   TK_CONTINUE,      // `continue`
   TK_RETURN,        // `return`
   TK_STRUCT,        // `struct`
+  TK_TYPEDEF,       // `typedef`
   TK_EOF,           // 入力の終わりを表すトークン
 };
 

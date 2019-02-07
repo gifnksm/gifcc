@@ -14,6 +14,7 @@ typedef struct DeclItem {
 
 typedef struct Decl {
   Map *decl;
+  Map *def;
   Map *struct_tag;
   struct Decl *outer;
 } Decl;
@@ -55,6 +56,8 @@ static bool register_decl_item(Decl *decl, char *name, Type *type,
                                StackVar *svar);
 static bool register_struct_decl(Decl *decl, char *tag, Type *type);
 static Type *get_struct_decl(Decl *decl, char *tag);
+static bool register_typedef(Decl *decl, char *name, Type *type);
+static Type *get_typedef(Decl *decl, char *name);
 static bool is_sametype(Type *ty1, Type *ty2);
 static bool is_integer_type(Type *ty);
 static bool is_arith_type(Type *ty);
@@ -62,7 +65,7 @@ static bool is_ptr_type(Type *ty);
 static bool is_array_type(Type *ty);
 static Type *integer_promoted(ScopeCtxt *sctxt, Expr **e);
 static Type *arith_converted(ScopeCtxt *sctxt, Expr **e1, Expr **e2);
-static bool token_is_typename(Token *token);
+static bool token_is_typename(Decl *decl, Token *token);
 static noreturn void binop_type_error_raw(ScopeCtxt *sctxt, int ty, Expr *lhs,
                                           Expr *rhs, const char *dbg_file,
                                           int dbg_line);
@@ -251,6 +254,7 @@ static ScopeCtxt *new_inner_scope_ctxt(ScopeCtxt *outer) {
 static Decl *new_decl(Decl *outer) {
   Decl *decl = malloc(sizeof(Decl));
   decl->decl = new_map();
+  decl->def = new_map();
   decl->struct_tag = new_map();
   decl->outer = outer;
   return decl;
@@ -347,6 +351,25 @@ static Type *get_struct_decl(Decl *decl, char *tag) {
   return NULL;
 }
 
+static bool register_typedef(Decl *decl, char *name, Type *type) {
+  if (map_get(decl->def, name)) {
+    return false;
+  }
+  map_put(decl->def, name, type);
+  return true;
+}
+
+static Type *get_typedef(Decl *decl, char *name) {
+  while (decl != NULL) {
+    Type *type = map_get(decl->def, name);
+    if (type) {
+      return type;
+    }
+    decl = decl->outer;
+  }
+  return NULL;
+}
+
 static bool is_sametype(Type *ty1, Type *ty2) {
   if (ty1->ty != ty2->ty) {
     return false;
@@ -384,13 +407,15 @@ static Type *arith_converted(ScopeCtxt *sctxt, Expr **e1, Expr **e2) {
   return ty1;
 }
 
-static bool token_is_typename(Token *token) {
+static bool token_is_typename(Decl *decl, Token *token) {
   switch (token->ty) {
   case TK_VOID:
   case TK_INT:
   case TK_CHAR:
   case TK_STRUCT:
     return true;
+  case TK_IDENT:
+    return get_typedef(decl, token->name);
   default:
     return false;
   }
@@ -1107,7 +1132,7 @@ static Expr *unary_expression(ScopeCtxt *sctxt) {
 static Expr *cast_expression(ScopeCtxt *sctxt) {
   Token *token = token_peek(sctxt->tokenizer);
   if (token->ty == '(' &&
-      token_is_typename(token_peek_ahead(sctxt->tokenizer, 1))) {
+      token_is_typename(sctxt->decl, token_peek_ahead(sctxt->tokenizer, 1))) {
     Range start = token->range;
     token_succ(sctxt->tokenizer);
     Type *val_type = type_name(sctxt->decl, sctxt->tokenizer);
@@ -1286,6 +1311,7 @@ static Expr *constant_expression(ScopeCtxt *sctxt) {
 }
 
 static void declaration(ScopeCtxt *sctxt) {
+  bool is_typedef = token_consume(sctxt->tokenizer, TK_TYPEDEF);
   Type *base_type = type_specifier(sctxt->decl, sctxt->tokenizer);
   if (token_consume(sctxt->tokenizer, ';')) {
     return;
@@ -1294,10 +1320,18 @@ static void declaration(ScopeCtxt *sctxt) {
   Type *type;
   Range range;
   declarator(sctxt->decl, sctxt->tokenizer, base_type, &name, &type, &range);
-  (void)register_stack(sctxt, name, type, range);
+  if (is_typedef) {
+    register_typedef(sctxt->decl, name, type);
+  } else {
+    (void)register_stack(sctxt, name, type, range);
+  }
   while (token_consume(sctxt->tokenizer, ',')) {
     declarator(sctxt->decl, sctxt->tokenizer, base_type, &name, &type, &range);
-    (void)register_stack(sctxt, name, type, range);
+    if (is_typedef) {
+      register_typedef(sctxt->decl, name, type);
+    } else {
+      (void)register_stack(sctxt, name, type, range);
+    }
   }
   token_expect(sctxt->tokenizer, ';');
 }
@@ -1313,6 +1347,8 @@ static Type *type_specifier(Decl *decl, Tokenizer *tokenizer) {
     return new_type(TY_VOID);
   case TK_STRUCT:
     return struct_or_union_specifier(decl, tokenizer, token);
+  case TK_IDENT:
+    return get_typedef(decl, token->name);
   default:
     token_error_with(tokenizer, token, "型名がありません");
   }
@@ -1614,7 +1650,8 @@ static Stmt *compound_statement(ScopeCtxt *sctxt) {
   Range range = start->range;
   Vector *stmts = new_vector();
   while (!token_consume(sctxt->tokenizer, '}')) {
-    if (token_is_typename(token_peek(sctxt->tokenizer))) {
+    Token *token = token_peek(sctxt->tokenizer);
+    if (token_is_typename(sctxt->decl, token) || token->ty == TK_TYPEDEF) {
       declaration(sctxt);
       continue;
     }
@@ -1663,6 +1700,7 @@ static TranslationUnit *translation_unit(Tokenizer *tokenizer) {
   Vector *gvar_list = new_vector();
 
   while (token_peek(tokenizer)->ty != TK_EOF) {
+    bool is_typedef = token_consume(tokenizer, TK_TYPEDEF);
     Type *base_type = type_specifier(gctxt->decl, gctxt->tokenizer);
     if (token_consume(gctxt->tokenizer, ';')) {
       continue;
@@ -1682,8 +1720,12 @@ static TranslationUnit *translation_unit(Tokenizer *tokenizer) {
       vec_push(func_list, function_definition(gctxt, type, name, range));
       continue;
     }
-    if (!is_func_type(type)) {
-      vec_push(gvar_list, new_global_variable(type, name, range));
+    if (is_typedef) {
+      register_typedef(gctxt->decl, name, type);
+    } else {
+      if (!is_func_type(type)) {
+        vec_push(gvar_list, new_global_variable(type, name, range));
+      }
     }
 
     while (token_consume(gctxt->tokenizer, ',')) {
@@ -1695,8 +1737,12 @@ static TranslationUnit *translation_unit(Tokenizer *tokenizer) {
             "同じ名前の関数またはグローバル変数が複数回定義されました: %s",
             name);
       }
-      if (!is_func_type(type)) {
-        vec_push(gvar_list, new_global_variable(type, name, range));
+      if (is_typedef) {
+        register_typedef(gctxt->decl, name, type);
+      } else {
+        if (!is_func_type(type)) {
+          vec_push(gvar_list, new_global_variable(type, name, range));
+        }
       }
     }
     token_expect(gctxt->tokenizer, ';');
