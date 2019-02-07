@@ -193,17 +193,6 @@ static noreturn void scope_error_raw(const ScopeCtxt *sctxt, Range range,
                            dbg_line, fmt, ap);
 }
 
-#define global_error(gctxt, range, fmt, ...)                                   \
-  global_error_raw((gctxt), (range), __FILE__, __LINE__, (fmt), ##__VA_ARGS__)
-static noreturn void global_error_raw(const GlobalCtxt *gctxt, Range range,
-                                      const char *dbg_file, int dbg_line,
-                                      char *fmt, ...) {
-  va_list ap;
-  va_start(ap, fmt);
-  reader_error_range_raw_v(token_get_reader(gctxt->tokenizer), range, dbg_file,
-                           dbg_line, fmt, ap);
-}
-
 static GlobalCtxt *new_global_ctxt(Tokenizer *tokenizer) {
   GlobalCtxt *gctxt = malloc(sizeof(GlobalCtxt));
   gctxt->tokenizer = tokenizer;
@@ -1446,8 +1435,9 @@ static void direct_declarator(Decl *decl, Tokenizer *tokenizer, Type *base_type,
       Token *token = token_expect(tokenizer, ')');
       *range = range_join(*range, token->range);
     } else {
-      reader_error_offset(token_get_reader(tokenizer), range->start,
-                          "識別子でも括弧でもありません");
+      *name = NULL;
+      *type = base_type;
+      *range = *range;
     }
   }
 
@@ -1710,11 +1700,7 @@ static TranslationUnit *translation_unit(Tokenizer *tokenizer) {
     Range range;
     declarator(gctxt->decl, gctxt->tokenizer, base_type, &name, &type, &range);
 
-    if (!register_decl_item(gctxt->decl, name, type, NULL)) {
-      global_error(
-          gctxt, range,
-          "同じ名前の関数またはグローバル変数が複数回定義されました: %s", name);
-    }
+    (void)register_decl_item(gctxt->decl, name, type, NULL);
 
     if (is_func_type(type) && token_peek(gctxt->tokenizer)->ty == '{') {
       vec_push(func_list, function_definition(gctxt, type, name, range));
@@ -1731,12 +1717,8 @@ static TranslationUnit *translation_unit(Tokenizer *tokenizer) {
     while (token_consume(gctxt->tokenizer, ',')) {
       declarator(gctxt->decl, gctxt->tokenizer, base_type, &name, &type,
                  &range);
-      if (!register_decl_item(gctxt->decl, name, type, NULL)) {
-        global_error(
-            gctxt, range,
-            "同じ名前の関数またはグローバル変数が複数回定義されました: %s",
-            name);
-      }
+      (void)register_decl_item(gctxt->decl, name, type, NULL);
+
       if (is_typedef) {
         register_typedef(gctxt->decl, name, type);
       } else {

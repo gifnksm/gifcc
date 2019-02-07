@@ -1052,6 +1052,14 @@ void test27(void) {
   test_ok(__func__);
 }
 
+int test28_foo(int, int, int);
+int test28_foo(int a, int b, int c) { return a + b + c; }
+void test28(void) {
+  check_int(12, test28_foo(3, 4, 5));
+
+  test_ok(__func__);
+}
+
 int main(void) {
   num_check = 0;
   test01();
