@@ -123,6 +123,14 @@ reader_error_offset_raw(const Reader *reader, int offset, const char *dbg_file,
                            dbg_line, fmt, ap);
 }
 
+noreturn __attribute__((format(printf, 5, 6))) void
+reader_error_range_raw(const Reader *reader, Range range, const char *dbg_file,
+                       int dbg_line, const char *fmt, ...) {
+  va_list ap;
+  va_start(ap, fmt);
+  reader_error_range_raw_v(reader, range, dbg_file, dbg_line, fmt, ap);
+}
+
 noreturn void reader_error_range_raw_v(const Reader *reader, Range range,
                                        const char *dbg_file, int dbg_line,
                                        const char *fmt, va_list ap) {

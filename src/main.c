@@ -99,6 +99,19 @@ static void dump_type_inner(Type *ty) {
     printf(")->");
     dump_type_inner(ty->func_ret);
     break;
+  case TY_STRUCT:
+    printf("STRUCT %s", ty->tag);
+    printf("(");
+    for (int i = 0; i < ty->members->keys->len; i++) {
+      if (i > 0) {
+        printf(", ");
+      }
+      Member *member = ty->members->vals->data[i];
+      dump_type_inner(member->type);
+      printf(" %s", member->name);
+    }
+    printf(")");
+    break;
   default:
     error("未知の型です: %d\n", ty->ty);
   }

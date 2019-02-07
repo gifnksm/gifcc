@@ -19,11 +19,14 @@ typedef struct {
 } LongToken;
 
 static const LongToken LONG_IDENT_TOKENS[] = {
-    {"void", TK_VOID},   {"int", TK_INT},           {"char", TK_CHAR},
-    {"if", TK_IF},       {"else", TK_ELSE},         {"switch", TK_SWITCH},
-    {"case", TK_CASE},   {"default", TK_DEFAULT},   {"while", TK_WHILE},
-    {"do", TK_DO},       {"for", TK_FOR},           {"goto", TK_GOTO},
-    {"break", TK_BREAK}, {"continue", TK_CONTINUE}, {"return", TK_RETURN},
+    {"void", TK_VOID},     {"int", TK_INT},
+    {"char", TK_CHAR},     {"if", TK_IF},
+    {"else", TK_ELSE},     {"switch", TK_SWITCH},
+    {"case", TK_CASE},     {"default", TK_DEFAULT},
+    {"while", TK_WHILE},   {"do", TK_DO},
+    {"for", TK_FOR},       {"goto", TK_GOTO},
+    {"break", TK_BREAK},   {"continue", TK_CONTINUE},
+    {"return", TK_RETURN}, {"struct", TK_STRUCT},
     {NULL, '\0'},
 };
 static const LongToken LONG_PUNCT_TOKENS[] = {
@@ -35,7 +38,7 @@ static const LongToken LONG_PUNCT_TOKENS[] = {
     {"--", TK_DEC},        {"-=", TK_SUB_ASSIGN}, {"*=", TK_MUL_ASSIGN},
     {"/=", TK_DIV_ASSIGN}, {"%=", TK_MOD_ASSIGN}, {NULL, '\0'},
 };
-static const char *SHORT_PUNCT_TOKENS = "=!<>&|^+-*/%();?:~{}[],";
+static const char *SHORT_PUNCT_TOKENS = "=!<>&|^+-*/%();?:~{}[],.";
 
 static Token *read_token(Reader *reader, bool *read_eof);
 static Token *new_token(int ty);

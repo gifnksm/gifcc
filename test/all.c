@@ -973,6 +973,24 @@ void test25(void) {
   test_ok(__func__);
 }
 
+void test26(void) {
+  struct Foo {
+    int x, y;
+  } s;
+
+  s.x = 3;
+  s.y = 5;
+
+  check_int(8, s.x + s.y);
+
+  struct {
+    int z;
+    int w;
+  } t;
+  t.z = t.w = 8;
+  check_int(64, t.z * t.w);
+}
+
 int main(void) {
   num_check = 0;
   test01();
@@ -997,6 +1015,9 @@ int main(void) {
   test21();
   test22();
   test23();
+  test24();
+  test25();
+  test26();
 
   return 0;
 }

@@ -68,6 +68,7 @@ enum {
   TK_BREAK,         // `break`
   TK_CONTINUE,      // `continue`
   TK_RETURN,        // `return`
+  TK_STRUCT,        // `struct`
   TK_EOF,           // 入力の終わりを表すトークン
 };
 
@@ -130,6 +131,7 @@ typedef enum {
   TY_PTR,
   TY_ARRAY,
   TY_FUNC,
+  TY_STRUCT,
 } type_t;
 
 typedef struct Type {
@@ -138,6 +140,10 @@ typedef struct Type {
   int array_len;
   struct Type *func_ret;
   Vector *func_param;
+  char *tag;
+  Map *members;
+  int member_size;
+  int member_align;
 } Type;
 
 typedef struct StackVar {
@@ -174,7 +180,7 @@ typedef struct Expr {
   struct Expr *cond; // 条件式 (tyがEX_CONDの場合のみ使う)
 
   int val;    // tyがEX_NUMの場合のみ使う
-  char *name; // tyがEX_IDENT, EX_STRの場合のみ使う
+  char *name; // tyがEX_IDENT, EX_STR, `.` の場合のみ使う
 
   // EX_CALL: <callee>(<argument>...)
   struct Expr *callee;
@@ -221,6 +227,12 @@ typedef struct Stmt {
   Map *stack_map; // tyがST_COMPOUNDの場合のみ使う
   Vector *stmts;  // tyがST_COMPOUNDの場合のみ使う
 } Stmt;
+
+typedef struct Member {
+  char *name;
+  Type *type;
+  int offset;
+} Member;
 
 typedef struct Function {
   char *name;
@@ -280,11 +292,17 @@ char *reader_get_line(const Reader *reader, int line);
   reader_error_offset_raw(reader, reader_get_offset(reader), __FILE__,         \
                           __LINE__, (fmt), ##__VA_ARGS__)
 #define reader_error_offset(reader, offset, fmt, ...)                          \
-  reader_error_offset_raw(reader, offset, __FILE__, __LINE__, fmt,             \
+  reader_error_offset_raw((reader), (offset), __FILE__, __LINE__, (fmt),       \
                           ##__VA_ARGS__)
+#define reader_error_range(reader, range, fmt, ...)                            \
+  reader_error_range_raw((reader), (range), __FILE__, __LINE__, (fmt),         \
+                         ##__VA_ARGS__)
 noreturn __attribute__((format(printf, 5, 6))) void
 reader_error_offset_raw(const Reader *reader, int offset, const char *dbg_file,
                         int dbg_line, const char *fmt, ...);
+noreturn __attribute__((format(printf, 5, 6))) void
+reader_error_range_raw(const Reader *reader, Range range, const char *dbg_file,
+                       int dbg_line, const char *fmt, ...);
 noreturn void reader_error_range_raw_v(const Reader *reader, Range range,
                                        const char *dbg_file, int dbg_line,
                                        const char *fmt, va_list ap);

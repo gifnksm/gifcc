@@ -39,6 +39,9 @@ static StackVar *register_stack(ScopeCtxt *sctxt, char *name, Type *type,
 static StackVar *get_stack(ScopeCtxt *sctxt, char *name);
 static bool register_global(GlobalCtxt *gctxt, char *name, Type *type,
                             Range range);
+static bool register_member(Tokenizer *tokenizer, Map *members, char *name,
+                            Type *type, Range range, int *offset,
+                            int *alignment);
 static GlobalVar *get_global(GlobalCtxt *gctxt, char *name);
 static bool is_sametype(Type *ty1, Type *ty2);
 static bool is_integer_type(Type *ty);
@@ -55,6 +58,8 @@ static Type *new_type(int ty);
 static Type *new_type_ptr(Type *base_type);
 static Type *new_type_array(Type *base_type, int len);
 static Type *new_type_func(Type *ret_type, Vector *func_param);
+static Type *new_type_struct(char *tag, Map *members, int size, int alignment);
+static Type *new_type_anon_struct(void);
 static Expr *coerce_array2ptr(ScopeCtxt *sctxt, Expr *expr);
 static Expr *new_expr(int ty, Type *val_type, Range range);
 static Expr *new_expr_num(int val, Range range);
@@ -74,6 +79,8 @@ static Expr *new_expr_cond(ScopeCtxt *sctxt, Expr *cond, Expr *then_expr,
                            Expr *else_expr, Range range);
 static Expr *new_expr_index(ScopeCtxt *sctxt, Expr *array, Expr *index,
                             Range range);
+static Expr *new_expr_dot(ScopeCtxt *sctxt, Expr *operand, char *name,
+                          Range range);
 static Stmt *new_stmt(int ty, Range range);
 static Stmt *new_stmt_expr(Expr *expr, Range range);
 static Stmt *new_stmt_if(Expr *cond, Stmt *then_stmt, Stmt *else_stmt,
@@ -114,6 +121,9 @@ static Expr *constant_expression(ScopeCtxt *sctxt);
 // declaration
 static void declaration(ScopeCtxt *sctxt);
 static Type *type_specifier(Tokenizer *tokenizer);
+static void struct_declaration(Tokenizer *tokenizer, Map *members, int *size,
+                               int *alignment);
+static Type *struct_or_union_specifier(Tokenizer *tokenizer, Token *token);
 static Type *type_name(Tokenizer *tokenizer);
 static void declarator(Tokenizer *tokenizer, Type *base_type, char **name,
                        Type **type, Range *range);
@@ -231,7 +241,6 @@ static StackVar *register_stack(ScopeCtxt *sctxt, char *name, Type *type,
   }
   if (map_get(sctxt->stack_map, name)) {
     scope_error(sctxt, range, "同じ名前のローカル変数が複数あります: %s", name);
-    return NULL;
   }
 
   FuncCtxt *fctxt = sctxt->func;
@@ -272,6 +281,33 @@ static bool register_global(GlobalCtxt *gctxt, char *name, Type *type,
   var->name = name;
   var->range = range;
   map_put(gctxt->var_map, name, var);
+  return true;
+}
+
+static bool register_member(Tokenizer *tokenizer, Map *members, char *name,
+                            Type *type, Range range, int *size,
+                            int *alignment) {
+  if (type->ty == TY_VOID) {
+    reader_error_range(token_get_reader(tokenizer), range,
+                       "void型の構造体メンバーです: %s", name);
+  }
+  if (map_get(members, name)) {
+    return false;
+  }
+
+  Member *member = malloc(sizeof(Member));
+  member->name = name;
+  member->type = type;
+
+  *size = align(*size, get_val_align(type));
+  member->offset = *size;
+  *size += get_val_size(type);
+
+  if (*alignment < get_val_align(type)) {
+    *alignment = get_val_align(type);
+  }
+
+  map_put(members, name, member);
   return true;
 }
 
@@ -321,6 +357,7 @@ static bool token_is_typename(Token *token) {
   case TK_VOID:
   case TK_INT:
   case TK_CHAR:
+  case TK_STRUCT:
     return true;
   default:
     return false;
@@ -341,6 +378,8 @@ int get_val_size(Type *ty) {
     return get_val_size(ty->ptrof) * ty->array_len;
   case TY_FUNC:
     error("関数型の値サイズを取得しようとしました");
+  case TY_STRUCT:
+    return ty->member_size;
   }
   error("不明な型のサイズを取得しようとしました");
 }
@@ -359,6 +398,8 @@ int get_val_align(Type *ty) {
     return get_val_align(ty->ptrof);
   case TY_FUNC:
     error("関数型の値アラインメントを取得しようとしました");
+  case TY_STRUCT:
+    return ty->member_align;
   }
   error("不明な型の値アラインメントを取得しようとしました");
 }
@@ -400,6 +441,24 @@ static Type *new_type_func(Type *ret_type, Vector *func_param) {
   funtype->func_ret = ret_type;
   funtype->func_param = func_param;
   return funtype;
+}
+
+static Type *new_type_struct(char *tag, Map *members, int member_size,
+                             int member_align) {
+  Type *type = malloc(sizeof(Type));
+  type->ty = TY_STRUCT;
+  type->tag = tag;
+  type->members = members;
+  type->member_size = align(member_size, member_align);
+  type->member_align = member_align;
+  return type;
+}
+
+static Type *new_type_anon_struct(void) {
+  Type *type = malloc(sizeof(Type));
+  type->ty = TY_STRUCT;
+  type->members = NULL;
+  return type;
 }
 
 static Expr *coerce_array2ptr(ScopeCtxt *sctxt, Expr *expr) {
@@ -522,6 +581,7 @@ static Expr *new_expr_cast(ScopeCtxt *sctxt, Type *val_type, Expr *operand,
     case TY_PTR:
     case TY_ARRAY:
     case TY_FUNC:
+    case TY_STRUCT:
       break;
     }
   }
@@ -766,6 +826,21 @@ static Expr *new_expr_index(ScopeCtxt *sctxt, Expr *array, Expr *index,
                         new_expr_binop(sctxt, '+', array, index, range), range);
 }
 
+static Expr *new_expr_dot(ScopeCtxt *sctxt, Expr *operand, char *name,
+                          Range range) {
+  if (operand->val_type->ty != TY_STRUCT) {
+    scope_error(sctxt, range, "構造体以外のメンバへのアクセスです");
+  }
+  Member *member = map_get(operand->val_type->members, name);
+  if (member == NULL) {
+    scope_error(sctxt, range, "存在しないメンバへのアクセスです: %s", name);
+  }
+  Expr *expr = new_expr('+', new_type_ptr(member->type), range);
+  expr->lhs = new_expr_unary(sctxt, '&', operand, range);
+  expr->rhs = new_expr_num(member->offset, range);
+  return new_expr_unary(sctxt, '*', expr, range);
+}
+
 static Stmt *new_stmt(int ty, Range range) {
   Stmt *stmt = malloc(sizeof(Stmt));
   stmt->ty = ty;
@@ -889,6 +964,10 @@ static Expr *postfix_expression(ScopeCtxt *sctxt) {
       Token *end = token_expect(sctxt->tokenizer, ']');
       expr = new_expr_index(sctxt, expr, operand,
                             range_join(expr->range, end->range));
+    } else if (token_consume(sctxt->tokenizer, '.')) {
+      Token *member = token_expect(sctxt->tokenizer, TK_IDENT);
+      expr = new_expr_dot(sctxt, expr, member->name,
+                          range_join(expr->range, member->range));
     } else if (token_consume(sctxt->tokenizer, '(')) {
       Vector *argument = NULL;
       if (token_peek(sctxt->tokenizer)->ty != ')') {
@@ -1179,9 +1258,55 @@ static Type *type_specifier(Tokenizer *tokenizer) {
     return new_type(TY_INT);
   case TK_VOID:
     return new_type(TY_VOID);
+  case TK_STRUCT:
+    return struct_or_union_specifier(tokenizer, token);
   default:
     token_error_with(tokenizer, token, "型名がありません");
   }
+}
+
+static void struct_declaration(Tokenizer *tokenizer, Map *members, int *size,
+                               int *alignment) {
+  Type *base_type = type_specifier(tokenizer);
+  char *name;
+  Type *type;
+  Range range;
+  declarator(tokenizer, base_type, &name, &type, &range);
+  if (!register_member(tokenizer, members, name, type, range, size,
+                       alignment)) {
+    reader_error_range(token_get_reader(tokenizer), range,
+                       "同じ名前のメンバ変数が複数あります: %s", name);
+  }
+
+  while (token_consume(tokenizer, ',')) {
+    declarator(tokenizer, base_type, &name, &type, &range);
+    if (!register_member(tokenizer, members, name, type, range, size,
+                         alignment)) {
+      reader_error_range(token_get_reader(tokenizer), range,
+                         "同じ名前のメンバ変数が複数あります: %s", name);
+    }
+  }
+  token_expect(tokenizer, ';');
+}
+
+static Type *struct_or_union_specifier(Tokenizer *tokenizer, Token *token) {
+  Token *tag = token_consume(tokenizer, TK_IDENT);
+  Map *members = NULL;
+  if (tag == NULL && token_peek(tokenizer)->ty != '{') {
+    token_error_with(tokenizer, token, "構造体のタグまたは `{` がありません");
+  }
+  if (token_consume(tokenizer, '{')) {
+    members = new_map();
+    int size = 0;
+    int alignment = 0;
+    while (token_peek(tokenizer)->ty != '}') {
+      struct_declaration(tokenizer, members, &size, &alignment);
+    }
+    token_expect(tokenizer, '}');
+    return new_type_struct(tag ? tag->name : NULL, members, size, alignment);
+  }
+
+  return new_type_anon_struct();
 }
 
 static Type *type_name(Tokenizer *tokenizer) {
