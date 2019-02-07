@@ -973,6 +973,13 @@ void test25(void) {
   test_ok(__func__);
 }
 
+struct Test26 {
+  int z;
+};
+struct Test26 test26_x;
+struct {
+  int y;
+} test26_y;
 void test26(void) {
   struct Foo {
     int x, y;
@@ -1014,6 +1021,14 @@ void test26(void) {
   p.x = &p;
   p.v = 123;
   check_int(123, p.x->x->x->x->v);
+
+  struct Test26 k;
+  k.z = 3;
+  check_int(3, k.z);
+
+  test26_x.z = 5;
+  test26_y.y = 100;
+  check_int(105, test26_x.z + test26_y.y);
 }
 
 int main(void) {

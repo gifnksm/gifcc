@@ -1682,6 +1682,9 @@ static TranslationUnit *translation_unit(Tokenizer *tokenizer) {
 
   while (token_peek(tokenizer)->ty != TK_EOF) {
     Type *base_type = type_specifier(gctxt->decl, gctxt->tokenizer);
+    if (token_consume(gctxt->tokenizer, ';')) {
+      continue;
+    }
     char *name;
     Type *type;
     Range range;
