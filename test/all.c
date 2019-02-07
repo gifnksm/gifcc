@@ -989,6 +989,11 @@ void test26(void) {
   } t;
   t.z = t.w = 8;
   check_int(64, t.z * t.w);
+
+  struct Foo s2;
+  s2.x = 8;
+  s2.y = 1;
+  check_int(9, s2.x + s2.y);
 }
 
 int main(void) {

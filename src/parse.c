@@ -7,10 +7,16 @@
 #include <stdlib.h>
 #include <string.h>
 
+typedef struct Decl {
+  Map *struct_tag;
+  struct Decl *outer;
+} Decl;
+
 typedef struct GlobalCtxt {
   Tokenizer *tokenizer;
   Map *var_map;
   Vector *str_list;
+  Decl *decl;
 } GlobalCtxt;
 
 typedef struct FuncCtxt {
@@ -28,12 +34,14 @@ typedef struct ScopeCtxt {
   struct ScopeCtxt *outer;
   Tokenizer *tokenizer;
   Map *stack_map;
+  Decl *decl;
 } ScopeCtxt;
 
 static GlobalCtxt *new_global_ctxt(Tokenizer *tokenizer);
 static FuncCtxt *new_func_ctxt(GlobalCtxt *gctxt, char *name);
 static ScopeCtxt *new_root_scope_ctxt(FuncCtxt *fctxt);
 static ScopeCtxt *new_inner_scope_ctxt(ScopeCtxt *outer);
+static Decl *new_decl(Decl *outer);
 static StackVar *register_stack(ScopeCtxt *sctxt, char *name, Type *type,
                                 Range range);
 static StackVar *get_stack(ScopeCtxt *sctxt, char *name);
@@ -43,6 +51,8 @@ static bool register_member(Tokenizer *tokenizer, Map *members, char *name,
                             Type *type, Range range, int *offset,
                             int *alignment);
 static GlobalVar *get_global(GlobalCtxt *gctxt, char *name);
+static bool register_struct_decl(Decl *decl, char *tag, Type *type);
+static Type *get_struct_decl(Decl *decl, char *tag);
 static bool is_sametype(Type *ty1, Type *ty2);
 static bool is_integer_type(Type *ty);
 static bool is_arith_type(Type *ty);
@@ -120,14 +130,15 @@ static Expr *constant_expression(ScopeCtxt *sctxt);
 
 // declaration
 static void declaration(ScopeCtxt *sctxt);
-static Type *type_specifier(Tokenizer *tokenizer);
-static void struct_declaration(Tokenizer *tokenizer, Map *members, int *size,
-                               int *alignment);
-static Type *struct_or_union_specifier(Tokenizer *tokenizer, Token *token);
-static Type *type_name(Tokenizer *tokenizer);
-static void declarator(Tokenizer *tokenizer, Type *base_type, char **name,
-                       Type **type, Range *range);
-static void direct_declarator(Tokenizer *tokenizer, Type *base_type,
+static Type *type_specifier(Decl *decl, Tokenizer *tokenizer);
+static void struct_declaration(Decl *decl, Tokenizer *tokenizer, Map *members,
+                               int *size, int *alignment);
+static Type *struct_or_union_specifier(Decl *decl, Tokenizer *tokenizer,
+                                       Token *token);
+static Type *type_name(Decl *decl, Tokenizer *tokenizer);
+static void declarator(Decl *decl, Tokenizer *tokenizer, Type *base_type,
+                       char **name, Type **type, Range *range);
+static void direct_declarator(Decl *decl, Tokenizer *tokenizer, Type *base_type,
                               char **name, Type **type, Range *range);
 
 // statement
@@ -193,6 +204,7 @@ static GlobalCtxt *new_global_ctxt(Tokenizer *tokenizer) {
   gctxt->tokenizer = tokenizer;
   gctxt->var_map = new_map();
   gctxt->str_list = new_vector();
+  gctxt->decl = new_decl(NULL);
 
   return gctxt;
 }
@@ -218,6 +230,7 @@ static ScopeCtxt *new_root_scope_ctxt(FuncCtxt *fctxt) {
   sctxt->outer = NULL;
   sctxt->tokenizer = fctxt->tokenizer;
   sctxt->stack_map = new_map();
+  sctxt->decl = new_decl(fctxt->global->decl);
 
   return sctxt;
 }
@@ -230,8 +243,16 @@ static ScopeCtxt *new_inner_scope_ctxt(ScopeCtxt *outer) {
   inner->outer = outer;
   inner->tokenizer = outer->tokenizer;
   inner->stack_map = new_map();
+  inner->decl = new_decl(outer->decl);
 
   return inner;
+}
+
+static Decl *new_decl(Decl *outer) {
+  Decl *decl = malloc(sizeof(Decl));
+  decl->struct_tag = new_map();
+  decl->outer = outer;
+  return decl;
 }
 
 static StackVar *register_stack(ScopeCtxt *sctxt, char *name, Type *type,
@@ -313,6 +334,25 @@ static bool register_member(Tokenizer *tokenizer, Map *members, char *name,
 
 static GlobalVar *get_global(GlobalCtxt *gctxt, char *name) {
   return map_get(gctxt->var_map, name);
+}
+
+static bool register_struct_decl(Decl *decl, char *tag, Type *type) {
+  if (map_get(decl->struct_tag, tag)) {
+    return false;
+  }
+  map_put(decl->struct_tag, tag, type);
+  return true;
+}
+
+static Type *get_struct_decl(Decl *decl, char *tag) {
+  while (decl != NULL) {
+    Type *type = map_get(decl->struct_tag, tag);
+    if (type) {
+      return type;
+    }
+    decl = decl->outer;
+  }
+  return NULL;
 }
 
 static bool is_sametype(Type *ty1, Type *ty2) {
@@ -831,7 +871,9 @@ static Expr *new_expr_dot(ScopeCtxt *sctxt, Expr *operand, char *name,
   if (operand->val_type->ty != TY_STRUCT) {
     scope_error(sctxt, range, "構造体以外のメンバへのアクセスです");
   }
-  Member *member = map_get(operand->val_type->members, name);
+  Member *member = operand->val_type->members
+                       ? map_get(operand->val_type->members, name)
+                       : NULL;
   if (member == NULL) {
     scope_error(sctxt, range, "存在しないメンバへのアクセスです: %s", name);
   }
@@ -1060,7 +1102,7 @@ static Expr *cast_expression(ScopeCtxt *sctxt) {
       token_is_typename(token_peek_ahead(sctxt->tokenizer, 1))) {
     Range start = token->range;
     token_succ(sctxt->tokenizer);
-    Type *val_type = type_name(sctxt->tokenizer);
+    Type *val_type = type_name(sctxt->decl, sctxt->tokenizer);
     token_expect(sctxt->tokenizer, ')');
     Expr *operand = cast_expression(sctxt);
     return new_expr_cast(sctxt, val_type, operand,
@@ -1236,20 +1278,20 @@ static Expr *constant_expression(ScopeCtxt *sctxt) {
 }
 
 static void declaration(ScopeCtxt *sctxt) {
-  Type *base_type = type_specifier(sctxt->tokenizer);
+  Type *base_type = type_specifier(sctxt->decl, sctxt->tokenizer);
   char *name;
   Type *type;
   Range range;
-  declarator(sctxt->tokenizer, base_type, &name, &type, &range);
+  declarator(sctxt->decl, sctxt->tokenizer, base_type, &name, &type, &range);
   (void)register_stack(sctxt, name, type, range);
   while (token_consume(sctxt->tokenizer, ',')) {
-    declarator(sctxt->tokenizer, base_type, &name, &type, &range);
+    declarator(sctxt->decl, sctxt->tokenizer, base_type, &name, &type, &range);
     (void)register_stack(sctxt, name, type, range);
   }
   token_expect(sctxt->tokenizer, ';');
 }
 
-static Type *type_specifier(Tokenizer *tokenizer) {
+static Type *type_specifier(Decl *decl, Tokenizer *tokenizer) {
   Token *token = token_pop(tokenizer);
   switch (token->ty) {
   case TK_CHAR:
@@ -1259,19 +1301,19 @@ static Type *type_specifier(Tokenizer *tokenizer) {
   case TK_VOID:
     return new_type(TY_VOID);
   case TK_STRUCT:
-    return struct_or_union_specifier(tokenizer, token);
+    return struct_or_union_specifier(decl, tokenizer, token);
   default:
     token_error_with(tokenizer, token, "型名がありません");
   }
 }
 
-static void struct_declaration(Tokenizer *tokenizer, Map *members, int *size,
-                               int *alignment) {
-  Type *base_type = type_specifier(tokenizer);
+static void struct_declaration(Decl *decl, Tokenizer *tokenizer, Map *members,
+                               int *size, int *alignment) {
+  Type *base_type = type_specifier(decl, tokenizer);
   char *name;
   Type *type;
   Range range;
-  declarator(tokenizer, base_type, &name, &type, &range);
+  declarator(decl, tokenizer, base_type, &name, &type, &range);
   if (!register_member(tokenizer, members, name, type, range, size,
                        alignment)) {
     reader_error_range(token_get_reader(tokenizer), range,
@@ -1279,7 +1321,7 @@ static void struct_declaration(Tokenizer *tokenizer, Map *members, int *size,
   }
 
   while (token_consume(tokenizer, ',')) {
-    declarator(tokenizer, base_type, &name, &type, &range);
+    declarator(decl, tokenizer, base_type, &name, &type, &range);
     if (!register_member(tokenizer, members, name, type, range, size,
                          alignment)) {
       reader_error_range(token_get_reader(tokenizer), range,
@@ -1289,28 +1331,43 @@ static void struct_declaration(Tokenizer *tokenizer, Map *members, int *size,
   token_expect(tokenizer, ';');
 }
 
-static Type *struct_or_union_specifier(Tokenizer *tokenizer, Token *token) {
+static Type *struct_or_union_specifier(Decl *decl, Tokenizer *tokenizer,
+                                       Token *token) {
   Token *tag = token_consume(tokenizer, TK_IDENT);
   Map *members = NULL;
   if (tag == NULL && token_peek(tokenizer)->ty != '{') {
     token_error_with(tokenizer, token, "構造体のタグまたは `{` がありません");
   }
+
   if (token_consume(tokenizer, '{')) {
     members = new_map();
     int size = 0;
     int alignment = 0;
     while (token_peek(tokenizer)->ty != '}') {
-      struct_declaration(tokenizer, members, &size, &alignment);
+      struct_declaration(decl, tokenizer, members, &size, &alignment);
     }
     token_expect(tokenizer, '}');
-    return new_type_struct(tag ? tag->name : NULL, members, size, alignment);
+    Type *type =
+        new_type_struct(tag ? tag->name : NULL, members, size, alignment);
+    if (tag != NULL) {
+      if (!register_struct_decl(decl, tag->name, type)) {
+        token_error_with(tokenizer, tag, "同じタグ名の構造体の多重定義です: %s",
+                         tag->name);
+      }
+    }
+    return type;
+  }
+
+  Type *type = get_struct_decl(decl, tag->name);
+  if (type != NULL) {
+    return type;
   }
 
   return new_type_anon_struct();
 }
 
-static Type *type_name(Tokenizer *tokenizer) {
-  Type *type = type_specifier(tokenizer);
+static Type *type_name(Decl *decl, Tokenizer *tokenizer) {
+  Type *type = type_specifier(decl, tokenizer);
   while (token_consume(tokenizer, '*')) {
     type = new_type_ptr(type);
   }
@@ -1321,18 +1378,18 @@ static Type *type_name(Tokenizer *tokenizer) {
   return type;
 }
 
-static void declarator(Tokenizer *tokenizer, Type *base_type, char **name,
-                       Type **type, Range *range) {
+static void declarator(Decl *decl, Tokenizer *tokenizer, Type *base_type,
+                       char **name, Type **type, Range *range) {
   Range start = token_peek(tokenizer)->range;
   while (token_consume(tokenizer, '*')) {
     base_type = new_type_ptr(base_type);
   }
   Range end;
-  direct_declarator(tokenizer, base_type, name, type, &end);
+  direct_declarator(decl, tokenizer, base_type, name, type, &end);
   *range = range_join(start, end);
 }
 
-static void direct_declarator(Tokenizer *tokenizer, Type *base_type,
+static void direct_declarator(Decl *decl, Tokenizer *tokenizer, Type *base_type,
                               char **name, Type **type, Range *range) {
   Type *placeholder = malloc(sizeof(Type));
   *range = token_peek(tokenizer)->range;
@@ -1345,7 +1402,7 @@ static void direct_declarator(Tokenizer *tokenizer, Type *base_type,
       *range = range_join(*range, token->range);
     } else if (token_consume(tokenizer, '(')) {
       Range mid;
-      declarator(tokenizer, placeholder, name, type, &mid);
+      declarator(decl, tokenizer, placeholder, name, type, &mid);
       Token *token = token_expect(tokenizer, ')');
       *range = range_join(*range, token->range);
     } else {
@@ -1373,9 +1430,9 @@ static void direct_declarator(Tokenizer *tokenizer, Type *base_type,
         // do nothing
       } else {
         while (true) {
-          Type *base_type = type_specifier(tokenizer);
+          Type *base_type = type_specifier(decl, tokenizer);
           Param *param = malloc(sizeof(Param));
-          declarator(tokenizer, base_type, &param->name, &param->type,
+          declarator(decl, tokenizer, base_type, &param->name, &param->type,
                      &param->range);
           vec_push(params, param);
           if (token_peek(tokenizer)->ty == ')') {
@@ -1612,11 +1669,11 @@ static TranslationUnit *translation_unit(Tokenizer *tokenizer) {
   Vector *gvar_list = new_vector();
 
   while (token_peek(tokenizer)->ty != TK_EOF) {
-    Type *base_type = type_specifier(gctxt->tokenizer);
+    Type *base_type = type_specifier(gctxt->decl, gctxt->tokenizer);
     char *name;
     Type *type;
     Range range;
-    declarator(gctxt->tokenizer, base_type, &name, &type, &range);
+    declarator(gctxt->decl, gctxt->tokenizer, base_type, &name, &type, &range);
 
     if (is_func_type(type)) {
       vec_push(func_list, function_definition(gctxt, type, name, range));
