@@ -1279,6 +1279,9 @@ static Expr *constant_expression(ScopeCtxt *sctxt) {
 
 static void declaration(ScopeCtxt *sctxt) {
   Type *base_type = type_specifier(sctxt->decl, sctxt->tokenizer);
+  if (token_consume(sctxt->tokenizer, ';')) {
+    return;
+  }
   char *name;
   Type *type;
   Range range;

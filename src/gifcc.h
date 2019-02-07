@@ -258,7 +258,9 @@ error_raw(const char *dbg_file, int dbg_line, const char *fmt, ...);
 noreturn void error_raw_v(const char *dbg_file, int dbg_line, const char *fmt,
                           va_list ap);
 
-static inline int align(int n, int s) { return ((n + (s - 1)) / s) * s; }
+static inline int align(int n, int s) {
+  return (s != 0) ? ((n + (s - 1)) / s) * s : 0;
+}
 
 Vector *new_vector(void);
 void vec_push(Vector *vec, void *elem);

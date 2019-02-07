@@ -994,6 +994,13 @@ void test26(void) {
   s2.x = 8;
   s2.y = 1;
   check_int(9, s2.x + s2.y);
+
+  struct Bar {
+    int x;
+  };
+  struct Bar u;
+  u.x = 3;
+  check_int(3, u.x);
 }
 
 int main(void) {
