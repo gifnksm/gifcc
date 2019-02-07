@@ -7,7 +7,13 @@
 #include <stdlib.h>
 #include <string.h>
 
+typedef struct DeclItem {
+  Type *type;
+  StackVar *stack_var;
+} DeclItem;
+
 typedef struct Decl {
+  Map *decl;
   Map *struct_tag;
   struct Decl *outer;
 } Decl;
@@ -33,7 +39,6 @@ typedef struct ScopeCtxt {
   FuncCtxt *func;
   struct ScopeCtxt *outer;
   Tokenizer *tokenizer;
-  Map *stack_map;
   Decl *decl;
 } ScopeCtxt;
 
@@ -44,12 +49,10 @@ static ScopeCtxt *new_inner_scope_ctxt(ScopeCtxt *outer);
 static Decl *new_decl(Decl *outer);
 static StackVar *register_stack(ScopeCtxt *sctxt, char *name, Type *type,
                                 Range range);
-static StackVar *get_stack(ScopeCtxt *sctxt, char *name);
-static bool register_global(GlobalCtxt *gctxt, char *name, Type *type,
-                            Range range);
 static bool register_member(Tokenizer *tokenizer, Type *type, char *member_name,
                             Type *member_type, Range range);
-static GlobalVar *get_global(GlobalCtxt *gctxt, char *name);
+static bool register_decl_item(Decl *decl, char *name, Type *type,
+                               StackVar *svar);
 static bool register_struct_decl(Decl *decl, char *tag, Type *type);
 static Type *get_struct_decl(Decl *decl, char *tag);
 static bool is_sametype(Type *ty1, Type *ty2);
@@ -106,7 +109,7 @@ static Stmt *new_stmt_for(Expr *init, Expr *cond, Expr *inc, Stmt *body,
                           Range range);
 static Stmt *new_stmt_goto(char *name, Range range);
 static Stmt *new_stmt_return(Expr *expr, Range range);
-static Stmt *new_stmt_compound(Map *stack_map, Vector *stmts, Range range);
+static Stmt *new_stmt_compound(Vector *stmts, Range range);
 
 // expression
 static Expr *primary_expression(ScopeCtxt *sctxt);
@@ -229,7 +232,6 @@ static ScopeCtxt *new_root_scope_ctxt(FuncCtxt *fctxt) {
   sctxt->func = fctxt;
   sctxt->outer = NULL;
   sctxt->tokenizer = fctxt->tokenizer;
-  sctxt->stack_map = new_map();
   sctxt->decl = new_decl(fctxt->global->decl);
 
   return sctxt;
@@ -242,7 +244,6 @@ static ScopeCtxt *new_inner_scope_ctxt(ScopeCtxt *outer) {
   inner->func = outer->func;
   inner->outer = outer;
   inner->tokenizer = outer->tokenizer;
-  inner->stack_map = new_map();
   inner->decl = new_decl(outer->decl);
 
   return inner;
@@ -250,6 +251,7 @@ static ScopeCtxt *new_inner_scope_ctxt(ScopeCtxt *outer) {
 
 static Decl *new_decl(Decl *outer) {
   Decl *decl = malloc(sizeof(Decl));
+  decl->decl = new_map();
   decl->struct_tag = new_map();
   decl->outer = outer;
   return decl;
@@ -260,9 +262,6 @@ static StackVar *register_stack(ScopeCtxt *sctxt, char *name, Type *type,
   if (type->ty == TY_VOID) {
     scope_error(sctxt, range, "void型の変数は定義できません: %s", name);
   }
-  if (map_get(sctxt->stack_map, name)) {
-    scope_error(sctxt, range, "同じ名前のローカル変数が複数あります: %s", name);
-  }
 
   FuncCtxt *fctxt = sctxt->func;
 
@@ -271,38 +270,13 @@ static StackVar *register_stack(ScopeCtxt *sctxt, char *name, Type *type,
   var->offset = fctxt->stack_size;
   var->type = type;
   var->range = range;
-  map_put(sctxt->stack_map, name, var);
   fctxt->stack_size += get_val_size(type);
 
+  if (!register_decl_item(sctxt->decl, name, type, var)) {
+    scope_error(sctxt, range, "同じ名前のローカル変数が複数あります: %s", name);
+  }
+
   return var;
-}
-
-static StackVar *get_stack(ScopeCtxt *sctxt, char *name) {
-  while (sctxt != NULL) {
-    StackVar *var = map_get(sctxt->stack_map, name);
-    if (var != NULL) {
-      return var;
-    }
-    sctxt = sctxt->outer;
-  }
-  return NULL;
-}
-
-static bool register_global(GlobalCtxt *gctxt, char *name, Type *type,
-                            Range range) {
-  if (type->ty == TY_VOID) {
-    global_error(gctxt, range, "void型の変数は定義できません: %s", name);
-  }
-  if (map_get(gctxt->var_map, name)) {
-    return false;
-  }
-
-  GlobalVar *var = malloc(sizeof(GlobalVar));
-  var->type = type;
-  var->name = name;
-  var->range = range;
-  map_put(gctxt->var_map, name, var);
-  return true;
 }
 
 static bool register_member(Tokenizer *tokenizer, Type *type, char *member_name,
@@ -332,8 +306,27 @@ static bool register_member(Tokenizer *tokenizer, Type *type, char *member_name,
   return true;
 }
 
-static GlobalVar *get_global(GlobalCtxt *gctxt, char *name) {
-  return map_get(gctxt->var_map, name);
+static bool register_decl_item(Decl *decl, char *name, Type *type,
+                               StackVar *svar) {
+  if (map_get(decl->decl, name)) {
+    return false;
+  }
+  DeclItem *item = malloc(sizeof(DeclItem));
+  item->type = type;
+  item->stack_var = svar;
+  map_put(decl->decl, name, item);
+  return true;
+}
+
+static DeclItem *get_decl_item(Decl *decl, char *name) {
+  while (decl != NULL) {
+    DeclItem *item = map_get(decl->decl, name);
+    if (item) {
+      return item;
+    }
+    decl = decl->outer;
+  }
+  return NULL;
 }
 
 static bool register_struct_decl(Decl *decl, char *tag, Type *type) {
@@ -533,26 +526,27 @@ static Expr *new_expr_ident(ScopeCtxt *sctxt, char *name, Range range) {
     }
     return new_expr_str(sctxt, sctxt->func->name, range);
   }
-  StackVar *svar = get_stack(sctxt, name);
-  GlobalVar *gvar = get_global(sctxt->global, name);
-  if (svar != NULL) {
-    ty = EX_STACK_VAR;
-    type = svar->type;
-  } else if (gvar != NULL) {
-    ty = EX_GLOBAL_VAR;
-    type = gvar->type;
+  DeclItem *item = get_decl_item(sctxt->decl, name);
+  StackVar *svar;
+  if (item != NULL) {
+    if (item->stack_var != NULL) {
+      ty = EX_STACK_VAR;
+      type = item->type;
+      svar = item->stack_var;
+    } else {
+      ty = EX_GLOBAL_VAR;
+      type = item->type;
+      svar = NULL;
+    }
   } else {
     // 未知の識別子はint型のグローバル変数として扱う
     ty = EX_GLOBAL_VAR;
     type = new_type(TY_INT);
+    svar = NULL;
   }
   Expr *expr = new_expr(ty, type, range);
   expr->name = name;
-  if (svar != NULL) {
-    expr->stack_var = svar;
-  } else {
-    expr->global_var = gvar;
-  }
+  expr->stack_var = svar;
   return expr;
 }
 
@@ -983,9 +977,8 @@ static Stmt *new_stmt_return(Expr *expr, Range range) {
   return stmt;
 }
 
-static Stmt *new_stmt_compound(Map *stack_map, Vector *stmts, Range range) {
+static Stmt *new_stmt_compound(Vector *stmts, Range range) {
   Stmt *stmt = new_stmt(ST_COMPOUND, range);
-  stmt->stack_map = stack_map;
   stmt->stmts = stmts;
   return stmt;
 }
@@ -1630,14 +1623,14 @@ static Stmt *compound_statement(ScopeCtxt *sctxt) {
     range = range_join(range, s->range);
     vec_push(stmts, s);
   }
-  return new_stmt_compound(sctxt->stack_map, stmts, range);
+  return new_stmt_compound(stmts, range);
 }
 
 static Function *function_definition(GlobalCtxt *gctxt, Type *type, char *name,
                                      Range start) {
   FuncCtxt *fctxt = new_func_ctxt(gctxt, name);
   ScopeCtxt *sctxt = new_root_scope_ctxt(fctxt);
-  if (!register_global(gctxt, name, type, start)) {
+  if (!register_decl_item(gctxt->decl, name, type, NULL)) {
     global_error(gctxt, start,
                  "同じ名前の関数またはグローバル変数が複数回定義されました: %s",
                  name);
@@ -1665,13 +1658,16 @@ static GlobalVar *global_variable(GlobalCtxt *gctxt, Type *type, char *name,
                                   Range start) {
   Token *end = token_expect(gctxt->tokenizer, ';');
   Range range = range_join(start, end->range);
-  if (!register_global(gctxt, name, type, range)) {
-    global_error(gctxt, range,
+  if (!register_decl_item(gctxt->decl, name, type, NULL)) {
+    global_error(gctxt, start,
                  "同じ名前の関数またはグローバル変数が複数回定義されました: %s",
                  name);
   }
-
-  return get_global(gctxt, name);
+  GlobalVar *gvar = malloc(sizeof(GlobalVar));
+  gvar->type = type;
+  gvar->name = name;
+  gvar->range = range;
+  return gvar;
 }
 
 static TranslationUnit *translation_unit(Tokenizer *tokenizer) {

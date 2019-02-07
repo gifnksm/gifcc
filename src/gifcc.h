@@ -188,7 +188,6 @@ typedef struct Expr {
   Vector *argument;
 
   StackVar *stack_var;
-  GlobalVar *global_var;
 
   // EX_CAST: (<val_type>)<expr>
   struct Expr *expr;
@@ -225,8 +224,7 @@ typedef struct Stmt {
   // ST_RETURN: return <expr>:
   struct Expr *expr;
 
-  Map *stack_map; // tyがST_COMPOUNDの場合のみ使う
-  Vector *stmts;  // tyがST_COMPOUNDの場合のみ使う
+  Vector *stmts; // tyがST_COMPOUNDの場合のみ使う
 } Stmt;
 
 typedef struct Member {

@@ -295,15 +295,6 @@ static void dump_stmt(const Reader *reader, Stmt *stmt, int level) {
     dump_range_start(reader, stmt->range);
     dump_indent(level);
     printf("{COMPOUND\n");
-    for (int i = 0; i < stmt->stack_map->keys->len; i++) {
-      const char *name = stmt->stack_map->keys->data[i];
-      const StackVar *svar = stmt->stack_map->vals->data[i];
-      dump_range_start(reader, svar->range);
-      dump_indent(level);
-      printf("STACK ");
-      dump_type(svar->type);
-      printf(" %s (%d)\n", name, svar->offset);
-    }
     for (int i = 0; i < stmt->stmts->len; i++) {
       dump_stmt(reader, stmt->stmts->data[i], level + 1);
     }
