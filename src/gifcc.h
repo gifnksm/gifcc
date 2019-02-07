@@ -53,6 +53,7 @@ enum {
   TK_AND_ASSIGN,    // `&=`
   TK_OR_ASSIGN,     // `|=`
   TK_XOR_ASSIGN,    // `^=`
+  TK_ARROW,         // `->`
   TK_VOID,          // `void`
   TK_INT,           // `int`
   TK_CHAR,          // `char`

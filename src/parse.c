@@ -91,6 +91,8 @@ static Expr *new_expr_index(ScopeCtxt *sctxt, Expr *array, Expr *index,
                             Range range);
 static Expr *new_expr_dot(ScopeCtxt *sctxt, Expr *operand, char *name,
                           Range range);
+static Expr *new_expr_arrow(ScopeCtxt *sctxt, Expr *operand, char *name,
+                            Range range);
 static Stmt *new_stmt(int ty, Range range);
 static Stmt *new_stmt_expr(Expr *expr, Range range);
 static Stmt *new_stmt_if(Expr *cond, Stmt *then_stmt, Stmt *else_stmt,
@@ -871,14 +873,24 @@ static Expr *new_expr_dot(ScopeCtxt *sctxt, Expr *operand, char *name,
   if (operand->val_type->ty != TY_STRUCT) {
     scope_error(sctxt, range, "構造体以外のメンバへのアクセスです");
   }
-  Member *member = operand->val_type->members
-                       ? map_get(operand->val_type->members, name)
+  return new_expr_arrow(sctxt, new_expr_unary(sctxt, '&', operand, range), name,
+                        range);
+}
+
+static Expr *new_expr_arrow(ScopeCtxt *sctxt, Expr *operand, char *name,
+                            Range range) {
+  if (operand->val_type->ty != TY_PTR ||
+      operand->val_type->ptrof->ty != TY_STRUCT) {
+    scope_error(sctxt, range, "構造体以外のメンバへのアクセスです");
+  }
+  Member *member = operand->val_type->ptrof->members
+                       ? map_get(operand->val_type->ptrof->members, name)
                        : NULL;
   if (member == NULL) {
     scope_error(sctxt, range, "存在しないメンバへのアクセスです: %s", name);
   }
   Expr *expr = new_expr('+', new_type_ptr(member->type), range);
-  expr->lhs = new_expr_unary(sctxt, '&', operand, range);
+  expr->lhs = operand;
   expr->rhs = new_expr_num(member->offset, range);
   return new_expr_unary(sctxt, '*', expr, range);
 }
@@ -1010,6 +1022,10 @@ static Expr *postfix_expression(ScopeCtxt *sctxt) {
       Token *member = token_expect(sctxt->tokenizer, TK_IDENT);
       expr = new_expr_dot(sctxt, expr, member->name,
                           range_join(expr->range, member->range));
+    } else if (token_consume(sctxt->tokenizer, TK_ARROW)) {
+      Token *member = token_expect(sctxt->tokenizer, TK_IDENT);
+      expr = new_expr_arrow(sctxt, expr, member->name,
+                            range_join(expr->range, member->range));
     } else if (token_consume(sctxt->tokenizer, '(')) {
       Vector *argument = NULL;
       if (token_peek(sctxt->tokenizer)->ty != ')') {

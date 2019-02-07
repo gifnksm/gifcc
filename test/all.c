@@ -1001,6 +1001,11 @@ void test26(void) {
   struct Bar u;
   u.x = 3;
   check_int(3, u.x);
+
+  struct Foo *q;
+  q = &s;
+  check_int(8, q->x + q->y);
+  check_int(1, &q->x == &s.x);
 }
 
 int main(void) {
