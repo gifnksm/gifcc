@@ -1630,11 +1630,6 @@ static Function *function_definition(GlobalCtxt *gctxt, Type *type, char *name,
                                      Range start) {
   FuncCtxt *fctxt = new_func_ctxt(gctxt, name);
   ScopeCtxt *sctxt = new_root_scope_ctxt(fctxt);
-  if (!register_decl_item(gctxt->decl, name, type, NULL)) {
-    global_error(gctxt, start,
-                 "同じ名前の関数またはグローバル変数が複数回定義されました: %s",
-                 name);
-  }
   for (int i = 0; i < type->func_param->len; i++) {
     Param *param = type->func_param->data[i];
     param->stack_var =
@@ -1657,16 +1652,10 @@ static Function *function_definition(GlobalCtxt *gctxt, Type *type, char *name,
 static GlobalVar *global_variable(GlobalCtxt *gctxt, Type *type, char *name,
                                   Range start) {
   Token *end = token_expect(gctxt->tokenizer, ';');
-  Range range = range_join(start, end->range);
-  if (!register_decl_item(gctxt->decl, name, type, NULL)) {
-    global_error(gctxt, start,
-                 "同じ名前の関数またはグローバル変数が複数回定義されました: %s",
-                 name);
-  }
   GlobalVar *gvar = malloc(sizeof(GlobalVar));
   gvar->type = type;
   gvar->name = name;
-  gvar->range = range;
+  gvar->range = range_join(start, end->range);
   return gvar;
 }
 
@@ -1686,7 +1675,16 @@ static TranslationUnit *translation_unit(Tokenizer *tokenizer) {
     Range range;
     declarator(gctxt->decl, gctxt->tokenizer, base_type, &name, &type, &range);
 
+    if (!register_decl_item(gctxt->decl, name, type, NULL)) {
+      global_error(
+          gctxt, range,
+          "同じ名前の関数またはグローバル変数が複数回定義されました: %s", name);
+    }
+
     if (is_func_type(type)) {
+      if (token_consume(gctxt->tokenizer, ';')) {
+        continue;
+      }
       vec_push(func_list, function_definition(gctxt, type, name, range));
       continue;
     }

@@ -1,3 +1,5 @@
+void abort(void);
+
 int num_check;
 void check_int(int a, int b) {
   if (a != b) {
