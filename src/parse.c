@@ -151,8 +151,7 @@ static Stmt *compound_statement(ScopeCtxt *sctxt);
 // top-level
 static Function *function_definition(GlobalCtxt *gctxt, Type *type, char *name,
                                      Range start);
-static GlobalVar *global_variable(GlobalCtxt *gctxt, Type *type, char *name,
-                                  Range start);
+static GlobalVar *new_global_variable(Type *type, char *name, Range range);
 static TranslationUnit *translation_unit(Tokenizer *tokenizer);
 
 static Stmt null_stmt = {
@@ -1649,13 +1648,11 @@ static Function *function_definition(GlobalCtxt *gctxt, Type *type, char *name,
   return func;
 }
 
-static GlobalVar *global_variable(GlobalCtxt *gctxt, Type *type, char *name,
-                                  Range start) {
-  Token *end = token_expect(gctxt->tokenizer, ';');
+static GlobalVar *new_global_variable(Type *type, char *name, Range range) {
   GlobalVar *gvar = malloc(sizeof(GlobalVar));
   gvar->type = type;
   gvar->name = name;
-  gvar->range = range_join(start, end->range);
+  gvar->range = range;
   return gvar;
 }
 
@@ -1681,15 +1678,28 @@ static TranslationUnit *translation_unit(Tokenizer *tokenizer) {
           "同じ名前の関数またはグローバル変数が複数回定義されました: %s", name);
     }
 
-    if (is_func_type(type)) {
-      if (token_consume(gctxt->tokenizer, ';')) {
-        continue;
-      }
+    if (is_func_type(type) && token_peek(gctxt->tokenizer)->ty == '{') {
       vec_push(func_list, function_definition(gctxt, type, name, range));
       continue;
     }
+    if (!is_func_type(type)) {
+      vec_push(gvar_list, new_global_variable(type, name, range));
+    }
 
-    vec_push(gvar_list, global_variable(gctxt, type, name, range));
+    while (token_consume(gctxt->tokenizer, ',')) {
+      declarator(gctxt->decl, gctxt->tokenizer, base_type, &name, &type,
+                 &range);
+      if (!register_decl_item(gctxt->decl, name, type, NULL)) {
+        global_error(
+            gctxt, range,
+            "同じ名前の関数またはグローバル変数が複数回定義されました: %s",
+            name);
+      }
+      if (!is_func_type(type)) {
+        vec_push(gvar_list, new_global_variable(type, name, range));
+      }
+    }
+    token_expect(gctxt->tokenizer, ';');
   }
 
   TranslationUnit *tunit = malloc(sizeof(TranslationUnit));

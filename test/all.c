@@ -981,7 +981,7 @@ struct Test26 {
 struct Test26 test26_x;
 struct {
   int y;
-} test26_y;
+} test26_y, test26_z;
 void test26(void) {
   struct Foo {
     int x, y;
@@ -1030,7 +1030,8 @@ void test26(void) {
 
   test26_x.z = 5;
   test26_y.y = 100;
-  check_int(105, test26_x.z + test26_y.y);
+  test26_z.y = 200;
+  check_int(305, test26_x.z + test26_y.y + test26_z.y);
 }
 
 int main(void) {
