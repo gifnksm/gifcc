@@ -77,7 +77,11 @@ static void dump_type_inner(Type *ty) {
     break;
   case TY_PTR:
     printf("PTR(");
-    dump_type_inner(ty->ptrof);
+    if (ty->ptrof->ty == TY_STRUCT && ty->ptrof->tag != NULL) {
+      printf("struct %s", ty->ptrof->tag);
+    } else {
+      dump_type_inner(ty->ptrof);
+    }
     printf(")");
     break;
   case TY_ARRAY:

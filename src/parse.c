@@ -47,9 +47,8 @@ static StackVar *register_stack(ScopeCtxt *sctxt, char *name, Type *type,
 static StackVar *get_stack(ScopeCtxt *sctxt, char *name);
 static bool register_global(GlobalCtxt *gctxt, char *name, Type *type,
                             Range range);
-static bool register_member(Tokenizer *tokenizer, Map *members, char *name,
-                            Type *type, Range range, int *offset,
-                            int *alignment);
+static bool register_member(Tokenizer *tokenizer, Type *type, char *member_name,
+                            Type *member_type, Range range);
 static GlobalVar *get_global(GlobalCtxt *gctxt, char *name);
 static bool register_struct_decl(Decl *decl, char *tag, Type *type);
 static Type *get_struct_decl(Decl *decl, char *tag);
@@ -68,7 +67,7 @@ static Type *new_type(int ty);
 static Type *new_type_ptr(Type *base_type);
 static Type *new_type_array(Type *base_type, int len);
 static Type *new_type_func(Type *ret_type, Vector *func_param);
-static Type *new_type_struct(char *tag, Map *members, int size, int alignment);
+static Type *new_type_struct(char *tag);
 static Type *new_type_anon_struct(void);
 static Expr *coerce_array2ptr(ScopeCtxt *sctxt, Expr *expr);
 static Expr *new_expr(int ty, Type *val_type, Range range);
@@ -133,8 +132,7 @@ static Expr *constant_expression(ScopeCtxt *sctxt);
 // declaration
 static void declaration(ScopeCtxt *sctxt);
 static Type *type_specifier(Decl *decl, Tokenizer *tokenizer);
-static void struct_declaration(Decl *decl, Tokenizer *tokenizer, Map *members,
-                               int *size, int *alignment);
+static void struct_declaration(Decl *decl, Tokenizer *tokenizer, Type *type);
 static Type *struct_or_union_specifier(Decl *decl, Tokenizer *tokenizer,
                                        Token *token);
 static Type *type_name(Decl *decl, Tokenizer *tokenizer);
@@ -307,30 +305,30 @@ static bool register_global(GlobalCtxt *gctxt, char *name, Type *type,
   return true;
 }
 
-static bool register_member(Tokenizer *tokenizer, Map *members, char *name,
-                            Type *type, Range range, int *size,
-                            int *alignment) {
-  if (type->ty == TY_VOID) {
+static bool register_member(Tokenizer *tokenizer, Type *type, char *member_name,
+                            Type *member_type, Range range) {
+  assert(type->ty == TY_STRUCT);
+  if (member_type->ty == TY_VOID) {
     reader_error_range(token_get_reader(tokenizer), range,
-                       "void型の構造体メンバーです: %s", name);
+                       "void型の構造体メンバーです: %s", member_name);
   }
-  if (map_get(members, name)) {
+  if (map_get(type->members, member_name)) {
     return false;
   }
 
   Member *member = malloc(sizeof(Member));
-  member->name = name;
-  member->type = type;
+  member->name = member_name;
+  member->type = member_type;
 
-  *size = align(*size, get_val_align(type));
-  member->offset = *size;
-  *size += get_val_size(type);
+  type->member_size = align(type->member_size, get_val_align(member_type));
+  member->offset = type->member_size;
+  type->member_size += get_val_size(member_type);
 
-  if (*alignment < get_val_align(type)) {
-    *alignment = get_val_align(type);
+  if (type->member_align < get_val_align(member_type)) {
+    type->member_align = get_val_align(member_type);
   }
 
-  map_put(members, name, member);
+  map_put(type->members, member_name, member);
   return true;
 }
 
@@ -421,7 +419,10 @@ int get_val_size(Type *ty) {
   case TY_FUNC:
     error("関数型の値サイズを取得しようとしました");
   case TY_STRUCT:
-    return ty->member_size;
+    if (ty->members == NULL) {
+      error("不完全型の値のサイズを取得しようとしました");
+    }
+    return align(ty->member_size, ty->member_align);
   }
   error("不明な型のサイズを取得しようとしました");
 }
@@ -485,14 +486,13 @@ static Type *new_type_func(Type *ret_type, Vector *func_param) {
   return funtype;
 }
 
-static Type *new_type_struct(char *tag, Map *members, int member_size,
-                             int member_align) {
+static Type *new_type_struct(char *tag) {
   Type *type = malloc(sizeof(Type));
   type->ty = TY_STRUCT;
   type->tag = tag;
-  type->members = members;
-  type->member_size = align(member_size, member_align);
-  type->member_align = member_align;
+  type->members = new_map();
+  type->member_size = 0;
+  type->member_align = 0;
   return type;
 }
 
@@ -1326,25 +1326,23 @@ static Type *type_specifier(Decl *decl, Tokenizer *tokenizer) {
   }
 }
 
-static void struct_declaration(Decl *decl, Tokenizer *tokenizer, Map *members,
-                               int *size, int *alignment) {
+static void struct_declaration(Decl *decl, Tokenizer *tokenizer, Type *type) {
+  assert(type->ty == TY_STRUCT);
   Type *base_type = type_specifier(decl, tokenizer);
-  char *name;
-  Type *type;
+  char *member_name;
+  Type *member_type;
   Range range;
-  declarator(decl, tokenizer, base_type, &name, &type, &range);
-  if (!register_member(tokenizer, members, name, type, range, size,
-                       alignment)) {
+  declarator(decl, tokenizer, base_type, &member_name, &member_type, &range);
+  if (!register_member(tokenizer, type, member_name, member_type, range)) {
     reader_error_range(token_get_reader(tokenizer), range,
-                       "同じ名前のメンバ変数が複数あります: %s", name);
+                       "同じ名前のメンバ変数が複数あります: %s", member_name);
   }
 
   while (token_consume(tokenizer, ',')) {
-    declarator(decl, tokenizer, base_type, &name, &type, &range);
-    if (!register_member(tokenizer, members, name, type, range, size,
-                         alignment)) {
+    declarator(decl, tokenizer, base_type, &member_name, &member_type, &range);
+    if (!register_member(tokenizer, type, member_name, member_type, range)) {
       reader_error_range(token_get_reader(tokenizer), range,
-                         "同じ名前のメンバ変数が複数あります: %s", name);
+                         "同じ名前のメンバ変数が複数あります: %s", member_name);
     }
   }
   token_expect(tokenizer, ';');
@@ -1353,27 +1351,22 @@ static void struct_declaration(Decl *decl, Tokenizer *tokenizer, Map *members,
 static Type *struct_or_union_specifier(Decl *decl, Tokenizer *tokenizer,
                                        Token *token) {
   Token *tag = token_consume(tokenizer, TK_IDENT);
-  Map *members = NULL;
   if (tag == NULL && token_peek(tokenizer)->ty != '{') {
     token_error_with(tokenizer, token, "構造体のタグまたは `{` がありません");
   }
 
   if (token_consume(tokenizer, '{')) {
-    members = new_map();
-    int size = 0;
-    int alignment = 0;
-    while (token_peek(tokenizer)->ty != '}') {
-      struct_declaration(decl, tokenizer, members, &size, &alignment);
-    }
-    token_expect(tokenizer, '}');
-    Type *type =
-        new_type_struct(tag ? tag->name : NULL, members, size, alignment);
+    Type *type = new_type_struct(tag ? tag->name : NULL);
     if (tag != NULL) {
       if (!register_struct_decl(decl, tag->name, type)) {
         token_error_with(tokenizer, tag, "同じタグ名の構造体の多重定義です: %s",
                          tag->name);
       }
     }
+    while (token_peek(tokenizer)->ty != '}') {
+      struct_declaration(decl, tokenizer, type);
+    }
+    token_expect(tokenizer, '}');
     return type;
   }
 

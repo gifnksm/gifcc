@@ -1006,6 +1006,14 @@ void test26(void) {
   q = &s;
   check_int(8, q->x + q->y);
   check_int(1, &q->x == &s.x);
+
+  struct P {
+    struct P *x;
+    int v;
+  } p;
+  p.x = &p;
+  p.v = 123;
+  check_int(123, p.x->x->x->x->v);
 }
 
 int main(void) {
