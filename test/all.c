@@ -27,14 +27,12 @@ void test01(void) {
 }
 
 void test02_01(void) {
-  int a, b;
-  a = b = 2;
+  int a = 2, b = 2;
   check_int(4, a + b);
 }
 void test02_02(void) {
-  int a, b;
-  a = 3;
-  b = 5 * 6 - 8;
+  int a = 3;
+  int b = 5 * 6 - 8;
   check_int(14, a + b / 2);
 }
 void test02_03(void) {
@@ -54,15 +52,15 @@ void test02(void) {
 }
 
 void test03_01(void) {
-  int a, b, c;
-  a = 3;
-  b = 5;
+  int c;
+  int a = 3;
+  int b = 5;
   check_int(0, c = a == b);
 }
 void test03_02(void) {
-  int a, b, c;
-  a = 3;
-  b = 5;
+  int c;
+  int a = 3;
+  int b = 5;
   check_int(0, c = a == b);
 }
 void test03_03(void) {
@@ -197,23 +195,15 @@ void test03_04(void) {
   check_int(120, 120);
 }
 void test03_05(void) {
-  int a, c, d;
-  a = 1;
-  c = 2;
-  d = 3;
+  int a = 1, c = 2, d = 3;
   check_int(6, a + c + d);
 }
 void test03_06(void) {
-  int a, ab, abc;
-  a = 1;
-  ab = 2;
-  abc = 3;
+  int a = 1, ab = 2, abc = 3;
   check_int(6, a + ab + abc);
 }
 void test03_07(void) {
-  int _, a_;
-  _ = 123;
-  a_ = 1;
+  int _ = 123, a_ = 1;
   check_int(124, _ + a_);
 }
 void test03(void) {
@@ -229,8 +219,7 @@ void test03(void) {
 }
 
 void test04(void) {
-  int a;
-  a = 0;
+  int a = 0;
   check_int(8, 1 << 2 << 1);
   check_int(2, 1 << 2 >> 1);
   check_int(0, 1 >> 3);
@@ -564,8 +553,7 @@ int test09_01(int n) {
   abort();
 }
 void test09_02(void) {
-  int c, i;
-  c = 0;
+  int c = 0, i;
   for (i = 0; i < 5; i++) {
     switch (i) {
     case 3:
@@ -591,9 +579,7 @@ void test09_02(void) {
   check_int(5, c);
 }
 void test09_03(void) {
-  int i, s;
-  i = 3;
-  s = 0;
+  int i = 3, s = 0;
   goto INIT;
   for (i = 0; i < 5; i++) {
   INIT:

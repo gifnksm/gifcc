@@ -135,7 +135,7 @@ static Expr *expression(LocalCtxt *lcx);
 static Expr *constant_expression(LocalCtxt *lcx);
 
 // declaration
-static void declaration(LocalCtxt *lcx);
+static void declaration(LocalCtxt *lcx, Vector *stmts);
 static Type *type_specifier(Scope *scope, Tokenizer *tokenizer);
 static void struct_declaration(Scope *scope, Tokenizer *tokenizer, Type *type);
 static Type *struct_or_union_specifier(Scope *scope, Tokenizer *tokenizer,
@@ -1327,7 +1327,7 @@ static Expr *constant_expression(LocalCtxt *lcx) {
   return conditional_expression(lcx);
 }
 
-static void declaration(LocalCtxt *lcx) {
+static void declaration(LocalCtxt *lcx, Vector *stmts) {
   bool is_typedef = token_consume(lcx->tokenizer, TK_TYPEDEF);
   Type *base_type = type_specifier(lcx->scope, lcx->tokenizer);
   if (token_consume(lcx->tokenizer, ';')) {
@@ -1342,12 +1342,28 @@ static void declaration(LocalCtxt *lcx) {
   } else {
     (void)register_stack(lcx, name, type, range);
   }
+  if (token_consume(lcx->tokenizer, '=')) {
+    Expr *rval = assignment_expression(lcx);
+    Expr *ident = new_expr_ident(lcx, name, range);
+    Expr *expr =
+        new_expr_binop(lcx, '=', ident, rval, range_join(range, rval->range));
+    Stmt *s = new_stmt_expr(expr, expr->range);
+    vec_push(stmts, s);
+  }
   while (token_consume(lcx->tokenizer, ',')) {
     declarator(lcx->scope, lcx->tokenizer, base_type, &name, &type, &range);
     if (is_typedef) {
       register_typedef(lcx->scope, name, type);
     } else {
       (void)register_stack(lcx, name, type, range);
+    }
+    if (token_consume(lcx->tokenizer, '=')) {
+      Expr *rval = assignment_expression(lcx);
+      Expr *ident = new_expr_ident(lcx, name, range);
+      Expr *expr =
+          new_expr_binop(lcx, '=', ident, rval, range_join(range, rval->range));
+      Stmt *s = new_stmt_expr(expr, expr->range);
+      vec_push(stmts, s);
     }
   }
   token_expect(lcx->tokenizer, ';');
@@ -1673,7 +1689,7 @@ static Stmt *compound_statement(LocalCtxt *lcx) {
   while (!token_consume(lcx->tokenizer, '}')) {
     Token *token = token_peek(lcx->tokenizer);
     if (token_is_typename(lcx->scope, token) || token->ty == TK_TYPEDEF) {
-      declaration(lcx);
+      declaration(lcx, stmts);
       continue;
     }
     Stmt *s = statement(lcx);
