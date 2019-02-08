@@ -70,6 +70,7 @@ enum {
   TK_CONTINUE,      // `continue`
   TK_RETURN,        // `return`
   TK_STRUCT,        // `struct`
+  TK_UNION,         // `union`
   TK_TYPEDEF,       // `typedef`
   TK_SIZEOF,        // `sizeof`
   TK_EOF,           // 入力の終わりを表すトークン
@@ -135,6 +136,7 @@ typedef enum {
   TY_ARRAY,
   TY_FUNC,
   TY_STRUCT,
+  TY_UNION,
 } type_t;
 
 typedef struct Type {

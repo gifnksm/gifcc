@@ -79,6 +79,8 @@ static void dump_type_inner(Type *ty) {
     printf("PTR(");
     if (ty->ptrof->ty == TY_STRUCT && ty->ptrof->tag != NULL) {
       printf("struct %s", ty->ptrof->tag);
+    } else if (ty->ptrof->ty == TY_UNION && ty->ptrof->tag != NULL) {
+      printf("union %s", ty->ptrof->tag);
     } else {
       dump_type_inner(ty->ptrof);
     }
@@ -105,6 +107,19 @@ static void dump_type_inner(Type *ty) {
     break;
   case TY_STRUCT:
     printf("STRUCT %s", ty->tag);
+    printf("(");
+    for (int i = 0; i < ty->members->keys->len; i++) {
+      if (i > 0) {
+        printf(", ");
+      }
+      Member *member = ty->members->vals->data[i];
+      dump_type_inner(member->type);
+      printf(" %s", member->name);
+    }
+    printf(")");
+    break;
+  case TY_UNION:
+    printf("UNION %s", ty->tag);
     printf("(");
     for (int i = 0; i < ty->members->keys->len; i++) {
       if (i > 0) {

@@ -1075,6 +1075,21 @@ void test29(void) {
   test_ok(__func__);
 }
 
+void test30(void) {
+  union {
+    int a;
+    int b;
+  } u;
+
+  u.a = 1;
+  check_int(1, u.a);
+
+  u.b = 2;
+
+  check_int(2, u.a);
+  check_int(2, u.b);
+}
+
 int main(void) {
   num_check = 0;
   test01();
