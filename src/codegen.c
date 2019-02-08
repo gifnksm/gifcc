@@ -95,7 +95,7 @@ static void gen_lval(const Reader *reader, Expr *expr) {
     return;
   }
 
-  expr_error(reader, expr, "左辺値が変数ではありません");
+  range_error(expr->range, "左辺値が変数ではありません");
 }
 
 static void gen_expr(const Reader *reader, Expr *expr) {
@@ -139,9 +139,9 @@ static void gen_expr(const Reader *reader, Expr *expr) {
     } else if (expr->callee->ty == EX_GLOBAL_VAR) {
       call_direct = true;
     } else {
-      expr_error(reader, expr->callee,
-                 "関数または関数ポインタ以外を呼び出そうとしました: %d",
-                 expr->callee->val_type->ty);
+      range_error(expr->callee->range,
+                  "関数または関数ポインタ以外を呼び出そうとしました: %d",
+                  expr->callee->val_type->ty);
     }
     if (arg && arg->len > 0) {
       // 引数をスタックに積む
@@ -574,22 +574,22 @@ static void gen_stmt(const Reader *reader, Stmt *stmt) {
   case ST_GOTO: {
     char *label = get_label(func_ctxt, stmt->name);
     if (label == NULL) {
-      stmt_error(reader, stmt, "未知のラベルへのgotoです: %s", stmt->name);
+      range_error(stmt->range, "未知のラベルへのgotoです: %s", stmt->name);
     }
     printf("  jmp %s\n", label);
     return;
   }
   case ST_BREAK: {
     if (break_labels->len <= 0) {
-      stmt_error(reader, stmt,
-                 "ループでもswitch文中でもない箇所にbreakがあります");
+      range_error(stmt->range,
+                  "ループでもswitch文中でもない箇所にbreakがあります");
     }
     printf("  jmp %s\n", (char *)break_labels->data[break_labels->len - 1]);
     return;
   }
   case ST_CONTINUE: {
     if (continue_labels->len <= 0) {
-      stmt_error(reader, stmt, "ループ中でない箇所にcontinueがあります");
+      range_error(stmt->range, "ループ中でない箇所にcontinueがあります");
     }
     printf("  jmp %s\n",
            (char *)continue_labels->data[continue_labels->len - 1]);

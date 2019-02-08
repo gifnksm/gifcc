@@ -76,7 +76,11 @@ enum {
   TK_EOF,           // 入力の終わりを表すトークン
 };
 
+typedef struct Reader Reader;
+typedef struct Tokenizer Tokenizer;
+
 typedef struct {
+  const Reader *reader;
   int start;
   int len;
 } Range;
@@ -252,9 +256,6 @@ typedef struct TranslationUnit {
   Vector *str_list;
 } TranslationUnit;
 
-typedef struct Reader Reader;
-typedef struct Tokenizer Tokenizer;
-
 #define error(fmt, ...) error_raw(__FILE__, __LINE__, (fmt), ##__VA_ARGS__)
 noreturn __attribute__((format(printf, 3, 4))) void
 error_raw(const char *dbg_file, int dbg_line, const char *fmt, ...);
@@ -299,18 +300,18 @@ char *reader_get_line(const Reader *reader, int line);
 #define reader_error_offset(reader, offset, fmt, ...)                          \
   reader_error_offset_raw((reader), (offset), __FILE__, __LINE__, (fmt),       \
                           ##__VA_ARGS__)
-#define reader_error_range(reader, range, fmt, ...)                            \
-  reader_error_range_raw((reader), (range), __FILE__, __LINE__, (fmt),         \
-                         ##__VA_ARGS__)
 noreturn __attribute__((format(printf, 5, 6))) void
 reader_error_offset_raw(const Reader *reader, int offset, const char *dbg_file,
                         int dbg_line, const char *fmt, ...);
-noreturn __attribute__((format(printf, 5, 6))) void
-reader_error_range_raw(const Reader *reader, Range range, const char *dbg_file,
-                       int dbg_line, const char *fmt, ...);
-noreturn void reader_error_range_raw_v(const Reader *reader, Range range,
-                                       const char *dbg_file, int dbg_line,
-                                       const char *fmt, va_list ap);
+
+#define range_error(range, fmt, ...)                                           \
+  range_error_raw((range), __FILE__, __LINE__, (fmt), ##__VA_ARGS__)
+noreturn __attribute__((format(printf, 4, 5))) void
+range_error_raw(Range range, const char *dbg_file, int dbg_line,
+                const char *fmt, ...);
+noreturn void range_error_raw_v(Range range, const char *dbg_file, int dbg_line,
+                                const char *fmt, va_list ap);
+
 Tokenizer *new_tokenizer(Reader *reader);
 void token_succ(Tokenizer *tokenizer);
 Token *token_peek(Tokenizer *tokenizer);
@@ -320,29 +321,11 @@ Token *token_consume(Tokenizer *tokenizer, int ty);
 Token *token_consume2(Tokenizer *tokenizer, int ty1, int ty2);
 Token *token_expect(Tokenizer *tokenizer, int ty);
 const char *token_kind_to_str(int kind);
-#define token_error(tokenizer, fmt, ...)                                       \
-  token_error_with_raw(tokenizer, token_peek(tokenizer), __FILE__, __LINE__,   \
-                       fmt, ##__VA_ARGS__)
-#define token_error_with(tokenizer, token, fmt, ...)                           \
-  token_error_with_raw(tokenizer, token, __FILE__, __LINE__, fmt, ##__VA_ARGS__)
-noreturn __attribute__((format(printf, 5, 6))) void
-token_error_with_raw(const Tokenizer *tokenizer, Token *token,
-                     const char *dbg_file, int dbg_line, char *fmt, ...);
 const Reader *token_get_reader(const Tokenizer *tokenizer);
 
 int get_val_size(Type *ty);
 int get_val_align(Type *ty);
 TranslationUnit *parse(Reader *reader);
-#define expr_error(reader, expr, fmt, ...)                                     \
-  expr_error_raw((reader), (expr), __FILE__, __LINE__, fmt, ##__VA_ARGS__)
-noreturn void expr_error_raw(const Reader *reader, const Expr *expr,
-                             const char *dbg_file, int dbg_line, char *fmt,
-                             ...);
-#define stmt_error(reader, stmt, fmt, ...)                                     \
-  stmt_error_raw((reader), (stmt), __FILE__, __LINE__, fmt, ##__VA_ARGS__)
-noreturn void stmt_error_raw(const Reader *reader, const Stmt *stmt,
-                             const char *dbg_file, int dbg_line, char *fmt,
-                             ...);
 
 char *make_label(void);
 void gen(const Reader *reader, TranslationUnit *tunit);
@@ -350,11 +333,12 @@ void gen(const Reader *reader, TranslationUnit *tunit);
 static inline Range range_join(Range a, Range b) {
   assert(a.start >= 0);
   assert(b.start >= 0);
+  assert(a.reader == b.reader);
   int aend = a.start + a.len;
   int bend = b.start + b.len;
   int start = a.start < b.start ? a.start : b.start;
   int end = aend > bend ? aend : bend;
-  return (Range){.start = start, .len = (end - start)};
+  return (Range){.reader = a.reader, .start = start, .len = (end - start)};
 }
 
 static inline char *get_label(Function *func, char *name) {

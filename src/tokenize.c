@@ -104,7 +104,7 @@ Token *token_consume2(Tokenizer *tokenizer, int ty1, int ty2) {
 Token *token_expect(Tokenizer *tokenizer, int ty) {
   Token *token = token_pop(tokenizer);
   if (token->ty != ty) {
-    token_error_with(tokenizer, token, "%sがありません", token_kind_to_str(ty));
+    range_error(token->range, "%sがありません", token_kind_to_str(ty));
   }
   return token;
 }
@@ -148,15 +148,6 @@ const char *token_kind_to_str(int kind) {
     abort();
   }
   }
-}
-
-noreturn __attribute__((format(printf, 5, 6))) void
-token_error_with_raw(const Tokenizer *tokenizer, Token *token,
-                     const char *dbg_file, int dbg_line, char *fmt, ...) {
-  va_list ap;
-  va_start(ap, fmt);
-  reader_error_range_raw_v(tokenizer->reader, token->range, dbg_file, dbg_line,
-                           fmt, ap);
 }
 
 const Reader *token_get_reader(const Tokenizer *tokenizer) {
@@ -236,6 +227,7 @@ static Token *read_token(Reader *reader, bool *read_eof) {
     }
 
     int end = reader_get_offset(reader);
+    token->range.reader = reader;
     token->range.start = start;
     token->range.len = end - start;
     return token;
@@ -244,6 +236,7 @@ static Token *read_token(Reader *reader, bool *read_eof) {
   if (!*read_eof) {
     *read_eof = true;
     Token *token = new_token(TK_EOF);
+    token->range.reader = reader;
     token->range.start = reader_get_offset(reader);
     token->range.len = 0;
     return token;

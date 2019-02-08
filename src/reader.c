@@ -111,7 +111,8 @@ char *reader_get_line(const Reader *reader, int line) {
   assert(1 <= line && line < reader->line_offset->len);
   int start = reader->line_offset->data[line - 1];
   int end = reader->line_offset->data[line];
-  return reader_get_source(reader, (Range){.start = start, .len = end - start});
+  return reader_get_source(
+      reader, (Range){.reader = reader, .start = start, .len = end - start});
 }
 
 noreturn __attribute__((format(printf, 5, 6))) void
@@ -119,33 +120,32 @@ reader_error_offset_raw(const Reader *reader, int offset, const char *dbg_file,
                         int dbg_line, const char *fmt, ...) {
   va_list ap;
   va_start(ap, fmt);
-  reader_error_range_raw_v(reader, (Range){.start = offset, .len = 1}, dbg_file,
-                           dbg_line, fmt, ap);
+  range_error_raw_v((Range){.reader = reader, .start = offset, .len = 1},
+                    dbg_file, dbg_line, fmt, ap);
 }
 
-noreturn __attribute__((format(printf, 5, 6))) void
-reader_error_range_raw(const Reader *reader, Range range, const char *dbg_file,
-                       int dbg_line, const char *fmt, ...) {
+noreturn __attribute__((format(printf, 4, 5))) void
+range_error_raw(Range range, const char *dbg_file, int dbg_line,
+                const char *fmt, ...) {
   va_list ap;
   va_start(ap, fmt);
-  reader_error_range_raw_v(reader, range, dbg_file, dbg_line, fmt, ap);
+  range_error_raw_v(range, dbg_file, dbg_line, fmt, ap);
 }
 
-noreturn void reader_error_range_raw_v(const Reader *reader, Range range,
-                                       const char *dbg_file, int dbg_line,
-                                       const char *fmt, va_list ap) {
+noreturn void range_error_raw_v(Range range, const char *dbg_file, int dbg_line,
+                                const char *fmt, va_list ap) {
   int start_line, start_column;
-  reader_get_position(reader, range.start, &start_line, &start_column);
+  reader_get_position(range.reader, range.start, &start_line, &start_column);
   int end_line, end_column;
-  reader_get_position(reader, range.start + range.len - 1, &end_line,
+  reader_get_position(range.reader, range.start + range.len - 1, &end_line,
                       &end_column);
-  fprintf(stderr, "%s:%d:%d: error: ", reader_get_filename(reader), start_line,
-          start_column);
+  fprintf(stderr, "%s:%d:%d: error: ", reader_get_filename(range.reader),
+          start_line, start_column);
   vfprintf(stderr, fmt, ap);
   fprintf(stderr, " (DEBUG:%s:%d)\n", dbg_file, dbg_line);
 
   for (int line = start_line; line <= end_line; line++) {
-    char *line_str = reader_get_line(reader, line);
+    char *line_str = reader_get_line(range.reader, line);
     int line_len = strlen(line_str);
     int sc = (line == start_line) ? start_column - 1 : 0;
     int ec = (line == end_line) ? end_column - 1 : line_len;
