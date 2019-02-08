@@ -146,7 +146,8 @@ static Stmt *compound_statement(Tokenizer *tokenizer, Scope *scope);
 // top-level
 static Function *function_definition(Tokenizer *tokenizer, Scope *global_scope,
                                      Type *type, char *name, Range start);
-static GlobalVar *new_global_variable(Type *type, char *name, Range range);
+static GlobalVar *new_global_variable(Type *type, char *name, Range range,
+                                      Expr *init);
 static TranslationUnit *translation_unit(Tokenizer *tokenizer);
 
 static Stmt null_stmt = {
@@ -1609,11 +1610,13 @@ static Function *function_definition(Tokenizer *tokenizer, Scope *global_scope,
   return func;
 }
 
-static GlobalVar *new_global_variable(Type *type, char *name, Range range) {
+static GlobalVar *new_global_variable(Type *type, char *name, Range range,
+                                      Expr *init) {
   GlobalVar *gvar = malloc(sizeof(GlobalVar));
   gvar->type = type;
   gvar->name = name;
   gvar->range = range;
+  gvar->init = init;
   return gvar;
 }
 
@@ -1646,7 +1649,11 @@ static TranslationUnit *translation_unit(Tokenizer *tokenizer) {
       register_typedef(scope, name, type);
     } else {
       if (!is_func_type(type)) {
-        vec_push(gvar_list, new_global_variable(type, name, range));
+        Expr *init = NULL;
+        if (token_consume(tokenizer, '=')) {
+          init = assignment_expression(tokenizer, scope);
+        }
+        vec_push(gvar_list, new_global_variable(type, name, range, init));
       }
     }
 
@@ -1658,7 +1665,11 @@ static TranslationUnit *translation_unit(Tokenizer *tokenizer) {
         register_typedef(scope, name, type);
       } else {
         if (!is_func_type(type)) {
-          vec_push(gvar_list, new_global_variable(type, name, range));
+          Expr *init = NULL;
+          if (token_consume(tokenizer, '=')) {
+            init = assignment_expression(tokenizer, scope);
+          }
+          vec_push(gvar_list, new_global_variable(type, name, range, init));
         }
       }
     }

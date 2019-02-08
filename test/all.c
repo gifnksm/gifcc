@@ -1,6 +1,6 @@
 void abort(void);
 
-int num_check;
+int num_check = 0;
 void check_int(int a, int b) {
   if (a != b) {
     printf("FAILED %d != %d\n", a, b);
@@ -1074,10 +1074,17 @@ void test30(void) {
 
   check_int(2, u.a);
   check_int(2, u.b);
+
+  test_ok(__func__);
+}
+
+int test31_x = 3;
+void test31(void) {
+  check_int(3, test31_x);
+  test_ok(__func__);
 }
 
 int main(void) {
-  num_check = 0;
   test01();
   test02();
   test03();
@@ -1106,6 +1113,8 @@ int main(void) {
   test27();
   test28();
   test29();
+  test30();
+  test31();
 
   return 0;
 }

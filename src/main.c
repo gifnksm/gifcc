@@ -462,7 +462,15 @@ static void output_ast(const Reader *reader, TranslationUnit *tunit) {
     dump_indent(level);
     printf("GLOBAL ");
     dump_type(gvar->type);
-    printf(" %s\n", gvar->name);
+    if (gvar->init != NULL) {
+      printf(" %s = {\n", gvar->name);
+      dump_expr(reader, gvar->init, level + 1);
+      dump_range_end(reader, gvar->range);
+      dump_indent(level);
+      printf("}\n");
+    } else {
+      printf(" %s\n", gvar->name);
+    }
   }
 }
 

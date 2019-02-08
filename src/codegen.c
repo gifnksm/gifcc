@@ -668,9 +668,23 @@ static void gen_func(const Reader *reader, Function *func) {
 }
 
 static void gen_gvar(GlobalVar *gvar) {
-  printf(".global %s\n", gvar->name);
-  printf("%s:\n", gvar->name);
-  printf("  .zero %d\n", get_val_size(gvar->type));
+  if (gvar->init == NULL) {
+    printf("  .bss\n");
+    printf(".global %s\n", gvar->name);
+    printf("%s:\n", gvar->name);
+    printf("  .zero %d\n", get_val_size(gvar->type));
+  } else {
+    printf("  .data\n");
+    printf(".global %s\n", gvar->name);
+    printf("%s:\n", gvar->name);
+    if (gvar->init->ty != EX_NUM) {
+      range_error(gvar->range, "数値ではありません");
+    }
+    if (gvar->init->val_type->ty != TY_INT) {
+      range_error(gvar->range, "int型ではありません");
+    }
+    printf("  .long %d\n", gvar->init->val);
+  }
 }
 
 static void gen_str(StringLiteral *str) {
@@ -687,7 +701,6 @@ void gen(const Reader *reader, TranslationUnit *tunit) {
   for (int i = 0; i < tunit->func_list->len; i++) {
     gen_func(reader, tunit->func_list->data[i]);
   }
-  printf("  .bss\n");
   for (int i = 0; i < tunit->gvar_list->len; i++) {
     gen_gvar(tunit->gvar_list->data[i]);
   }

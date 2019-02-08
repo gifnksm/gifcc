@@ -161,10 +161,12 @@ typedef struct StackVar {
   Range range;
 } StackVar;
 
+typedef struct Expr Expr;
 typedef struct GlobalVar {
   char *name;
   Type *type;
   Range range;
+  Expr *init;
 } GlobalVar;
 
 typedef struct Param {
