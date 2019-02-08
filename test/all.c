@@ -1085,11 +1085,15 @@ void test31(void) {
 }
 
 long test32_x = 8;
+long *test32_p = &test32_x;
 void test32(void) {
   long x = 3;
   int y = 3;
 
   check_int(8, test32_x);
+  *test32_p = 1;
+  check_int(1, test32_x);
+
   check_int(8, sizeof(x));
   check_int(8, sizeof(x + y));
   check_int(8, sizeof(y + x));

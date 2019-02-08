@@ -668,7 +668,8 @@ static void gen_func(const Reader *reader, Function *func) {
 }
 
 static void gen_gvar(GlobalVar *gvar) {
-  if (gvar->init == NULL) {
+  Expr *init = gvar->init;
+  if (init == NULL) {
     printf("  .bss\n");
     printf(".global %s\n", gvar->name);
     printf("%s:\n", gvar->name);
@@ -677,15 +678,21 @@ static void gen_gvar(GlobalVar *gvar) {
     printf("  .data\n");
     printf(".global %s\n", gvar->name);
     printf("%s:\n", gvar->name);
-    if (gvar->init->ty != EX_NUM) {
-      range_error(gvar->range, "数値ではありません");
-    }
-    if (gvar->init->val_type->ty == TY_INT) {
-      printf("  .long %d\n", gvar->init->val);
-    } else if (gvar->init->val_type->ty == TY_LONG) {
-      printf("  .quad %d\n", gvar->init->val);
+    if (init->ty == EX_NUM) {
+      if (init->val_type->ty == TY_INT) {
+        printf("  .long %d\n", init->val);
+      } else if (init->val_type->ty == TY_LONG) {
+        printf("  .quad %d\n", init->val);
+      } else {
+        range_error(gvar->range, "int型ではありません");
+      }
+    } else if (init->ty == '&' && init->lhs == NULL && init->rhs != NULL) {
+      if (init->rhs->ty != EX_GLOBAL_VAR) {
+        range_error(gvar->range, "グローバル変数以外へのポインタです");
+      }
+      printf("  .quad %s\n", init->rhs->name);
     } else {
-      range_error(gvar->range, "int型ではありません");
+      range_error(gvar->range, "数値でもポインタでもありません");
     }
   }
 }
