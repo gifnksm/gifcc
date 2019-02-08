@@ -1269,8 +1269,13 @@ static Type *type_specifier(Scope *scope, Tokenizer *tokenizer) {
   case TK_STRUCT:
   case TK_UNION:
     return struct_or_union_specifier(scope, tokenizer, token);
-  case TK_IDENT:
-    return get_typedef(scope, token->name);
+  case TK_IDENT: {
+    Type *type = get_typedef(scope, token->name);
+    if (type != NULL) {
+      return type;
+    }
+  }
+    // fallthrough
   default:
     range_error(token->range, "型名がありません");
   }
