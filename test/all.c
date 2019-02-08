@@ -1097,6 +1097,8 @@ void test32(void) {
   check_int(8, sizeof(x));
   check_int(8, sizeof(x + y));
   check_int(8, sizeof(y + x));
+
+  test_ok(__func__);
 }
 
 void test33(void) {
@@ -1120,6 +1122,8 @@ void test33(void) {
 
   p.x = 3;
   check_int(3, p.x);
+
+  test_ok(__func__);
 }
 
 int main(void) {
