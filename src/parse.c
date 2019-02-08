@@ -1115,6 +1115,21 @@ static Expr *unary_expression(LocalCtxt *lcx) {
     expr->val = val;
     return expr;
   }
+
+  if ((token = token_consume(lcx->tokenizer, TK_SIZEOF)) != NULL) {
+    if (token_peek(lcx->tokenizer)->ty != '(' ||
+        !token_is_typename(lcx->scope, token_peek_ahead(lcx->tokenizer, 1))) {
+      Expr *expr = unary_expression(lcx);
+      return new_expr_num(get_val_size(expr->val_type),
+                          range_join(token->range, expr->range));
+    } else {
+      token_expect(lcx->tokenizer, '(');
+      Type *type = type_name(lcx->scope, lcx->tokenizer);
+      Token *end = token_expect(lcx->tokenizer, ')');
+      return new_expr_num(get_val_size(type),
+                          range_join(token->range, end->range));
+    }
+  }
   return postfix_expression(lcx);
 }
 

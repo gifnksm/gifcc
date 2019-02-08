@@ -24,7 +24,8 @@ static const LongToken LONG_IDENT_TOKENS[] = {
     {"case", TK_CASE},     {"default", TK_DEFAULT},   {"while", TK_WHILE},
     {"do", TK_DO},         {"for", TK_FOR},           {"goto", TK_GOTO},
     {"break", TK_BREAK},   {"continue", TK_CONTINUE}, {"return", TK_RETURN},
-    {"struct", TK_STRUCT}, {"typedef", TK_TYPEDEF},   {NULL, '\0'},
+    {"struct", TK_STRUCT}, {"typedef", TK_TYPEDEF},   {"sizeof", TK_SIZEOF},
+    {NULL, '\0'},
 };
 static const LongToken LONG_PUNCT_TOKENS[] = {
     {"==", TK_EQEQ},       {"!=", TK_NOTEQ},      {"<<=", TK_LSHIFT_ASSIGN},

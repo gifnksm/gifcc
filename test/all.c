@@ -1060,6 +1060,21 @@ void test28(void) {
   test_ok(__func__);
 }
 
+void test29(void) {
+  int a[7];
+  struct Foo {
+    int a[9];
+  };
+
+  check_int(4, sizeof(int));
+  check_int(4, sizeof 3);
+  check_int(4, sizeof(3 + 5));
+  check_int(28, sizeof a);
+  check_int(36, sizeof(struct Foo));
+
+  test_ok(__func__);
+}
+
 int main(void) {
   num_check = 0;
   test01();
@@ -1088,6 +1103,8 @@ int main(void) {
   test25();
   test26();
   test27();
+  test28();
+  test29();
 
   return 0;
 }
