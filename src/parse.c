@@ -40,9 +40,10 @@ static Scope *new_scope(GlobalCtxt *gcx, FuncCtxt *fcx, Scope *outer);
 static Scope *new_global_scope(GlobalCtxt *gcx);
 static Scope *new_func_scope(Scope *global, FuncCtxt *fcx);
 static Scope *new_inner_scope(Scope *outer);
+static Member *new_member(char *name, Type *type, int offset, Range range);
 static StackVar *register_stack(Scope *scope, char *name, Type *type,
                                 Range range);
-static bool register_member(Type *type, char *member_name, Type *member_type,
+static void register_member(Type *type, char *member_name, Type *member_type,
                             Range range);
 static bool register_decl(Scope *scope, char *name, Type *type, StackVar *svar);
 static Decl *get_decl(Scope *scope, char *name);
@@ -202,6 +203,17 @@ static Scope *new_inner_scope(Scope *outer) {
   return new_scope(outer->global_ctxt, outer->func_ctxt, outer);
 }
 
+static Member *new_member(char *name, Type *type, int offset, Range range) {
+  if (type->ty == TY_VOID) {
+    range_error(range, "void型のメンバーです: %s", name);
+  }
+  Member *member = malloc(sizeof(Member));
+  member->name = name;
+  member->type = type;
+  member->offset = offset;
+  return member;
+}
+
 static StackVar *register_stack(Scope *scope, char *name, Type *type,
                                 Range range) {
   if (type->ty == TY_VOID) {
@@ -224,38 +236,47 @@ static StackVar *register_stack(Scope *scope, char *name, Type *type,
   return var;
 }
 
-static bool register_member(Type *type, char *member_name, Type *member_type,
+static void register_member(Type *type, char *member_name, Type *member_type,
                             Range range) {
   assert(type->ty == TY_STRUCT || type->ty == TY_UNION);
 
-  if (member_type->ty == TY_VOID) {
-    range_error(range, "void型のメンバーです: %s", member_name);
-  }
-  if (map_get(type->members, member_name)) {
-    return false;
-  }
-
-  Member *member = malloc(sizeof(Member));
-  member->name = member_name;
-  member->type = member_type;
-
+  int offset;
   if (type->ty == TY_STRUCT) {
     type->member_size = align(type->member_size, get_val_align(member_type));
-    member->offset = type->member_size;
+    offset = type->member_size;
     type->member_size += get_val_size(member_type);
   } else {
     if (get_val_size(member_type) > type->member_size) {
       type->member_size = get_val_size(member_type);
     }
-    member->offset = 0;
+    offset = 0;
   }
 
   if (type->member_align < get_val_align(member_type)) {
     type->member_align = get_val_align(member_type);
   }
 
-  map_put(type->members, member_name, member);
-  return true;
+  if (member_name == NULL) {
+    assert(member_type->ty == TY_STRUCT || member_type->ty == TY_UNION);
+    Map *inner_members = member_type->members;
+    for (int i = 0; i < inner_members->keys->len; i++) {
+      Member *inner = inner_members->vals->data[i];
+      Member *member =
+          new_member(inner->name, inner->type, offset + inner->offset, range);
+      if (map_get(type->members, member->name)) {
+        range_error(range, "同じ名前のメンバ変数が複数あります: %s",
+                    member->name);
+      }
+      map_put(type->members, member->name, member);
+    }
+  } else {
+    Member *member = new_member(member_name, member_type, offset, range);
+    if (map_get(type->members, member->name)) {
+      range_error(range, "同じ名前のメンバ変数が複数あります: %s",
+                  member->name);
+    }
+    map_put(type->members, member->name, member);
+  }
 }
 
 static bool register_decl(Scope *scope, char *name, Type *type,
@@ -1307,15 +1328,11 @@ static void struct_declaration(Scope *scope, Tokenizer *tokenizer, Type *type) {
   Type *member_type;
   Range range;
   declarator(scope, tokenizer, base_type, &member_name, &member_type, &range);
-  if (!register_member(type, member_name, member_type, range)) {
-    range_error(range, "同じ名前のメンバ変数が複数あります: %s", member_name);
-  }
+  register_member(type, member_name, member_type, range);
 
   while (token_consume(tokenizer, ',')) {
     declarator(scope, tokenizer, base_type, &member_name, &member_type, &range);
-    if (!register_member(type, member_name, member_type, range)) {
-      range_error(range, "同じ名前のメンバ変数が複数あります: %s", member_name);
-    }
+    register_member(type, member_name, member_type, range);
   }
   token_expect(tokenizer, ';');
 }

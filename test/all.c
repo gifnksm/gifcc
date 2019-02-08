@@ -1099,6 +1099,29 @@ void test32(void) {
   check_int(8, sizeof(y + x));
 }
 
+void test33(void) {
+  struct {
+    struct {
+      int a;
+      int b;
+    };
+  } s;
+  s.a = 4;
+  s.b = 8;
+  check_int(12, s.a + s.b);
+
+  struct {
+    union {
+      struct {
+        int x;
+      };
+    };
+  } p;
+
+  p.x = 3;
+  check_int(3, p.x);
+}
+
 int main(void) {
   test01();
   test02();
@@ -1131,6 +1154,7 @@ int main(void) {
   test30();
   test31();
   test32();
+  test33();
 
   return 0;
 }
