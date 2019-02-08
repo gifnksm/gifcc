@@ -56,6 +56,7 @@ enum {
   TK_ARROW,         // `->`
   TK_VOID,          // `void`
   TK_INT,           // `int`
+  TK_LONG,          // `long`
   TK_CHAR,          // `char`
   TK_IF,            // `if`
   TK_ELSE,          // `else`
@@ -135,6 +136,7 @@ typedef enum {
 typedef enum {
   TY_VOID,
   TY_INT,
+  TY_LONG,
   TY_CHAR,
   TY_PTR,
   TY_ARRAY,

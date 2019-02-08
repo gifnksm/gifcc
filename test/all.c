@@ -1084,6 +1084,17 @@ void test31(void) {
   test_ok(__func__);
 }
 
+long test32_x = 8;
+void test32(void) {
+  long x = 3;
+  int y = 3;
+
+  check_int(8, test32_x);
+  check_int(8, sizeof(x));
+  check_int(8, sizeof(x + y));
+  check_int(8, sizeof(y + x));
+}
+
 int main(void) {
   test01();
   test02();
@@ -1115,6 +1126,7 @@ int main(void) {
   test29();
   test30();
   test31();
+  test32();
 
   return 0;
 }

@@ -68,13 +68,16 @@ static void dump_type_inner(Type *ty) {
   switch (ty->ty) {
   case TY_VOID:
     printf("void");
-    break;
+    return;
   case TY_INT:
     printf("int");
-    break;
+    return;
+  case TY_LONG:
+    printf("long");
+    return;
   case TY_CHAR:
     printf("char");
-    break;
+    return;
   case TY_PTR:
     printf("PTR(");
     if (ty->ptrof->ty == TY_STRUCT && ty->ptrof->tag != NULL) {
@@ -85,12 +88,12 @@ static void dump_type_inner(Type *ty) {
       dump_type_inner(ty->ptrof);
     }
     printf(")");
-    break;
+    return;
   case TY_ARRAY:
     printf("ARRAY[%d](", ty->array_len);
     dump_type_inner(ty->ptrof);
     printf(")");
-    break;
+    return;
   case TY_FUNC:
     printf("FUNC ");
     printf("(");
@@ -104,7 +107,7 @@ static void dump_type_inner(Type *ty) {
     }
     printf(")->");
     dump_type_inner(ty->func_ret);
-    break;
+    return;
   case TY_STRUCT:
     printf("STRUCT %s", ty->tag);
     printf("(");
@@ -117,7 +120,7 @@ static void dump_type_inner(Type *ty) {
       printf(" %s", member->name);
     }
     printf(")");
-    break;
+    return;
   case TY_UNION:
     printf("UNION %s", ty->tag);
     printf("(");
@@ -130,10 +133,9 @@ static void dump_type_inner(Type *ty) {
       printf(" %s", member->name);
     }
     printf(")");
-    break;
-  default:
-    error("未知の型です: %d\n", ty->ty);
+    return;
   }
+  error("未知の型です: %d\n", ty->ty);
 }
 static void dump_type(Type *ty) {
   printf("<");

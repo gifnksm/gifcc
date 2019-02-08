@@ -680,10 +680,13 @@ static void gen_gvar(GlobalVar *gvar) {
     if (gvar->init->ty != EX_NUM) {
       range_error(gvar->range, "数値ではありません");
     }
-    if (gvar->init->val_type->ty != TY_INT) {
+    if (gvar->init->val_type->ty == TY_INT) {
+      printf("  .long %d\n", gvar->init->val);
+    } else if (gvar->init->val_type->ty == TY_LONG) {
+      printf("  .quad %d\n", gvar->init->val);
+    } else {
       range_error(gvar->range, "int型ではありません");
     }
-    printf("  .long %d\n", gvar->init->val);
   }
 }
 

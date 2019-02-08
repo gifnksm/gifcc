@@ -330,7 +330,7 @@ static bool is_sametype(Type *ty1, Type *ty2) {
 }
 
 static bool is_integer_type(Type *ty) {
-  return ty->ty == TY_INT || ty->ty == TY_CHAR;
+  return ty->ty == TY_INT || ty->ty == TY_LONG || ty->ty == TY_CHAR;
 }
 static bool is_arith_type(Type *ty) { return is_integer_type(ty); }
 static bool is_ptr_type(Type *ty) { return ty->ty == TY_PTR; }
@@ -352,6 +352,14 @@ static Type *arith_converted(Scope *scope, Expr **e1, Expr **e2) {
   }
   Type *ty1 = integer_promoted(scope, e2);
   Type *ty2 = integer_promoted(scope, e1);
+  if (get_val_size(ty1) < get_val_size(ty2)) {
+    *e1 = new_expr_cast(scope, ty2, *e1, (*e1)->range);
+    return ty2;
+  }
+  if (get_val_size(ty1) > get_val_size(ty2)) {
+    *e2 = new_expr_cast(scope, ty1, *e2, (*e2)->range);
+    return ty1;
+  }
   assert(is_sametype(ty1, ty2));
   return ty1;
 }
@@ -360,6 +368,7 @@ static bool token_is_typename(Scope *scope, Token *token) {
   switch (token->ty) {
   case TK_VOID:
   case TK_INT:
+  case TK_LONG:
   case TK_CHAR:
   case TK_STRUCT:
   case TK_UNION:
@@ -379,6 +388,8 @@ int get_val_size(Type *ty) {
     return sizeof(char);
   case TY_INT:
     return sizeof(int);
+  case TY_LONG:
+    return sizeof(long);
   case TY_PTR:
     return sizeof(void *);
   case TY_ARRAY:
@@ -403,6 +414,8 @@ int get_val_align(Type *ty) {
     return alignof(char);
   case TY_INT:
     return alignof(int);
+  case TY_LONG:
+    return alignof(long);
   case TY_PTR:
     return alignof(void *);
   case TY_ARRAY:
@@ -594,6 +607,10 @@ static Expr *new_expr_cast(Scope *scope, Type *val_type, Expr *operand,
       operand->val_type = val_type;
       operand->val = (int)operand->val;
       return operand;
+    case TY_LONG:
+      operand->val_type = val_type;
+      operand->val = (long)operand->val;
+      return operand;
     case TY_CHAR:
       operand->val_type = val_type;
       operand->val = (char)operand->val;
@@ -705,7 +722,7 @@ static Expr *new_expr_binop(Scope *scope, int ty, Expr *lhs, Expr *rhs,
     if (val_type == NULL) {
       binop_type_error(ty, lhs, rhs);
     }
-    assert(val_type->ty == TY_INT);
+    assert(val_type->ty == TY_INT || val_type->ty == TY_LONG);
     if (lhs->ty == EX_NUM && rhs->ty == EX_NUM) {
       lhs->val += rhs->val;
       return lhs;
@@ -1264,6 +1281,8 @@ static Type *type_specifier(Scope *scope, Tokenizer *tokenizer) {
     return new_type(TY_CHAR);
   case TK_INT:
     return new_type(TY_INT);
+  case TK_LONG:
+    return new_type(TY_LONG);
   case TK_VOID:
     return new_type(TY_VOID);
   case TK_STRUCT:
@@ -1656,7 +1675,8 @@ static TranslationUnit *translation_unit(Tokenizer *tokenizer) {
       if (!is_func_type(type)) {
         Expr *init = NULL;
         if (token_consume(tokenizer, '=')) {
-          init = assignment_expression(tokenizer, scope);
+          Expr *expr = assignment_expression(tokenizer, scope);
+          init = new_expr_cast(scope, type, expr, expr->range);
         }
         vec_push(gvar_list, new_global_variable(type, name, range, init));
       }
@@ -1672,7 +1692,8 @@ static TranslationUnit *translation_unit(Tokenizer *tokenizer) {
         if (!is_func_type(type)) {
           Expr *init = NULL;
           if (token_consume(tokenizer, '=')) {
-            init = assignment_expression(tokenizer, scope);
+            Expr *expr = assignment_expression(tokenizer, scope);
+            init = new_expr_cast(scope, type, expr, expr->range);
           }
           vec_push(gvar_list, new_global_variable(type, name, range, init));
         }
