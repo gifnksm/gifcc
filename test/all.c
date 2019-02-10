@@ -1086,6 +1086,10 @@ void test31(void) {
 
 long test32_x = 8;
 long *test32_p = &test32_x;
+char test32_fun_char(void) { return 0; }
+int test32_fun_int(void) { return 0; }
+long test32_fun_long(void) { return 0; }
+int *test32_fun_ptr(void) { return 0; }
 void test32(void) {
   long x = 3;
   int y = 3;
@@ -1097,6 +1101,16 @@ void test32(void) {
   check_int(8, sizeof(x));
   check_int(8, sizeof(x + y));
   check_int(8, sizeof(y + x));
+  check_int(4, sizeof(y));
+
+  check_int(8, sizeof &test32_fun_char);
+  check_int(1, sizeof test32_fun_char());
+  check_int(8, sizeof &test32_fun_int);
+  check_int(4, sizeof test32_fun_int());
+  check_int(8, sizeof &test32_fun_long);
+  check_int(8, sizeof test32_fun_long());
+  check_int(8, sizeof &test32_fun_ptr);
+  check_int(8, sizeof test32_fun_ptr());
 
   test_ok(__func__);
 }
