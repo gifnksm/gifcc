@@ -941,11 +941,7 @@ void test23(void) {
 }
 
 void test24(void) {
-  char a, b, c, d;
-  a = 64;
-  b = 64;
-  c = 64;
-  d = 64;
+  char a = 64, b = a, c = a, d = a;
   check_int(256, a + b + c + d);
 
   check_int(256, (char)64 + (char)64 + (char)64 + (char)64);

@@ -172,7 +172,7 @@ typedef struct GlobalVar {
 } GlobalVar;
 
 typedef struct Param {
-  char *name;
+  Token *name;
   Type *type;
   Range range;
   StackVar *stack_var;

@@ -103,7 +103,7 @@ static void dump_type_inner(Type *ty) {
       }
       Param *param = ty->func_param->data[i];
       dump_type_inner(param->type);
-      printf(" %s", param->name);
+      printf(" %s", param->name != NULL ? param->name->name : NULL);
     }
     printf(")->");
     dump_type_inner(ty->func_ret);

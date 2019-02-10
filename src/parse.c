@@ -8,7 +8,8 @@
 #include <string.h>
 
 typedef struct GlobalCtxt {
-  Map *var_map;
+  Vector *func_list;
+  Vector *gvar_list;
   Vector *str_list;
 } GlobalCtxt;
 
@@ -34,6 +35,17 @@ typedef struct Scope {
   struct Scope *outer;
 } Scope;
 
+typedef enum { DEF_GLOBAL_VAR, DEF_STACK_VAR, DEF_FUNC } def_type_t;
+
+typedef struct VarDef {
+  def_type_t type;
+  Token *name;
+  Expr *init;
+  StackVar *stack_var;
+  GlobalVar *global_var;
+  Function *func;
+} VarDef;
+
 static GlobalCtxt *new_global_ctxt(void);
 static FuncCtxt *new_func_ctxt(char *name);
 static Scope *new_scope(GlobalCtxt *gcx, FuncCtxt *fcx, Scope *outer);
@@ -41,8 +53,10 @@ static Scope *new_global_scope(GlobalCtxt *gcx);
 static Scope *new_func_scope(Scope *global, FuncCtxt *fcx);
 static Scope *new_inner_scope(Scope *outer);
 static Member *new_member(char *name, Type *type, int offset, Range range);
-static StackVar *register_stack(Scope *scope, char *name, Type *type,
-                                Range range);
+static VarDef *register_var(Scope *scope, Token *name, Type *type, Range range);
+static VarDef *register_func(Scope *scope, Token *name, Type *type);
+static StackVar *register_stack_var(Scope *scope, Token *name, Type *type,
+                                    Range range);
 static void register_member(Type *type, char *member_name, Type *member_type,
                             Range range);
 static bool register_decl(Scope *scope, char *name, Type *type, StackVar *svar);
@@ -128,17 +142,18 @@ static Expr *expression(Tokenizer *tokenizer, Scope *scope);
 static Expr *constant_expression(Tokenizer *tokenizer, Scope *scope);
 
 // declaration
-static void declaration(Tokenizer *tokenizer, Scope *scope, Vector *stmts);
+static Vector *declaration(Tokenizer *tokenizer, Scope *scope);
 static Type *type_specifier(Scope *scope, Tokenizer *tokenizer);
 static void struct_declaration(Scope *scope, Tokenizer *tokenizer, Type *type);
 static Type *struct_or_union_specifier(Scope *scope, Tokenizer *tokenizer,
                                        Token *token);
 static Type *type_name(Scope *scope, Tokenizer *tokenizer);
 static void declarator(Scope *scope, Tokenizer *tokenizer, Type *base_type,
-                       char **name, Type **type, Range *range);
+                       Token **name, Type **type, Range *range);
 static void direct_declarator(Scope *scope, Tokenizer *tokenizer,
-                              Type *base_type, char **name, Type **type,
+                              Type *base_type, Token **name, Type **type,
                               Range *range);
+static Expr *initializer(Tokenizer *tokenizer, Scope *scope, Type *type);
 
 // statement
 static Stmt *statement(Tokenizer *tokenizer, Scope *scope);
@@ -162,7 +177,8 @@ TranslationUnit *parse(Reader *reader) {
 
 static GlobalCtxt *new_global_ctxt(void) {
   GlobalCtxt *gcx = malloc(sizeof(GlobalCtxt));
-  gcx->var_map = new_map();
+  gcx->func_list = new_vector();
+  gcx->gvar_list = new_vector();
   gcx->str_list = new_vector();
 
   return gcx;
@@ -214,10 +230,48 @@ static Member *new_member(char *name, Type *type, int offset, Range range) {
   return member;
 }
 
-static StackVar *register_stack(Scope *scope, char *name, Type *type,
-                                Range range) {
+static VarDef *register_var(Scope *scope, Token *name, Type *type,
+                            Range range) {
+  def_type_t ty;
+  StackVar *svar = NULL;
+  GlobalVar *gvar = NULL;
+  if (scope->func_ctxt != NULL) {
+    ty = DEF_STACK_VAR;
+    svar = register_stack_var(scope, name, type, range);
+  } else {
+    ty = DEF_GLOBAL_VAR;
+    (void)register_decl(scope, name->name, type, NULL);
+    gvar = new_global_variable(type, name->name, range, NULL);
+  }
+
+  VarDef *def = malloc(sizeof(VarDef));
+  def->type = ty;
+  def->name = name;
+  def->init = NULL;
+  def->stack_var = svar;
+  def->global_var = gvar;
+  def->func = NULL;
+  return def;
+}
+
+static VarDef *register_func(Scope *scope, Token *name, Type *type) {
+  (void)register_decl(scope, name->name, type, NULL);
+
+  VarDef *def = malloc(sizeof(VarDef));
+  def->type = DEF_FUNC;
+  def->name = name;
+  def->init = NULL;
+  def->stack_var = NULL;
+  def->global_var = NULL;
+  def->func = NULL;
+
+  return def;
+}
+
+static StackVar *register_stack_var(Scope *scope, Token *name, Type *type,
+                                    Range range) {
   if (type->ty == TY_VOID) {
-    range_error(range, "void型の変数は定義できません: %s", name);
+    range_error(range, "void型の変数は定義できません: %s", name->name);
   }
 
   FuncCtxt *fcx = scope->func_ctxt;
@@ -229,8 +283,8 @@ static StackVar *register_stack(Scope *scope, char *name, Type *type,
   var->range = range;
   fcx->stack_size += get_val_size(type);
 
-  if (!register_decl(scope, name, type, var)) {
-    range_error(range, "同じ名前のローカル変数が複数あります: %s", name);
+  if (!register_decl(scope, name->name, type, var)) {
+    range_error(range, "同じ名前のローカル変数が複数あります: %s", name->name);
   }
 
   return var;
@@ -1253,46 +1307,54 @@ static Expr *constant_expression(Tokenizer *tokenizer, Scope *scope) {
   return conditional_expression(tokenizer, scope);
 }
 
-static void declaration(Tokenizer *tokenizer, Scope *scope, Vector *stmts) {
+static Vector *declaration(Tokenizer *tokenizer, Scope *scope) {
+  Vector *def_list = new_vector();
   bool is_typedef = token_consume(tokenizer, TK_TYPEDEF);
   Type *base_type = type_specifier(scope, tokenizer);
   if (token_consume(tokenizer, ';')) {
-    return;
+    return def_list;
   }
-  char *name;
+
+  Token *name;
   Type *type;
   Range range;
   declarator(scope, tokenizer, base_type, &name, &type, &range);
+
   if (is_typedef) {
-    register_typedef(scope, name, type);
+    register_typedef(scope, name->name, type);
   } else {
-    (void)register_stack(scope, name, type, range);
+    if (is_func_type(type)) {
+      VarDef *def = register_func(scope, name, type);
+      if (token_peek(tokenizer)->ty == '{') {
+        def->func =
+            function_definition(tokenizer, scope, type, name->name, range);
+        vec_push(def_list, def);
+        return def_list;
+      }
+    } else {
+      VarDef *def = register_var(scope, name, type, range);
+      if (token_consume(tokenizer, '=')) {
+        def->init = initializer(tokenizer, scope, type);
+      }
+      vec_push(def_list, def);
+    }
   }
-  if (token_consume(tokenizer, '=')) {
-    Expr *rval = assignment_expression(tokenizer, scope);
-    Expr *ident = new_expr_ident(scope, name, range);
-    Expr *expr =
-        new_expr_binop(scope, '=', ident, rval, range_join(range, rval->range));
-    Stmt *s = new_stmt_expr(expr, expr->range);
-    vec_push(stmts, s);
-  }
+
   while (token_consume(tokenizer, ',')) {
     declarator(scope, tokenizer, base_type, &name, &type, &range);
     if (is_typedef) {
-      register_typedef(scope, name, type);
+      register_typedef(scope, name->name, type);
     } else {
-      (void)register_stack(scope, name, type, range);
-    }
-    if (token_consume(tokenizer, '=')) {
-      Expr *rval = assignment_expression(tokenizer, scope);
-      Expr *ident = new_expr_ident(scope, name, range);
-      Expr *expr = new_expr_binop(scope, '=', ident, rval,
-                                  range_join(range, rval->range));
-      Stmt *s = new_stmt_expr(expr, expr->range);
-      vec_push(stmts, s);
+      VarDef *def = register_var(scope, name, type, range);
+      if (token_consume(tokenizer, '=')) {
+        def->init = initializer(tokenizer, scope, type);
+      }
+      vec_push(def_list, def);
     }
   }
   token_expect(tokenizer, ';');
+
+  return def_list;
 }
 
 static Type *type_specifier(Scope *scope, Tokenizer *tokenizer) {
@@ -1324,15 +1386,17 @@ static Type *type_specifier(Scope *scope, Tokenizer *tokenizer) {
 static void struct_declaration(Scope *scope, Tokenizer *tokenizer, Type *type) {
   assert(type->ty == TY_STRUCT || type->ty == TY_UNION);
   Type *base_type = type_specifier(scope, tokenizer);
-  char *member_name;
+  Token *member_name;
   Type *member_type;
   Range range;
   declarator(scope, tokenizer, base_type, &member_name, &member_type, &range);
-  register_member(type, member_name, member_type, range);
+  register_member(type, member_name != NULL ? member_name->name : NULL,
+                  member_type, range);
 
   while (token_consume(tokenizer, ',')) {
     declarator(scope, tokenizer, base_type, &member_name, &member_type, &range);
-    register_member(type, member_name, member_type, range);
+    register_member(type, member_name != NULL ? member_name->name : NULL,
+                    member_type, range);
   }
   token_expect(tokenizer, ';');
 }
@@ -1383,7 +1447,7 @@ static Type *type_name(Scope *scope, Tokenizer *tokenizer) {
 }
 
 static void declarator(Scope *scope, Tokenizer *tokenizer, Type *base_type,
-                       char **name, Type **type, Range *range) {
+                       Token **name, Type **type, Range *range) {
   Range start = token_peek(tokenizer)->range;
   while (token_consume(tokenizer, '*')) {
     base_type = new_type_ptr(base_type);
@@ -1394,7 +1458,7 @@ static void declarator(Scope *scope, Tokenizer *tokenizer, Type *base_type,
 }
 
 static void direct_declarator(Scope *scope, Tokenizer *tokenizer,
-                              Type *base_type, char **name, Type **type,
+                              Type *base_type, Token **name, Type **type,
                               Range *range) {
   Type *placeholder = malloc(sizeof(Type));
   *range = token_peek(tokenizer)->range;
@@ -1402,7 +1466,7 @@ static void direct_declarator(Scope *scope, Tokenizer *tokenizer,
   {
     Token *token;
     if ((token = token_consume(tokenizer, TK_IDENT)) != NULL) {
-      *name = token->name;
+      *name = token;
       *type = placeholder;
       *range = range_join(*range, token->range);
     } else if (token_consume(tokenizer, '(')) {
@@ -1461,6 +1525,12 @@ static void direct_declarator(Scope *scope, Tokenizer *tokenizer,
   }
 
   *placeholder = *base_type;
+}
+
+static Expr *initializer(Tokenizer *tokenizer, Scope *scope, Type *type) {
+  Expr *expr = assignment_expression(tokenizer, scope);
+  Expr *init = new_expr_cast(scope, type, expr, expr->range);
+  return init;
 }
 
 static Stmt *statement(Tokenizer *tokenizer, Scope *scope) {
@@ -1618,7 +1688,26 @@ static Stmt *compound_statement(Tokenizer *tokenizer, Scope *scope) {
   while (!token_consume(tokenizer, '}')) {
     Token *token = token_peek(tokenizer);
     if (token_is_typename(scope, token) || token->ty == TK_TYPEDEF) {
-      declaration(tokenizer, scope, stmts);
+      Vector *def_list = declaration(tokenizer, scope);
+
+      for (int i = 0; i < def_list->len; i++) {
+        VarDef *def = def_list->data[i];
+        if (def->type != DEF_STACK_VAR) {
+          assert(def->type == DEF_FUNC);
+          range_error(def->name->range, "関数内で関数は定義できません");
+        }
+        if (def->init == NULL) {
+          continue;
+        }
+
+        Expr *ident = new_expr_ident(scope, def->name->name, def->name->range);
+        Expr *expr = new_expr_binop(scope, '=', ident, def->init,
+                                    range_join(ident->range, def->init->range));
+
+        Stmt *s = new_stmt_expr(expr, expr->range);
+        vec_push(stmts, s);
+      }
+
       continue;
     }
     Stmt *s = statement(tokenizer, scope);
@@ -1635,7 +1724,7 @@ static Function *function_definition(Tokenizer *tokenizer, Scope *global_scope,
   for (int i = 0; i < type->func_param->len; i++) {
     Param *param = type->func_param->data[i];
     param->stack_var =
-        register_stack(scope, param->name, param->type, param->range);
+        register_stack_var(scope, param->name, param->type, param->range);
   }
 
   Stmt *body = compound_statement(tokenizer, scope);
@@ -1665,63 +1754,30 @@ static TranslationUnit *translation_unit(Tokenizer *tokenizer) {
   GlobalCtxt *gcx = new_global_ctxt();
   Scope *scope = new_global_scope(gcx);
 
-  Vector *func_list = new_vector();
-  Vector *gvar_list = new_vector();
-
   while (token_peek(tokenizer)->ty != TK_EOF) {
-    bool is_typedef = token_consume(tokenizer, TK_TYPEDEF);
-    Type *base_type = type_specifier(scope, tokenizer);
-    if (token_consume(tokenizer, ';')) {
-      continue;
-    }
-    char *name;
-    Type *type;
-    Range range;
-    declarator(scope, tokenizer, base_type, &name, &type, &range);
-
-    (void)register_decl(scope, name, type, NULL);
-
-    if (is_func_type(type) && token_peek(tokenizer)->ty == '{') {
-      vec_push(func_list,
-               function_definition(tokenizer, scope, type, name, range));
-      continue;
-    }
-    if (is_typedef) {
-      register_typedef(scope, name, type);
-    } else {
-      if (!is_func_type(type)) {
-        Expr *init = NULL;
-        if (token_consume(tokenizer, '=')) {
-          Expr *expr = assignment_expression(tokenizer, scope);
-          init = new_expr_cast(scope, type, expr, expr->range);
-        }
-        vec_push(gvar_list, new_global_variable(type, name, range, init));
+    Vector *def_list = declaration(tokenizer, scope);
+    for (int i = 0; i < def_list->len; i++) {
+      VarDef *def = def_list->data[i];
+      switch (def->type) {
+      case DEF_FUNC:
+        vec_push(gcx->func_list, def->func);
+        break;
+      case DEF_GLOBAL_VAR:
+        def->global_var->init = def->init;
+        vec_push(gcx->gvar_list, def->global_var);
+        break;
+      case DEF_STACK_VAR:
+        abort();
+      }
+      if (def->init == NULL) {
+        continue;
       }
     }
-
-    while (token_consume(tokenizer, ',')) {
-      declarator(scope, tokenizer, base_type, &name, &type, &range);
-      (void)register_decl(scope, name, type, NULL);
-
-      if (is_typedef) {
-        register_typedef(scope, name, type);
-      } else {
-        if (!is_func_type(type)) {
-          Expr *init = NULL;
-          if (token_consume(tokenizer, '=')) {
-            Expr *expr = assignment_expression(tokenizer, scope);
-            init = new_expr_cast(scope, type, expr, expr->range);
-          }
-          vec_push(gvar_list, new_global_variable(type, name, range, init));
-        }
-      }
-    }
-    token_expect(tokenizer, ';');
   }
 
   TranslationUnit *tunit = malloc(sizeof(TranslationUnit));
-  tunit->func_list = func_list;
-  tunit->gvar_list = gvar_list;
+  tunit->func_list = gcx->func_list;
+  tunit->gvar_list = gcx->gvar_list;
   tunit->str_list = gcx->str_list;
   return tunit;
 }
