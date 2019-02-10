@@ -692,6 +692,9 @@ static Expr *new_expr_cast(Scope *scope, Type *val_type, Expr *operand,
       operand->val = (char)operand->val;
       return operand;
     case TY_PTR:
+      operand->val_type = val_type;
+      operand->val = operand->val;
+      return operand;
     case TY_ARRAY:
     case TY_FUNC:
     case TY_STRUCT:

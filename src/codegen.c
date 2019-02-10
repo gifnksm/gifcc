@@ -683,6 +683,8 @@ static void gen_gvar(GlobalVar *gvar) {
         printf("  .long %d\n", init->val);
       } else if (init->val_type->ty == TY_LONG) {
         printf("  .quad %d\n", init->val);
+      } else if (init->val_type->ty == TY_PTR) {
+        printf("  .quad %d\n", init->val);
       } else {
         range_error(gvar->range, "int型ではありません");
       }
