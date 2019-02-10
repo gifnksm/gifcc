@@ -1,5 +1,6 @@
 #include "gifcc.h"
 #include <assert.h>
+#include <inttypes.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -111,11 +112,41 @@ static void gen_lval(const Reader *reader, Expr *expr) {
   range_error(expr->range, "左辺値が変数ではありません");
 }
 
+static char *num2str(Number num, Range range) {
+  char buf[1024];
+  switch (num.type) {
+  case TY_INT:
+    sprintf(buf, "%d", num.int_val);
+    break;
+  case TY_CHAR:
+    sprintf(buf, "%hhd", num.char_val);
+    break;
+  case TY_SHORT:
+    sprintf(buf, "%hd", num.short_val);
+    break;
+  case TY_LONG:
+    sprintf(buf, "%ld", num.long_val);
+    break;
+  case TY_PTR:
+    sprintf(buf, "%" PRIdPTR, num.ptr_val);
+    break;
+  case TY_VOID:
+    sprintf(buf, "0");
+    break;
+  case TY_ARRAY:
+  case TY_FUNC:
+  case TY_STRUCT:
+  case TY_UNION:
+    range_error(range, "不正な型の数値です: %d", num.type);
+  }
+  return strdup(buf);
+}
+
 static void gen_expr(const Reader *reader, Expr *expr) {
   const Reg *r = get_int_reg(expr->val_type, expr->range);
 
   if (expr->ty == EX_NUM) {
-    printf("  push %d\n", expr->val);
+    printf("  push %s\n", num2str(expr->num_val, expr->range));
     return;
   }
 
@@ -331,7 +362,7 @@ static void gen_expr(const Reader *reader, Expr *expr) {
       gen_lval(reader, expr->rhs);
       printf("  pop rax\n");
       printf("  mov %s, [rax]\n", r->rdi);
-      printf("  add %s, %d\n", r->rdi, expr->val);
+      printf("  add %s, %d\n", r->rdi, expr->incdec_size);
       printf("  mov [rax], %s\n", r->rdi);
       printf("  push rdi\n");
       return;
@@ -341,7 +372,7 @@ static void gen_expr(const Reader *reader, Expr *expr) {
     printf("  pop rax\n");
     printf("  mov %s, [rax]\n", r->rdi);
     printf("  push rdi\n");
-    printf("  add %s, %d\n", r->rdi, expr->val);
+    printf("  add %s, %d\n", r->rdi, expr->incdec_size);
     printf("  mov [rax], %s\n", r->rdi);
     return;
   }
@@ -352,7 +383,7 @@ static void gen_expr(const Reader *reader, Expr *expr) {
       gen_lval(reader, expr->rhs);
       printf("  pop rax\n");
       printf("  mov %s, [rax]\n", r->rdi);
-      printf("  sub %s, %d\n", r->rdi, expr->val);
+      printf("  sub %s, %d\n", r->rdi, expr->incdec_size);
       printf("  mov [rax], %s\n", r->rdi);
       printf("  push rdi\n");
       return;
@@ -362,7 +393,7 @@ static void gen_expr(const Reader *reader, Expr *expr) {
     printf("  pop rax\n");
     printf("  mov %s, [rax]\n", r->rdi);
     printf("  push rdi\n");
-    printf("  sub %s, %d\n", r->rdi, expr->val);
+    printf("  sub %s, %d\n", r->rdi, expr->incdec_size);
     printf("  mov [rax], %s\n", r->rdi);
     return;
   }
@@ -693,11 +724,11 @@ static void gen_gvar(GlobalVar *gvar) {
     printf("%s:\n", gvar->name);
     if (init->ty == EX_NUM) {
       if (init->val_type->ty == TY_INT) {
-        printf("  .long %d\n", init->val);
+        printf("  .long %d\n", init->num_val.int_val);
       } else if (init->val_type->ty == TY_LONG) {
-        printf("  .quad %d\n", init->val);
+        printf("  .quad %ld\n", init->num_val.long_val);
       } else if (init->val_type->ty == TY_PTR) {
-        printf("  .quad %d\n", init->val);
+        printf("  .quad %" PRIdPTR "\n", init->num_val.ptr_val);
       } else {
         range_error(gvar->range, "int型ではありません");
       }

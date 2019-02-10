@@ -45,7 +45,7 @@ static const char *SHORT_PUNCT_TOKENS = "=!<>&|^+-*/%();?:~{}[],.";
 
 static Token *read_token(Reader *reader, bool *read_eof);
 static Token *new_token(int ty);
-static Token *new_token_num(int val);
+static Token *new_token_num(Number val);
 static Token *new_token_ident(char *name);
 static Token *new_token_str(char *str);
 static Token *punctuator(Reader *reader);
@@ -252,10 +252,10 @@ static Token *new_token(int ty) {
   return token;
 }
 
-static Token *new_token_num(int val) {
+static Token *new_token_num(Number val) {
   Token *token = malloc(sizeof(Token));
   token->ty = TK_NUM;
-  token->val = val;
+  token->num_val = val;
   return token;
 }
 
@@ -368,7 +368,7 @@ static Token *hexadecimal_constant(Reader *reader) {
     reader_succ(reader);
   }
 
-  return new_token_num(val);
+  return new_token_num((Number){.type = TY_INT, .int_val = val});
 }
 
 static Token *octal_constant(Reader *reader) {
@@ -387,7 +387,7 @@ static Token *octal_constant(Reader *reader) {
     reader_succ(reader);
   }
 
-  return new_token_num(val);
+  return new_token_num((Number){.type = TY_INT, .int_val = val});
 }
 
 static Token *decimal_constant(Reader *reader) {
@@ -405,7 +405,7 @@ static Token *decimal_constant(Reader *reader) {
     reader_succ(reader);
   }
 
-  return new_token_num(val);
+  return new_token_num((Number){.type = TY_INT, .int_val = val});
 }
 
 static Token *character_constant(Reader *reader) {
@@ -420,7 +420,7 @@ static Token *character_constant(Reader *reader) {
   }
   ch = c_char(reader);
   reader_expect(reader, '\'');
-  return new_token_num(ch);
+  return new_token_num((Number){.type = TY_INT, .int_val = ch});
 }
 
 static Token *string_literal(Reader *reader) {

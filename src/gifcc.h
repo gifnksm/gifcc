@@ -2,6 +2,7 @@
 
 #include <assert.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdnoreturn.h>
 
@@ -87,12 +88,49 @@ typedef struct {
   int len;
 } Range;
 
+#define SET_NUMBER_VAL(dest, num)                                              \
+  (((num)->type == TY_CHAR)                                                    \
+       ? (dest) = (num)->char_val                                              \
+       : (((num)->type == TY_SHORT)                                            \
+              ? (dest) = (num)->short_val                                      \
+              : (((num)->type == TY_INT)                                       \
+                     ? (dest) = (num)->int_val                                 \
+                     : (((num)->type == TY_LONG)                               \
+                            ? (dest) = (num)->long_val                         \
+                            : (((num)->type == TY_PTR)                         \
+                                   ? (dest) = (num)->ptr_val                   \
+                                   : abort())))))
+
+typedef enum {
+  TY_VOID,
+  TY_INT,
+  TY_SHORT,
+  TY_LONG,
+  TY_CHAR,
+  TY_PTR,
+  TY_ARRAY,
+  TY_FUNC,
+  TY_STRUCT,
+  TY_UNION,
+} type_t;
+
+typedef struct Number {
+  type_t type;
+  union {
+    char char_val;
+    short short_val;
+    int int_val;
+    long long_val;
+    intptr_t ptr_val;
+  };
+} Number;
+
 // トークンの型
 typedef struct {
-  int ty;     // トークンの型
-  int val;    // tyがTK_NUMの場合、その数値
-  char *name; // tyがTK_IDENTの場合、その名前
-  char *str;  // tyがTK_STRの場合、その値
+  int ty;         // トークンの型
+  Number num_val; // tyがTK_NUMの場合、その数値
+  char *name;     // tyがTK_IDENTの場合、その名前
+  char *str;      // tyがTK_STRの場合、その値
   Range range;
 } Token;
 
@@ -133,19 +171,6 @@ typedef enum {
   ST_RETURN,
   ST_NULL,
 } stmt_t;
-
-typedef enum {
-  TY_VOID,
-  TY_INT,
-  TY_SHORT,
-  TY_LONG,
-  TY_CHAR,
-  TY_PTR,
-  TY_ARRAY,
-  TY_FUNC,
-  TY_STRUCT,
-  TY_UNION,
-} type_t;
 
 typedef struct Type {
   type_t ty;
@@ -194,8 +219,9 @@ typedef struct Expr {
   struct Expr *rhs;  // 右辺
   struct Expr *cond; // 条件式 (tyがEX_CONDの場合のみ使う)
 
-  int val;    // tyがEX_NUMの場合のみ使う
-  char *name; // tyがEX_IDENT, EX_STR, `.` の場合のみ使う
+  Number num_val;  // tyがEX_NUMの場合のみ使う
+  char *name;      // tyがEX_IDENT, EX_STR, `.` の場合のみ使う
+  int incdec_size; // tyがEX_INC, EX_DECの場合のみ使う
 
   // EX_CALL: <callee>(<argument>...)
   struct Expr *callee;

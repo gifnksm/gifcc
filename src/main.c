@@ -1,6 +1,7 @@
 #include "gifcc.h"
 #include <assert.h>
 #include <getopt.h>
+#include <inttypes.h>
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -22,6 +23,32 @@ noreturn void error_raw_v(const char *dbg_file, int dbg_line, const char *fmt,
   exit(1);
 }
 
+static void dump_number(Number num) {
+  switch (num.type) {
+  case TY_CHAR:
+    printf("%hhd", num.char_val);
+    break;
+  case TY_SHORT:
+    printf("%hd", num.short_val);
+    break;
+  case TY_INT:
+    printf("%d", num.int_val);
+    break;
+  case TY_LONG:
+    printf("%ld", num.long_val);
+    break;
+  case TY_PTR:
+    printf("%" PRIdPTR, num.ptr_val);
+    break;
+  case TY_VOID:
+  case TY_ARRAY:
+  case TY_FUNC:
+  case TY_STRUCT:
+  case TY_UNION:
+    assert(false);
+  }
+}
+
 static void output_token(Reader *reader) {
   Tokenizer *tokenizer = new_tokenizer(reader);
   Token *token;
@@ -33,7 +60,7 @@ static void output_token(Reader *reader) {
            token_kind_to_str(token->ty));
     switch (token->ty) {
     case TK_NUM:
-      printf("%-8d", token->val);
+      dump_number(token->num_val);
       break;
     case TK_IDENT:
       printf("%-8s", token->name);
@@ -176,7 +203,7 @@ static void dump_binop_expr_incdec(const Reader *reader, Expr *expr,
   dump_range_start(reader, expr->range);
   dump_indent(level);
   dump_type(expr->val_type);
-  printf("(%s %d\n", label, expr->val);
+  printf("(%s %d\n", label, expr->incdec_size);
   if (expr->lhs != NULL) {
     dump_expr(reader, expr->lhs, level + 1);
   } else {
@@ -207,7 +234,9 @@ static void dump_expr(const Reader *reader, Expr *expr, int level) {
     dump_range_start(reader, expr->range);
     dump_indent(level);
     dump_type(expr->val_type);
-    printf("(NUM %d)\n", expr->val);
+    printf("(NUM ");
+    dump_number(expr->num_val);
+    printf(")\n");
     return;
   case EX_STACK_VAR:
     dump_range_start(reader, expr->range);
