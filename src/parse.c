@@ -406,7 +406,8 @@ static bool is_sametype(Type *ty1, Type *ty2) {
 }
 
 static bool is_integer_type(Type *ty) {
-  return ty->ty == TY_INT || ty->ty == TY_LONG || ty->ty == TY_CHAR;
+  return ty->ty == TY_INT || ty->ty == TY_SHORT || ty->ty == TY_LONG ||
+         ty->ty == TY_CHAR;
 }
 static bool is_arith_type(Type *ty) { return is_integer_type(ty); }
 static bool is_ptr_type(Type *ty) { return ty->ty == TY_PTR; }
@@ -416,8 +417,8 @@ static Type *integer_promoted(Scope *scope, Expr **e) {
   if (!is_integer_type((*e)->val_type)) {
     return NULL;
   }
-  // CHAR は INT へ昇格する
-  if ((*e)->val_type->ty == TY_CHAR) {
+  // CHAR, SHORT は INT へ昇格する
+  if ((*e)->val_type->ty == TY_CHAR || (*e)->val_type->ty == TY_SHORT) {
     *e = new_expr_cast(scope, new_type(TY_INT), *e, (*e)->range);
   }
   return (*e)->val_type;
@@ -444,6 +445,7 @@ static bool token_is_typename(Scope *scope, Token *token) {
   switch (token->ty) {
   case TK_VOID:
   case TK_INT:
+  case TK_SHORT:
   case TK_LONG:
   case TK_CHAR:
   case TK_STRUCT:
@@ -464,6 +466,8 @@ int get_val_size(Type *ty, Range range) {
     return sizeof(char);
   case TY_INT:
     return sizeof(int);
+  case TY_SHORT:
+    return sizeof(short);
   case TY_LONG:
     return sizeof(long);
   case TY_PTR:
@@ -488,6 +492,8 @@ int get_val_align(Type *ty, Range range) {
     return alignof(void);
   case TY_CHAR:
     return alignof(char);
+  case TY_SHORT:
+    return alignof(short);
   case TY_INT:
     return alignof(int);
   case TY_LONG:
@@ -683,6 +689,10 @@ static Expr *new_expr_cast(Scope *scope, Type *val_type, Expr *operand,
       operand->val_type = val_type;
       operand->val = (int)operand->val;
       return operand;
+    case TY_SHORT:
+      operand->val_type = val_type;
+      operand->val = (short)operand->val;
+      return operand;
     case TY_LONG:
       operand->val_type = val_type;
       operand->val = (long)operand->val;
@@ -757,17 +767,20 @@ static Expr *new_expr_binop(Scope *scope, int ty, Expr *lhs, Expr *rhs,
     if (val_type == NULL) {
       binop_type_error(ty, lhs, rhs);
     }
-    assert(val_type->ty == TY_INT);
+    assert(val_type->ty == TY_INT || val_type->ty == TY_LONG);
     if (lhs->ty == EX_NUM && rhs->ty == EX_NUM) {
       switch (ty) {
       case '*':
         lhs->val *= rhs->val;
+        lhs->range = range;
         return lhs;
       case '/':
         lhs->val /= rhs->val;
+        lhs->range = range;
         return lhs;
       case '%':
         lhs->val %= rhs->val;
+        lhs->range = range;
         return lhs;
       }
       assert(false);
@@ -806,6 +819,7 @@ static Expr *new_expr_binop(Scope *scope, int ty, Expr *lhs, Expr *rhs,
     assert(val_type->ty == TY_INT || val_type->ty == TY_LONG);
     if (lhs->ty == EX_NUM && rhs->ty == EX_NUM) {
       lhs->val += rhs->val;
+      lhs->range = range;
       return lhs;
     }
     break;
@@ -842,9 +856,10 @@ static Expr *new_expr_binop(Scope *scope, int ty, Expr *lhs, Expr *rhs,
     if (val_type == NULL) {
       binop_type_error(ty, lhs, rhs);
     }
-    assert(val_type->ty == TY_INT);
+    assert(val_type->ty == TY_INT || val_type->ty == TY_LONG);
     if (lhs->ty == EX_NUM && rhs->ty == EX_NUM) {
       lhs->val -= rhs->val;
+      lhs->range = range;
       return lhs;
     }
     break;
@@ -858,14 +873,16 @@ static Expr *new_expr_binop(Scope *scope, int ty, Expr *lhs, Expr *rhs,
     if (val_type == NULL) {
       binop_type_error(ty, lhs, rhs);
     }
-    assert(val_type->ty == TY_INT);
+    assert(val_type->ty == TY_INT || val_type->ty == TY_LONG);
     if (lhs->ty == EX_NUM && rhs->ty == EX_NUM) {
       switch (ty) {
       case EX_LSHIFT:
         lhs->val <<= rhs->val;
+        lhs->range = range;
         return lhs;
       case EX_RSHIFT:
         lhs->val >>= rhs->val;
+        lhs->range = range;
         return lhs;
       }
       assert(false);
@@ -891,17 +908,20 @@ static Expr *new_expr_binop(Scope *scope, int ty, Expr *lhs, Expr *rhs,
     if (val_type == NULL) {
       binop_type_error(ty, lhs, rhs);
     }
-    assert(val_type->ty == TY_INT);
+    assert(val_type->ty == TY_INT || val_type->ty == TY_LONG);
     if (lhs->ty == EX_NUM && rhs->ty == EX_NUM) {
       switch (ty) {
       case '&':
         lhs->val &= rhs->val;
+        lhs->range = range;
         return lhs;
       case '^':
         lhs->val ^= rhs->val;
+        lhs->range = range;
         return lhs;
       case '|':
         lhs->val |= rhs->val;
+        lhs->range = range;
         return lhs;
       }
       assert(false);
@@ -1372,6 +1392,8 @@ static Type *type_specifier(Scope *scope, Tokenizer *tokenizer) {
     return new_type(TY_CHAR);
   case TK_INT:
     return new_type(TY_INT);
+  case TK_SHORT:
+    return new_type(TY_SHORT);
   case TK_LONG:
     return new_type(TY_LONG);
   case TK_VOID:

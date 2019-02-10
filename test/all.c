@@ -1083,6 +1083,7 @@ void test31(void) {
 long test32_x = 8;
 long *test32_p = &test32_x;
 char test32_fun_char(void) { return 0; }
+short test32_fun_short(void) { return 0; }
 int test32_fun_int(void) { return 0; }
 long test32_fun_long(void) { return 0; }
 int *test32_fun_ptr(void) { return 0; }
@@ -1101,6 +1102,8 @@ void test32(void) {
 
   check_int(8, sizeof &test32_fun_char);
   check_int(1, sizeof test32_fun_char());
+  check_int(8, sizeof &test32_fun_char);
+  check_int(2, sizeof test32_fun_short());
   check_int(8, sizeof &test32_fun_int);
   check_int(4, sizeof test32_fun_int());
   check_int(8, sizeof &test32_fun_long);
@@ -1132,6 +1135,82 @@ void test33(void) {
 
   p.x = 3;
   check_int(3, p.x);
+
+  test_ok(__func__);
+}
+
+void test34(void) {
+  char ca = 3, cb = 5;
+  check_int(8, ca + cb);
+  check_int(-2, ca - cb);
+  check_int(15, ca * cb);
+  check_int(0, ca / cb);
+  check_int(3, ca % cb);
+  check_int(0, ca == cb);
+  check_int(1, ca != cb);
+  check_int(1, ca < cb);
+  check_int(0, ca > cb);
+  check_int(1, ca <= cb);
+  check_int(0, ca >= cb);
+  check_int(96, ca << cb);
+  check_int(0, ca >> cb);
+  check_int(1, ca & cb);
+  check_int(7, ca | cb);
+  check_int(5, (ca, cb));
+
+  short sa = 3, sb = 5;
+  check_int(8, sa + sb);
+  check_int(-2, sa - sb);
+  check_int(15, sa * sb);
+  check_int(0, sa / sb);
+  check_int(3, sa % sb);
+  check_int(0, sa == sb);
+  check_int(1, sa != sb);
+  check_int(1, sa < sb);
+  check_int(0, sa > sb);
+  check_int(1, sa <= sb);
+  check_int(0, sa >= sb);
+  check_int(96, sa << sb);
+  check_int(0, sa >> sb);
+  check_int(1, sa & sb);
+  check_int(7, sa | sb);
+  check_int(5, (sa, sb));
+
+  int ia = 3, ib = 5;
+  check_int(8, ia + ib);
+  check_int(-2, ia - ib);
+  check_int(15, ia * ib);
+  check_int(0, ia / ib);
+  check_int(3, ia % ib);
+  check_int(0, ia == ib);
+  check_int(1, ia != ib);
+  check_int(1, ia < ib);
+  check_int(0, ia > ib);
+  check_int(1, ia <= ib);
+  check_int(0, ia >= ib);
+  check_int(96, ia << ib);
+  check_int(0, ia >> ib);
+  check_int(1, ia & ib);
+  check_int(7, ia | ib);
+  check_int(5, (ia, ib));
+
+  long la = 3, lb = 5;
+  check_int(8, la + lb);
+  check_int(-2, la - lb);
+  check_int(15, la * lb);
+  check_int(0, la / lb);
+  check_int(3, la % lb);
+  check_int(0, la == lb);
+  check_int(1, la != lb);
+  check_int(1, la < lb);
+  check_int(0, la > lb);
+  check_int(1, la <= lb);
+  check_int(0, la >= lb);
+  check_int(96, la << lb);
+  check_int(0, la >> lb);
+  check_int(1, la & lb);
+  check_int(7, la | lb);
+  check_int(5, (la, lb));
 
   test_ok(__func__);
 }
@@ -1169,6 +1248,7 @@ int main(void) {
   test31();
   test32();
   test33();
+  test34();
 
   return 0;
 }

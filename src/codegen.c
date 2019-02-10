@@ -44,6 +44,17 @@ const Reg Reg4 = {
     .r10 = "r10d",
     .r11 = "r11d",
 };
+const Reg Reg2 = {
+    .rax = "ax",
+    .rdi = "di",
+    .rsi = "si",
+    .rdx = "dx",
+    .rcx = "cx",
+    .r8 = "r8w",
+    .r9 = "r9w",
+    .r10 = "r10w",
+    .r11 = "r11w",
+};
 const Reg Reg1 = {
     .rax = "al",
     .rdi = "dil",
@@ -62,6 +73,8 @@ static const Reg *get_int_reg(Type *ty, Range range) {
     return &Reg8;
   case 4:
     return &Reg4;
+  case 2:
+    return &Reg2;
   case 1:
     return &Reg1;
   default:

@@ -72,6 +72,9 @@ static void dump_type_inner(Type *ty) {
   case TY_INT:
     printf("int");
     return;
+  case TY_SHORT:
+    printf("short");
+    return;
   case TY_LONG:
     printf("long");
     return;
