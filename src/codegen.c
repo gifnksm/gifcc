@@ -56,8 +56,8 @@ const Reg Reg1 = {
     .r11 = "r11b",
 };
 
-static const Reg *get_int_reg(Type *ty) {
-  switch (get_val_size(ty)) {
+static const Reg *get_int_reg(Type *ty, Range range) {
+  switch (get_val_size(ty, range)) {
   case 8:
     return &Reg8;
   case 4:
@@ -65,7 +65,7 @@ static const Reg *get_int_reg(Type *ty) {
   case 1:
     return &Reg1;
   default:
-    error("サポートしていない型サイズです");
+    range_error(range, "サポートしていない型サイズです");
   }
 }
 
@@ -99,7 +99,7 @@ static void gen_lval(const Reader *reader, Expr *expr) {
 }
 
 static void gen_expr(const Reader *reader, Expr *expr) {
-  const Reg *r = get_int_reg(expr->val_type);
+  const Reg *r = get_int_reg(expr->val_type, expr->range);
 
   if (expr->ty == EX_NUM) {
     printf("  push %d\n", expr->val);
@@ -627,7 +627,7 @@ static void gen_func(const Reader *reader, Function *func) {
     Param *param = func->type->func_param->data[i];
     StackVar *var = param->stack_var;
     assert(var != NULL);
-    const Reg *r = get_int_reg(var->type);
+    const Reg *r = get_int_reg(var->type, var->range);
     printf("  lea rax, [rbp - %d]\n",
            align(func_ctxt->stack_size, 16) - var->offset);
     switch (i) {
@@ -673,7 +673,7 @@ static void gen_gvar(GlobalVar *gvar) {
     printf("  .bss\n");
     printf(".global %s\n", gvar->name);
     printf("%s:\n", gvar->name);
-    printf("  .zero %d\n", get_val_size(gvar->type));
+    printf("  .zero %d\n", get_val_size(gvar->type, gvar->range));
   } else {
     printf("  .data\n");
     printf(".global %s\n", gvar->name);

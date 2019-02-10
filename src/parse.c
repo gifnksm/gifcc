@@ -277,11 +277,11 @@ static StackVar *register_stack_var(Scope *scope, Token *name, Type *type,
   FuncCtxt *fcx = scope->func_ctxt;
 
   StackVar *var = malloc(sizeof(StackVar));
-  fcx->stack_size = align(fcx->stack_size, get_val_align(type));
+  fcx->stack_size = align(fcx->stack_size, get_val_align(type, range));
   var->offset = fcx->stack_size;
   var->type = type;
   var->range = range;
-  fcx->stack_size += get_val_size(type);
+  fcx->stack_size += get_val_size(type, range);
 
   if (!register_decl(scope, name->name, type, var)) {
     range_error(range, "同じ名前のローカル変数が複数あります: %s", name->name);
@@ -296,18 +296,19 @@ static void register_member(Type *type, char *member_name, Type *member_type,
 
   int offset;
   if (type->ty == TY_STRUCT) {
-    type->member_size = align(type->member_size, get_val_align(member_type));
+    type->member_size =
+        align(type->member_size, get_val_align(member_type, range));
     offset = type->member_size;
-    type->member_size += get_val_size(member_type);
+    type->member_size += get_val_size(member_type, range);
   } else {
-    if (get_val_size(member_type) > type->member_size) {
-      type->member_size = get_val_size(member_type);
+    if (get_val_size(member_type, range) > type->member_size) {
+      type->member_size = get_val_size(member_type, range);
     }
     offset = 0;
   }
 
-  if (type->member_align < get_val_align(member_type)) {
-    type->member_align = get_val_align(member_type);
+  if (type->member_align < get_val_align(member_type, range)) {
+    type->member_align = get_val_align(member_type, range);
   }
 
   if (member_name == NULL) {
@@ -427,11 +428,11 @@ static Type *arith_converted(Scope *scope, Expr **e1, Expr **e2) {
   }
   Type *ty1 = integer_promoted(scope, e2);
   Type *ty2 = integer_promoted(scope, e1);
-  if (get_val_size(ty1) < get_val_size(ty2)) {
+  if (get_val_size(ty1, (*e1)->range) < get_val_size(ty2, (*e2)->range)) {
     *e1 = new_expr_cast(scope, ty2, *e1, (*e1)->range);
     return ty2;
   }
-  if (get_val_size(ty1) > get_val_size(ty2)) {
+  if (get_val_size(ty1, (*e1)->range) > get_val_size(ty2, (*e2)->range)) {
     *e2 = new_expr_cast(scope, ty1, *e2, (*e2)->range);
     return ty1;
   }
@@ -455,7 +456,7 @@ static bool token_is_typename(Scope *scope, Token *token) {
   }
 }
 
-int get_val_size(Type *ty) {
+int get_val_size(Type *ty, Range range) {
   switch (ty->ty) {
   case TY_VOID:
     return sizeof(void);
@@ -468,20 +469,20 @@ int get_val_size(Type *ty) {
   case TY_PTR:
     return sizeof(void *);
   case TY_ARRAY:
-    return get_val_size(ty->ptrof) * ty->array_len;
+    return get_val_size(ty->ptrof, range) * ty->array_len;
   case TY_FUNC:
-    error("関数型の値サイズを取得しようとしました");
+    range_error(range, "関数型の値サイズを取得しようとしました");
   case TY_STRUCT:
   case TY_UNION:
     if (ty->members == NULL) {
-      error("不完全型の値のサイズを取得しようとしました");
+      range_error(range, "不完全型の値のサイズを取得しようとしました");
     }
     return align(ty->member_size, ty->member_align);
   }
-  error("不明な型のサイズを取得しようとしました");
+  range_error(range, "不明な型のサイズを取得しようとしました");
 }
 
-int get_val_align(Type *ty) {
+int get_val_align(Type *ty, Range range) {
   switch (ty->ty) {
   case TY_VOID:
     return alignof(void);
@@ -494,14 +495,14 @@ int get_val_align(Type *ty) {
   case TY_PTR:
     return alignof(void *);
   case TY_ARRAY:
-    return get_val_align(ty->ptrof);
+    return get_val_align(ty->ptrof, range);
   case TY_FUNC:
-    error("関数型の値アラインメントを取得しようとしました");
+    range_error(range, "関数型の値アラインメントを取得しようとしました");
   case TY_STRUCT:
   case TY_UNION:
     return ty->member_align;
   }
-  error("不明な型の値アラインメントを取得しようとしました");
+  range_error(range, "不明な型の値アラインメントを取得しようとしました");
 }
 
 #define binop_type_error(ty, lhs, rhs)                                         \
@@ -658,7 +659,7 @@ static Expr *new_expr_postfix(Scope *scope, int ty, Expr *operand,
   expr->rhs = NULL;
   if (ty == EX_INC || ty == EX_DEC) {
     if (is_ptr_type(operand->val_type)) {
-      expr->val = get_val_size(operand->val_type->ptrof);
+      expr->val = get_val_size(operand->val_type->ptrof, operand->range);
     } else {
       expr->val = 1;
     }
@@ -730,7 +731,7 @@ static Expr *new_expr_unary(Scope *scope, int ty, Expr *operand, Range range) {
   expr->rhs = operand;
   if (ty == EX_INC || ty == EX_DEC) {
     if (is_ptr_type(operand->val_type)) {
-      expr->val = get_val_size(expr->val_type->ptrof);
+      expr->val = get_val_size(expr->val_type->ptrof, expr->range);
     } else {
       expr->val = 1;
     }
@@ -777,7 +778,8 @@ static Expr *new_expr_binop(Scope *scope, int ty, Expr *lhs, Expr *rhs,
       }
       rhs = new_expr_binop(
           scope, '*', rhs,
-          new_expr_num(get_val_size(lhs->val_type->ptrof), range), range);
+          new_expr_num(get_val_size(lhs->val_type->ptrof, lhs->range), range),
+          range);
       val_type = lhs->val_type;
       break;
     }
@@ -788,7 +790,8 @@ static Expr *new_expr_binop(Scope *scope, int ty, Expr *lhs, Expr *rhs,
       }
       lhs = new_expr_binop(
           scope, '*', lhs,
-          new_expr_num(get_val_size(rhs->val_type->ptrof), range), range);
+          new_expr_num(get_val_size(rhs->val_type->ptrof, rhs->range), range),
+          range);
       val_type = rhs->val_type;
       break;
     }
@@ -814,12 +817,14 @@ static Expr *new_expr_binop(Scope *scope, int ty, Expr *lhs, Expr *rhs,
         sub->rhs = rhs;
         return new_expr_binop(
             scope, '/', sub,
-            new_expr_num(get_val_size(lhs->val_type->ptrof), range), range);
+            new_expr_num(get_val_size(lhs->val_type->ptrof, lhs->range), range),
+            range);
       }
       if (is_integer_type(rhs->val_type)) {
         rhs = new_expr_binop(
             scope, '*', rhs,
-            new_expr_num(get_val_size(lhs->val_type->ptrof), range), range);
+            new_expr_num(get_val_size(lhs->val_type->ptrof, lhs->range), range),
+            range);
         val_type = lhs->val_type;
         break;
       }
@@ -1153,13 +1158,13 @@ static Expr *unary_expression(Tokenizer *tokenizer, Scope *scope) {
     if (token_peek(tokenizer)->ty != '(' ||
         !token_is_typename(scope, token_peek_ahead(tokenizer, 1))) {
       Expr *expr = unary_expression(tokenizer, scope);
-      return new_expr_num(get_val_size(expr->val_type),
+      return new_expr_num(get_val_size(expr->val_type, expr->range),
                           range_join(token->range, expr->range));
     } else {
       token_expect(tokenizer, '(');
       Type *type = type_name(scope, tokenizer);
       Token *end = token_expect(tokenizer, ')');
-      return new_expr_num(get_val_size(type),
+      return new_expr_num(get_val_size(type, end->range),
                           range_join(token->range, end->range));
     }
   }

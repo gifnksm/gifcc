@@ -327,8 +327,8 @@ Token *token_expect(Tokenizer *tokenizer, int ty);
 const char *token_kind_to_str(int kind);
 const Reader *token_get_reader(const Tokenizer *tokenizer);
 
-int get_val_size(Type *ty);
-int get_val_align(Type *ty);
+int get_val_size(Type *ty, Range range);
+int get_val_align(Type *ty, Range range);
 TranslationUnit *parse(Reader *reader);
 
 char *make_label(void);
