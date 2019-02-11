@@ -175,10 +175,6 @@ static Function *function_definition(Tokenizer *tokenizer, Scope *global_scope,
 static GlobalVar *new_global_variable(Type *type, char *name, Range range);
 static TranslationUnit *translation_unit(Tokenizer *tokenizer);
 
-static Stmt null_stmt = {
-    .ty = ST_NULL,
-};
-
 TranslationUnit *parse(Reader *reader) {
   Tokenizer *tokenizer = new_tokenizer(reader);
   return translation_unit(tokenizer);
@@ -1771,7 +1767,7 @@ static Stmt *statement(Tokenizer *tokenizer, Scope *scope) {
     Expr *cond = expression(tokenizer, scope);
     token_expect(tokenizer, ')');
     Stmt *then_stmt = statement(tokenizer, scope);
-    Stmt *else_stmt = &null_stmt;
+    Stmt *else_stmt = new_stmt(ST_NULL, then_stmt->range);
     Range range;
     if (token_consume(tokenizer, TK_ELSE)) {
       else_stmt = statement(tokenizer, scope);
