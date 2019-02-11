@@ -1215,6 +1215,18 @@ void test34(void) {
   test_ok(__func__);
 }
 
+void test35(void) {
+  char cx = 0;
+  cx = cx + 1;
+  check_int(1, cx);
+
+  short sx = 0;
+  sx = sx + 1;
+  check_int(1, sx);
+
+  test_ok(__func__);
+}
+
 int main(void) {
   test01();
   test02();
@@ -1249,6 +1261,7 @@ int main(void) {
   test32();
   test33();
   test34();
+  test35();
 
   return 0;
 }

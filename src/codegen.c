@@ -241,10 +241,13 @@ static void gen_expr(const Reader *reader, Expr *expr) {
   }
 
   if (expr->ty == EX_CAST) {
-    gen_expr(reader, expr->expr);
-    if (expr->expr->val_type->ty == TY_CHAR && expr->val_type->ty == TY_INT) {
+    Expr *operand = expr->expr;
+    gen_expr(reader, operand);
+    const Reg *from = get_int_reg(operand->val_type, operand->range);
+    if (get_val_size(expr->val_type, expr->range) >
+        get_val_size(operand->val_type, operand->range)) {
       printf("  pop rax\n");
-      printf("  movsx rax, al\n");
+      printf("  movsx %s, %s\n", r->rax, from->rax);
       printf("  push rax\n");
     }
     return;

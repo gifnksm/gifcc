@@ -995,6 +995,7 @@ static Expr *new_expr_binop(Scope *scope, int op, Expr *lhs, Expr *rhs,
     val_type = new_type(TY_INT);
     break;
   case '=':
+    rhs = new_expr_cast(scope, lhs->val_type, rhs, rhs->range);
     val_type = lhs->val_type;
     break;
   case ',':
