@@ -49,6 +49,7 @@ typedef struct VarDef {
 
 static Number new_number_int(int val);
 static Number new_number_size(int val);
+static Initializer *new_initializer(Type *type, Member *member);
 static GlobalCtxt *new_global_ctxt(void);
 static FuncCtxt *new_func_ctxt(char *name, Type *type);
 static Scope *new_scope(GlobalCtxt *gcx, FuncCtxt *fcx, Scope *outer);
@@ -188,6 +189,13 @@ static Number new_number_int(int val) {
 }
 static Number new_number_size(int val) {
   return (Number){.type = TY_LONG, .ptr_val = val};
+}
+
+static Initializer *new_initializer(Type *type, Member *member) {
+  Initializer *init = malloc(sizeof(Initializer));
+  init->type = type;
+  init->member = member;
+  return init;
 }
 
 static GlobalCtxt *new_global_ctxt(void) {
@@ -1664,37 +1672,54 @@ static void direct_declarator(Scope *scope, Tokenizer *tokenizer,
 
 static Initializer *initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
                                 Member *member) {
-  Initializer *init = malloc(sizeof(Initializer));
-  init->type = type;
-  init->member = member;
-
   Token *token;
   if ((token = token_consume(tokenizer, '{')) != NULL) {
-    if (type->ty != TY_STRUCT) {
+    Initializer *init;
+    switch (type->ty) {
+    case TY_INT:
+    case TY_SHORT:
+    case TY_LONG:
+    case TY_CHAR:
+    case TY_PTR: {
+      init = initializer(tokenizer, scope, type, member);
+      break;
+    }
+    case TY_STRUCT: {
+      init = new_initializer(type, member);
+
+      Map *members = new_map();
+      for (int i = 0; i < type->members->vals->len; i++) {
+        map_put(members, type->members->keys->data[i], NULL);
+      }
+      for (int i = 0; i < type->members->vals->len; i++) {
+        Member *member = type->members->vals->data[i];
+        members->keys->data[i] = member->name;
+        members->vals->data[i] =
+            initializer(tokenizer, scope, member->type, member);
+        if (token_consume(tokenizer, ',') == NULL) {
+          break;
+        }
+      }
+
+      init->members = members;
+      break;
+    }
+    case TY_VOID:
+    case TY_ARRAY:
+    case TY_FUNC:
+    case TY_UNION:
       range_error(token->range, "構造体ではありません");
     }
-    Map *members = new_map();
-    for (int i = 0; i < type->members->vals->len; i++) {
-      map_put(members, type->members->keys->data[i], NULL);
-    }
-    for (int i = 0; i < type->members->vals->len; i++) {
-      Member *member = type->members->vals->data[i];
-      members->keys->data[i] = member->name;
-      members->vals->data[i] =
-          initializer(tokenizer, scope, member->type, member);
-      if (token_consume(tokenizer, ',') == NULL) {
-        break;
-      }
-    }
     token_expect(tokenizer, '}');
-    init->members = members;
     return init;
   };
 
-  Expr *expr = assignment_expression(tokenizer, scope);
-  init->expr = new_expr_cast(scope, type, expr, expr->range);
-
-  return init;
+  {
+    Initializer *init = new_initializer(type, member);
+    Expr *expr = assignment_expression(tokenizer, scope);
+    init->expr = new_expr_cast(scope, type, expr, expr->range);
+    return init;
+  }
 }
 
 static Stmt *statement(Tokenizer *tokenizer, Scope *scope) {

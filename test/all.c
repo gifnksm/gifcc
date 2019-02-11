@@ -1243,6 +1243,14 @@ struct {
   short e;
   void *f;
 } test37_s = {1, 2, 3, 4, 5, 6};
+struct {
+  int a;
+  int b;
+  char c;
+  int d;
+  short e;
+  void *f;
+} test37_t = {{{1}}, {2}, {3}, {{{4}}}, {5}, 6};
 void test37(void) {
   check_int(1, test37_s.a);
   check_int(2, test37_s.b);
@@ -1250,6 +1258,13 @@ void test37(void) {
   check_int(4, test37_s.d);
   check_int(5, test37_s.e);
   check_int(6, test37_s.f);
+
+  check_int(1, test37_t.a);
+  check_int(2, test37_t.b);
+  check_int(3, test37_t.c);
+  check_int(4, test37_t.d);
+  check_int(5, test37_t.e);
+  check_int(6, test37_t.f);
 
   struct S {
     int a;
@@ -1265,6 +1280,21 @@ void test37(void) {
   check_int(14, s.d);
   check_int(15, s.e);
   check_int(16, s.f);
+
+  struct T {
+    int a;
+    int b;
+    char c;
+    int d;
+    short e;
+    void *f;
+  } t = {{{11}}, {12}, {13}, {{{14}}}, {15}, 16};
+  check_int(11, t.a);
+  check_int(12, t.b);
+  check_int(13, t.c);
+  check_int(14, t.d);
+  check_int(15, t.e);
+  check_int(16, t.f);
 
   test_ok(__func__);
 }
