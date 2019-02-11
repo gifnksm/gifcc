@@ -2025,6 +2025,8 @@ static TranslationUnit *translation_unit(Tokenizer *tokenizer) {
   GlobalCtxt *gcx = new_global_ctxt();
   Scope *scope = new_global_scope(gcx);
 
+  Map *gvar_map = new_map();
+
   while (token_peek(tokenizer)->ty != TK_EOF) {
     Vector *def_list = declaration(tokenizer, scope);
     for (int i = 0; i < def_list->len; i++) {
@@ -2033,10 +2035,24 @@ static TranslationUnit *translation_unit(Tokenizer *tokenizer) {
       case DEF_FUNC:
         vec_push(gcx->func_list, def->func);
         break;
-      case DEF_GLOBAL_VAR:
-        def->global_var->init = def->init;
-        vec_push(gcx->gvar_list, def->global_var);
+      case DEF_GLOBAL_VAR: {
+        GlobalVar *prev_def = map_get(gvar_map, def->name->name);
+        if (prev_def == NULL) {
+          def->global_var->init = def->init;
+          vec_push(gcx->gvar_list, def->global_var);
+          map_put(gvar_map, def->name->name, def->global_var);
+        } else {
+          if (def->init != NULL) {
+            if (prev_def->init != NULL) {
+              range_error(def->global_var->range,
+                          "グローバル変数が複数回定義されました: %s",
+                          def->name->name);
+            }
+            prev_def->init = def->init;
+          }
+        }
         break;
+      }
       case DEF_STACK_VAR:
         abort();
       }

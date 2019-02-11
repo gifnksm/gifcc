@@ -1462,8 +1462,12 @@ void test42(void) {
 
   test_ok(__func__);
 }
+int test42_n;
 int test42_n = 8;
+int test42_n;
+int test42_m;
 int test42_m = 10;
+int test42_m;
 int test42_f(void) { return 32; }
 int test42_g(void) { return 64; }
 
@@ -1508,6 +1512,7 @@ int main(void) {
   test39();
   test40();
   test41();
+  test42();
 
   return 0;
 }
