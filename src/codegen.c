@@ -714,8 +714,70 @@ static void gen_func(const Reader *reader, Function *func) {
   printf("  ret\n");
 }
 
+static void gen_gvar_init(Initializer *init, Range range) {
+  if (init->expr != NULL) {
+    if (init->expr->ty == EX_NUM) {
+      switch (init->expr->val_type->ty) {
+      case TY_INT:
+        printf("  .long %d\n", init->expr->num_val.int_val);
+        break;
+      case TY_CHAR:
+        printf("  .byte %d\n", init->expr->num_val.int_val);
+        break;
+      case TY_SHORT:
+        printf("  .word %d\n", init->expr->num_val.int_val);
+        break;
+      case TY_LONG:
+        printf("  .quad %ld\n", init->expr->num_val.long_val);
+        break;
+      case TY_PTR:
+        printf("  .quad %" PRIdPTR "\n", init->expr->num_val.ptr_val);
+        break;
+      case TY_VOID:
+      case TY_ARRAY:
+      case TY_FUNC:
+      case TY_STRUCT:
+      case TY_UNION:
+        range_error(range, "int型ではありません");
+      }
+    } else if (init->expr->ty == '&' && init->expr->lhs == NULL &&
+               init->expr->rhs != NULL) {
+      if (init->expr->rhs->ty != EX_GLOBAL_VAR) {
+        range_error(range, "グローバル変数以外へのポインタです");
+      }
+      printf("  .quad %s\n", init->expr->rhs->name);
+    } else {
+      range_error(range, "数値でもポインタでもありません");
+    }
+    return;
+  }
+
+  if (init->members != NULL) {
+    int offset = 0;
+    for (int i = 0; i < init->members->keys->len; i++) {
+      Initializer *meminit = init->members->vals->data[i];
+      Member *member = meminit->member;
+      if (offset < member->offset) {
+        printf("  .zero %d\n", member->offset - offset);
+        offset = member->offset;
+      }
+      assert(offset == member->offset);
+      gen_gvar_init(meminit, range);
+      offset += get_val_size(meminit->type, range);
+    }
+    int ty_size = get_val_size(init->type, range);
+    if (offset < ty_size) {
+      printf("  .zero %d\n", ty_size - offset);
+      offset = ty_size;
+    }
+    assert(offset == ty_size);
+    return;
+  }
+  assert(false);
+}
+
 static void gen_gvar(GlobalVar *gvar) {
-  Expr *init = gvar->init;
+  Initializer *init = gvar->init;
   if (init == NULL) {
     printf("  .bss\n");
     printf(".global %s\n", gvar->name);
@@ -725,24 +787,7 @@ static void gen_gvar(GlobalVar *gvar) {
     printf("  .data\n");
     printf(".global %s\n", gvar->name);
     printf("%s:\n", gvar->name);
-    if (init->ty == EX_NUM) {
-      if (init->val_type->ty == TY_INT) {
-        printf("  .long %d\n", init->num_val.int_val);
-      } else if (init->val_type->ty == TY_LONG) {
-        printf("  .quad %ld\n", init->num_val.long_val);
-      } else if (init->val_type->ty == TY_PTR) {
-        printf("  .quad %" PRIdPTR "\n", init->num_val.ptr_val);
-      } else {
-        range_error(gvar->range, "int型ではありません");
-      }
-    } else if (init->ty == '&' && init->lhs == NULL && init->rhs != NULL) {
-      if (init->rhs->ty != EX_GLOBAL_VAR) {
-        range_error(gvar->range, "グローバル変数以外へのポインタです");
-      }
-      printf("  .quad %s\n", init->rhs->name);
-    } else {
-      range_error(gvar->range, "数値でもポインタでもありません");
-    }
+    gen_gvar_init(init, gvar->range);
   }
 }
 

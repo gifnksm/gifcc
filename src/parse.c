@@ -41,12 +41,13 @@ typedef enum { DEF_GLOBAL_VAR, DEF_STACK_VAR, DEF_FUNC } def_type_t;
 typedef struct VarDef {
   def_type_t type;
   Token *name;
-  Expr *init;
+  Initializer *init;
   StackVar *stack_var;
   GlobalVar *global_var;
   Function *func;
 } VarDef;
 
+static Number new_number_int(int val);
 static Number new_number_size(int val);
 static GlobalCtxt *new_global_ctxt(void);
 static FuncCtxt *new_func_ctxt(char *name, Type *type);
@@ -158,17 +159,19 @@ static void declarator(Scope *scope, Tokenizer *tokenizer, Type *base_type,
 static void direct_declarator(Scope *scope, Tokenizer *tokenizer,
                               Type *base_type, Token **name, Type **type,
                               Range *range);
-static Expr *initializer(Tokenizer *tokenizer, Scope *scope, Type *type);
+static Initializer *initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
+                                Member *member);
 
 // statement
 static Stmt *statement(Tokenizer *tokenizer, Scope *scope);
+static void gen_init(Scope *scope, Vector *stmts, Initializer *init,
+                     Expr *dest);
 static Stmt *compound_statement(Tokenizer *tokenizer, Scope *scope);
 
 // top-level
 static Function *function_definition(Tokenizer *tokenizer, Scope *global_scope,
                                      Type *type, char *name, Range start);
-static GlobalVar *new_global_variable(Type *type, char *name, Range range,
-                                      Expr *init);
+static GlobalVar *new_global_variable(Type *type, char *name, Range range);
 static TranslationUnit *translation_unit(Tokenizer *tokenizer);
 
 static Stmt null_stmt = {
@@ -180,6 +183,9 @@ TranslationUnit *parse(Reader *reader) {
   return translation_unit(tokenizer);
 }
 
+static Number new_number_int(int val) {
+  return (Number){.type = TY_INT, .ptr_val = val};
+}
 static Number new_number_size(int val) {
   return (Number){.type = TY_LONG, .ptr_val = val};
 }
@@ -251,7 +257,7 @@ static VarDef *register_var(Scope *scope, Token *name, Type *type,
   } else {
     ty = DEF_GLOBAL_VAR;
     (void)register_decl(scope, name->name, type, NULL);
-    gvar = new_global_variable(type, name->name, range, NULL);
+    gvar = new_global_variable(type, name->name, range);
   }
 
   VarDef *def = malloc(sizeof(VarDef));
@@ -1457,7 +1463,7 @@ static Vector *declaration(Tokenizer *tokenizer, Scope *scope) {
     } else {
       VarDef *def = register_var(scope, name, type, range);
       if (token_consume(tokenizer, '=')) {
-        def->init = initializer(tokenizer, scope, type);
+        def->init = initializer(tokenizer, scope, type, NULL);
       }
       vec_push(def_list, def);
     }
@@ -1473,7 +1479,7 @@ static Vector *declaration(Tokenizer *tokenizer, Scope *scope) {
       } else {
         VarDef *def = register_var(scope, name, type, range);
         if (token_consume(tokenizer, '=')) {
-          def->init = initializer(tokenizer, scope, type);
+          def->init = initializer(tokenizer, scope, type, NULL);
         }
         vec_push(def_list, def);
       }
@@ -1656,9 +1662,38 @@ static void direct_declarator(Scope *scope, Tokenizer *tokenizer,
   *placeholder = *base_type;
 }
 
-static Expr *initializer(Tokenizer *tokenizer, Scope *scope, Type *type) {
+static Initializer *initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
+                                Member *member) {
+  Initializer *init = malloc(sizeof(Initializer));
+  init->type = type;
+  init->member = member;
+
+  Token *token;
+  if ((token = token_consume(tokenizer, '{')) != NULL) {
+    if (type->ty != TY_STRUCT) {
+      range_error(token->range, "構造体ではありません");
+    }
+    Map *members = new_map();
+    for (int i = 0; i < type->members->vals->len; i++) {
+      map_put(members, type->members->keys->data[i], NULL);
+    }
+    for (int i = 0; i < type->members->vals->len; i++) {
+      Member *member = type->members->vals->data[i];
+      members->keys->data[i] = member->name;
+      members->vals->data[i] =
+          initializer(tokenizer, scope, member->type, member);
+      if (token_consume(tokenizer, ',') == NULL) {
+        break;
+      }
+    }
+    token_expect(tokenizer, '}');
+    init->members = members;
+    return init;
+  };
+
   Expr *expr = assignment_expression(tokenizer, scope);
-  Expr *init = new_expr_cast(scope, type, expr, expr->range);
+  init->expr = new_expr_cast(scope, type, expr, expr->range);
+
   return init;
 }
 
@@ -1809,6 +1844,36 @@ static Stmt *statement(Tokenizer *tokenizer, Scope *scope) {
   }
 }
 
+static void gen_init(Scope *scope, Vector *stmts, Initializer *init,
+                     Expr *dest) {
+  if (init == NULL) {
+    Expr *expr = new_expr_binop(scope, '=', dest,
+                                new_expr_num(new_number_int(0), dest->range),
+                                dest->range);
+    Stmt *s = new_stmt_expr(expr, expr->range);
+    vec_push(stmts, s);
+    return;
+  }
+
+  if (init->members != NULL) {
+    for (int i = 0; i < init->members->keys->len; i++) {
+      Expr *mem =
+          new_expr_dot(scope, dest, init->members->keys->data[i], dest->range);
+      gen_init(scope, stmts, init->members->vals->data[i], mem);
+    }
+    return;
+  }
+
+  if (init->expr != NULL) {
+    Expr *expr = new_expr_binop(scope, '=', dest, init->expr,
+                                range_join(dest->range, init->expr->range));
+    Stmt *s = new_stmt_expr(expr, expr->range);
+    vec_push(stmts, s);
+    return;
+  }
+  assert(false);
+}
+
 static Stmt *compound_statement(Tokenizer *tokenizer, Scope *scope) {
   Token *start = token_expect(tokenizer, '{');
 
@@ -1825,16 +1890,13 @@ static Stmt *compound_statement(Tokenizer *tokenizer, Scope *scope) {
           assert(def->type == DEF_FUNC);
           range_error(def->name->range, "関数内で関数は定義できません");
         }
-        if (def->init == NULL) {
+        Initializer *init = def->init;
+        if (init == NULL) {
           continue;
         }
 
-        Expr *ident = new_expr_ident(scope, def->name->name, def->name->range);
-        Expr *expr = new_expr_binop(scope, '=', ident, def->init,
-                                    range_join(ident->range, def->init->range));
-
-        Stmt *s = new_stmt_expr(expr, expr->range);
-        vec_push(stmts, s);
+        Expr *dest = new_expr_ident(scope, def->name->name, def->name->range);
+        gen_init(scope, stmts, init, dest);
       }
 
       continue;
@@ -1869,13 +1931,12 @@ static Function *function_definition(Tokenizer *tokenizer, Scope *global_scope,
   return func;
 }
 
-static GlobalVar *new_global_variable(Type *type, char *name, Range range,
-                                      Expr *init) {
+static GlobalVar *new_global_variable(Type *type, char *name, Range range) {
   GlobalVar *gvar = malloc(sizeof(GlobalVar));
   gvar->type = type;
   gvar->name = name;
   gvar->range = range;
-  gvar->init = init;
+  gvar->init = NULL;
   return gvar;
 }
 

@@ -474,6 +474,39 @@ static void dump_stmt(const Reader *reader, Stmt *stmt, int level) {
   error("未知のノードです: %d\n", stmt->ty);
 }
 
+static void dump_init(const Reader *reader, Initializer *init, Range range,
+                      int level) {
+  if (init == NULL) {
+    dump_range_start(reader, range);
+    dump_indent(level);
+    printf("NULL\n");
+  }
+
+  if (init->expr != NULL) {
+    dump_expr(reader, init->expr, level);
+    return;
+  }
+  if (init->members != NULL) {
+    dump_range_start(reader, range);
+    dump_indent(level);
+    dump_type(init->type);
+    printf("{\n");
+    for (int i = 0; i < init->members->keys->len; i++) {
+      char *name = init->members->keys->data[i];
+      Initializer *val = init->members->vals->data[i];
+      dump_range_start(reader, range);
+      dump_indent(level + 1);
+      printf(".%s = \n", name);
+      dump_init(reader, val, range, level + 1);
+    }
+    dump_range_end(reader, range);
+    dump_indent(level);
+    printf("}\n");
+    return;
+  }
+  assert(false);
+}
+
 static void output_ast(const Reader *reader, TranslationUnit *tunit) {
   int level = 0;
   for (int i = 0; i < tunit->func_list->len; i++) {
@@ -497,11 +530,11 @@ static void output_ast(const Reader *reader, TranslationUnit *tunit) {
     printf("GLOBAL ");
     dump_type(gvar->type);
     if (gvar->init != NULL) {
-      printf(" %s = {\n", gvar->name);
-      dump_expr(reader, gvar->init, level + 1);
+      printf(" %s = \n", gvar->name);
+      dump_init(reader, gvar->init, gvar->range, level + 1);
       dump_range_end(reader, gvar->range);
       dump_indent(level);
-      printf("}\n");
+      printf("\n");
     } else {
       printf(" %s\n", gvar->name);
     }

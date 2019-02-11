@@ -184,18 +184,26 @@ typedef struct Type {
   int member_align;
 } Type;
 
+typedef struct Member Member;
+typedef struct Expr Expr;
+typedef struct Initializer {
+  Type *type;
+  Member *member;
+  Map *members;
+  Expr *expr;
+} Initializer;
+
 typedef struct StackVar {
   int offset;
   Type *type;
   Range range;
 } StackVar;
 
-typedef struct Expr Expr;
 typedef struct GlobalVar {
   char *name;
   Type *type;
   Range range;
-  Expr *init;
+  Initializer *init;
 } GlobalVar;
 
 typedef struct Param {

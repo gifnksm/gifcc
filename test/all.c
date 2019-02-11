@@ -1235,6 +1235,40 @@ void test36(void) {
 int test36_f(int a) { return a; }
 int test36_g(int a) { return a; }
 
+struct {
+  int a;
+  int b;
+  char c;
+  int d;
+  short e;
+  void *f;
+} test37_s = {1, 2, 3, 4, 5, 6};
+void test37(void) {
+  check_int(1, test37_s.a);
+  check_int(2, test37_s.b);
+  check_int(3, test37_s.c);
+  check_int(4, test37_s.d);
+  check_int(5, test37_s.e);
+  check_int(6, test37_s.f);
+
+  struct S {
+    int a;
+    int b;
+    char c;
+    int d;
+    short e;
+    void *f;
+  } s = {11, 12, 13, 14, 15, 16};
+  check_int(11, s.a);
+  check_int(12, s.b);
+  check_int(13, s.c);
+  check_int(14, s.d);
+  check_int(15, s.e);
+  check_int(16, s.f);
+
+  test_ok(__func__);
+}
+
 int main(void) {
   test01();
   test02();
@@ -1271,6 +1305,7 @@ int main(void) {
   test34();
   test35();
   test36();
+  test37();
 
   return 0;
 }
