@@ -57,7 +57,8 @@ static Scope *new_global_scope(GlobalCtxt *gcx);
 static Scope *new_func_scope(Scope *global, FuncCtxt *fcx);
 static Scope *new_inner_scope(Scope *outer);
 static Member *new_member(char *name, Type *type, int offset, Range range);
-static VarDef *register_var(Scope *scope, Token *name, Type *type, Range range);
+static VarDef *register_var(Scope *scope, Token *name, Type *type, Range range,
+                            bool is_static);
 static VarDef *register_func(Scope *scope, Token *name, Type *type);
 static StackVar *register_stack_var(Scope *scope, Token *name, Type *type,
                                     Range range);
@@ -77,6 +78,7 @@ static bool is_array_type(Type *ty);
 static Type *integer_promoted(Scope *scope, Expr **e);
 static Type *arith_converted(Scope *scope, Expr **e1, Expr **e2);
 static bool token_is_typename(Scope *scope, Token *token);
+static bool token_is_storage_class_specifier(Token *token);
 static noreturn void binop_type_error_raw(int ty, Expr *lhs, Expr *rhs,
                                           const char *dbg_file, int dbg_line);
 static Type *new_type(int ty);
@@ -171,8 +173,10 @@ static Stmt *compound_statement(Tokenizer *tokenizer, Scope *scope);
 
 // top-level
 static Function *function_definition(Tokenizer *tokenizer, Scope *global_scope,
-                                     Type *type, char *name, Range start);
-static GlobalVar *new_global_variable(Type *type, char *name, Range range);
+                                     Type *type, char *name, bool is_static,
+                                     Range start);
+static GlobalVar *new_global_variable(Type *type, char *name, Range range,
+                                      bool is_static);
 static TranslationUnit *translation_unit(Tokenizer *tokenizer);
 
 TranslationUnit *parse(Reader *reader) {
@@ -250,8 +254,8 @@ static Member *new_member(char *name, Type *type, int offset, Range range) {
   return member;
 }
 
-static VarDef *register_var(Scope *scope, Token *name, Type *type,
-                            Range range) {
+static VarDef *register_var(Scope *scope, Token *name, Type *type, Range range,
+                            bool is_static) {
   def_type_t ty;
   StackVar *svar = NULL;
   GlobalVar *gvar = NULL;
@@ -261,7 +265,7 @@ static VarDef *register_var(Scope *scope, Token *name, Type *type,
   } else {
     ty = DEF_GLOBAL_VAR;
     (void)register_decl(scope, name->name, type, NULL);
-    gvar = new_global_variable(type, name->name, range);
+    gvar = new_global_variable(type, name->name, range, is_static);
   }
 
   VarDef *def = malloc(sizeof(VarDef));
@@ -476,6 +480,17 @@ static bool token_is_typename(Scope *scope, Token *token) {
     return true;
   case TK_IDENT:
     return get_typedef(scope, token->name);
+  default:
+    return false;
+  }
+}
+
+static bool token_is_storage_class_specifier(Token *token) {
+  switch (token->ty) {
+  case TK_TYPEDEF:
+  case TK_EXTERN:
+  case TK_STATIC:
+    return true;
   default:
     return false;
   }
@@ -1485,6 +1500,7 @@ static Vector *declaration(Tokenizer *tokenizer, Scope *scope) {
   Vector *def_list = new_vector();
   bool is_typedef = token_consume(tokenizer, TK_TYPEDEF);
   bool is_extern = token_consume(tokenizer, TK_EXTERN);
+  bool is_static = token_consume(tokenizer, TK_STATIC);
   Type *base_type = type_specifier(scope, tokenizer);
   if (token_consume(tokenizer, ';')) {
     return def_list;
@@ -1503,13 +1519,13 @@ static Vector *declaration(Tokenizer *tokenizer, Scope *scope) {
     if (is_func_type(type)) {
       VarDef *def = register_func(scope, name, type);
       if (token_peek(tokenizer)->ty == '{') {
-        def->func =
-            function_definition(tokenizer, scope, type, name->name, range);
+        def->func = function_definition(tokenizer, scope, type, name->name,
+                                        is_static, range);
         vec_push(def_list, def);
         return def_list;
       }
     } else {
-      VarDef *def = register_var(scope, name, type, range);
+      VarDef *def = register_var(scope, name, type, range, is_static);
       if (token_consume(tokenizer, '=')) {
         def->init = initializer(tokenizer, scope, type, NULL);
       }
@@ -1527,7 +1543,7 @@ static Vector *declaration(Tokenizer *tokenizer, Scope *scope) {
       if (is_func_type(type)) {
         (void)register_func(scope, name, type);
       } else {
-        VarDef *def = register_var(scope, name, type, range);
+        VarDef *def = register_var(scope, name, type, range, is_static);
         if (token_consume(tokenizer, '=')) {
           def->init = initializer(tokenizer, scope, type, NULL);
         }
@@ -2021,10 +2037,10 @@ static Stmt *compound_statement(Tokenizer *tokenizer, Scope *scope) {
   Vector *stmts = new_vector();
   while (!token_consume(tokenizer, '}')) {
     Token *token = token_peek(tokenizer);
-    if (token_is_typename(scope, token) || token->ty == TK_TYPEDEF ||
-        token->ty == TK_EXTERN) {
-      Vector *def_list = declaration(tokenizer, scope);
+    if (token_is_typename(scope, token) ||
+        token_is_storage_class_specifier(token)) {
 
+      Vector *def_list = declaration(tokenizer, scope);
       for (int i = 0; i < def_list->len; i++) {
         VarDef *def = def_list->data[i];
         if (def->type != DEF_STACK_VAR) {
@@ -2042,6 +2058,7 @@ static Stmt *compound_statement(Tokenizer *tokenizer, Scope *scope) {
 
       continue;
     }
+
     Stmt *s = statement(tokenizer, scope);
     range = range_join(range, s->range);
     vec_push(stmts, s);
@@ -2050,7 +2067,8 @@ static Stmt *compound_statement(Tokenizer *tokenizer, Scope *scope) {
 }
 
 static Function *function_definition(Tokenizer *tokenizer, Scope *global_scope,
-                                     Type *type, char *name, Range start) {
+                                     Type *type, char *name, bool is_static,
+                                     Range start) {
   FuncCtxt *fcx = new_func_ctxt(name, type);
   Scope *scope = new_func_scope(global_scope, fcx);
   for (int i = 0; i < type->func_param->len; i++) {
@@ -2064,6 +2082,7 @@ static Function *function_definition(Tokenizer *tokenizer, Scope *global_scope,
   Function *func = malloc(sizeof(Function));
   func->name = name;
   func->type = type;
+  func->is_static = is_static;
   func->range = range_join(start, body->range);
   func->stack_size = fcx->stack_size;
   func->label_map = fcx->label_map;
@@ -2072,11 +2091,13 @@ static Function *function_definition(Tokenizer *tokenizer, Scope *global_scope,
   return func;
 }
 
-static GlobalVar *new_global_variable(Type *type, char *name, Range range) {
+static GlobalVar *new_global_variable(Type *type, char *name, Range range,
+                                      bool is_static) {
   GlobalVar *gvar = malloc(sizeof(GlobalVar));
   gvar->type = type;
   gvar->name = name;
   gvar->range = range;
+  gvar->is_static = is_static;
   gvar->init = NULL;
   return gvar;
 }

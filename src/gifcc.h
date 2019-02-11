@@ -75,9 +75,10 @@ enum {
   TK_RETURN,        // `return`
   TK_STRUCT,        // `struct`
   TK_UNION,         // `union`
-  TK_TYPEDEF,       // `typedef`
   TK_SIZEOF,        // `sizeof`
+  TK_TYPEDEF,       // `typedef`
   TK_EXTERN,        // `extern`
+  TK_STATIC,        // `static`
   TK_EOF,           // 入力の終わりを表すトークン
 };
 
@@ -214,6 +215,7 @@ typedef struct GlobalVar {
   char *name;
   Type *type;
   Range range;
+  bool is_static;
   Initializer *init;
 } GlobalVar;
 
@@ -297,6 +299,7 @@ typedef struct Function {
   char *name;
   Type *type;
   Range range;
+  bool is_static;
   int stack_size;
   Map *label_map;
   Stmt *body;

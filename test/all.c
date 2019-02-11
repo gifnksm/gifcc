@@ -1,7 +1,7 @@
 void abort(void);
 
-int num_check = 0;
-void check_int(int a, int b) {
+static int num_check = 0;
+static void check_int(int a, int b) {
   if (a != b) {
     printf("FAILED %d != %d\n", a, b);
     abort();
@@ -9,12 +9,12 @@ void check_int(int a, int b) {
   num_check++;
 }
 
-void test_ok(char *name) {
+static void test_ok(char *name) {
   printf("%s OK (%d assertions)\n", name, num_check);
   num_check = 0;
 }
 
-void test01(void) {
+static void test01(void) {
   check_int(0, 0);
   check_int(42, 42);
   check_int(21, 5 + 20 - 4);
@@ -26,24 +26,24 @@ void test01(void) {
   test_ok(__func__);
 }
 
-void test02_01(void) {
+static void test02_01(void) {
   int a = 2, b = 2;
   check_int(4, a + b);
   return;
 }
-void test02_02(void) {
+static void test02_02(void) {
   int a = 3;
   int b = 5 * 6 - 8;
   check_int(14, a + b / 2);
   return;
 }
-void test02_03(void) {
+static void test02_03(void) {
   int a, b;
   b = (a = 5);
   check_int(10, a + b);
   return;
 }
-void test02(void) {
+static void test02(void) {
   test02_01();
   test02_02();
   test02_03();
@@ -54,19 +54,19 @@ void test02(void) {
   test_ok(__func__);
 }
 
-void test03_01(void) {
+static void test03_01(void) {
   int c;
   int a = 3;
   int b = 5;
   check_int(0, c = a == b);
 }
-void test03_02(void) {
+static void test03_02(void) {
   int c;
   int a = 3;
   int b = 5;
   check_int(0, c = a == b);
 }
-void test03_03(void) {
+static void test03_03(void) {
   int a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u, v, w, x, y,
       z;
   a = b = c = d = e = f = g = h = i = j = k = l = m = n = o = p = q = r = s =
@@ -75,7 +75,7 @@ void test03_03(void) {
                 r + s + t + u + v + w + x + y + z,
             26);
 }
-void test03_04(void) {
+static void test03_04(void) {
   1;
   2;
   3;
@@ -197,19 +197,19 @@ void test03_04(void) {
   119;
   check_int(120, 120);
 }
-void test03_05(void) {
+static void test03_05(void) {
   int a = 1, c = 2, d = 3;
   check_int(6, a + c + d);
 }
-void test03_06(void) {
+static void test03_06(void) {
   int a = 1, ab = 2, abc = 3;
   check_int(6, a + ab + abc);
 }
-void test03_07(void) {
+static void test03_07(void) {
   int _ = 123, a_ = 1;
   check_int(124, _ + a_);
 }
-void test03(void) {
+static void test03(void) {
   test03_01();
   test03_02();
   test03_03();
@@ -221,7 +221,7 @@ void test03(void) {
   test_ok(__func__);
 }
 
-void test04(void) {
+static void test04(void) {
   int a = 0;
   check_int(8, 1 << 2 << 1);
   check_int(2, 1 << 2 >> 1);
@@ -258,7 +258,7 @@ void test04(void) {
   test_ok(__func__);
 }
 
-void test05(void) {
+static void test05(void) {
   int a, b;
 
   a = +3;
@@ -300,7 +300,7 @@ void test05(void) {
   test_ok(__func__);
 }
 
-void test06(void) {
+static void test06(void) {
   1;
   ;
   2;
@@ -312,7 +312,7 @@ void test06(void) {
   test_ok(__func__);
 }
 
-void test07(void) {
+static void test07(void) {
   int a, b, c, s;
 
   a = 1;
@@ -493,7 +493,7 @@ void test07(void) {
   test_ok(__func__);
 }
 
-void test08(void) {
+static void test08(void) {
   int a, *p;
 
   a = 4;
@@ -544,7 +544,7 @@ void test08(void) {
   test_ok(__func__);
 }
 
-int test09_01(int n) {
+static int test09_01(int n) {
   switch (n) {
   case 0:
     return 0;
@@ -555,7 +555,7 @@ int test09_01(int n) {
   }
   abort();
 }
-void test09_02(void) {
+static void test09_02(void) {
   int c = 0, i;
   for (i = 0; i < 5; i++) {
     switch (i) {
@@ -581,7 +581,7 @@ void test09_02(void) {
   }
   check_int(5, c);
 }
-void test09_03(void) {
+static void test09_03(void) {
   int i = 3, s = 0;
   goto INIT;
   for (i = 0; i < 5; i++) {
@@ -590,14 +590,14 @@ void test09_03(void) {
   }
   check_int(7, s);
 }
-void test09_04(void) {
+static void test09_04(void) {
   int x = 5;
   switch (1)
   case 0:
     abort();
   check_int(5, x);
 }
-void test09(void) {
+static void test09(void) {
   check_int(3, test09_01(3));
   check_int(0, test09_01(0));
   check_int(255, test09_01(8));
@@ -608,7 +608,7 @@ void test09(void) {
   test_ok(__func__);
 }
 
-void test10(void) {
+static void test10(void) {
   check_int(255, 0xff);
   check_int(16, 0x10);
   check_int(255, 0377);
@@ -627,24 +627,26 @@ void test10(void) {
   test_ok(__func__);
 }
 
-int test11_01(void) {
+static int test11_01(void) {
   if (1)
     return 3;
   abort();
 }
-void test11(void) {
+static void test11(void) {
   check_int(3, test11_01());
   test_ok(__func__);
 }
 
-int ret3() { return 3; }
-int ret8() { return 8; }
-int add_38(void) { return ret3() + ret8(); }
-int to_double(int n) { return 2 * n; }
-int add(int a, int b) { return a + b; }
-int sub(int a, int b) { return a - b; }
-int fib(int n) { return (n <= 0) ? 0 : (n == 1) ? 1 : fib(n - 2) + fib(n - 1); }
-void test12(void) {
+static int ret3() { return 3; }
+static int ret8() { return 8; }
+static int add_38(void) { return ret3() + ret8(); }
+static int to_double(int n) { return 2 * n; }
+static int add(int a, int b) { return a + b; }
+static int sub(int a, int b) { return a - b; }
+static int fib(int n) {
+  return (n <= 0) ? 0 : (n == 1) ? 1 : fib(n - 2) + fib(n - 1);
+}
+static void test12(void) {
   int a, b;
   a = add_38();
   b = ret3();
@@ -669,18 +671,18 @@ void test12(void) {
   test_ok(__func__);
 }
 
-int add6(int a, int b, int c, int d, int e, int f) {
+static int add6(int a, int b, int c, int d, int e, int f) {
   return a + b + c + d + e + f;
 }
-int digits6(int a, int b, int c, int d, int e, int f) {
+static int digits6(int a, int b, int c, int d, int e, int f) {
   return ((((((a * 10) + b) * 10 + c) * 10 + d) * 10 + e) * 10 + f);
 }
-int add10(int a, int b, int c, int d, int e, int f, int g, int h, int i,
-          int j) {
+static int add10(int a, int b, int c, int d, int e, int f, int g, int h, int i,
+                 int j) {
   return a + b + c + d + e + f + g + h + i + j;
 }
-int digits10(int a, int b, int c, int d, int e, int f, int g, int h, int i,
-             int j) {
+static int digits10(int a, int b, int c, int d, int e, int f, int g, int h,
+                    int i, int j) {
   return (
       (((((((((a * 10) + b) * 10 + c) * 10 + d) * 10 + e) * 10 + f) * 10 + g) *
             10 +
@@ -691,7 +693,7 @@ int digits10(int a, int b, int c, int d, int e, int f, int g, int h, int i,
       j);
 }
 
-void test13(void) {
+static void test13(void) {
   check_int(123456, digits6(1, 2, 3, 4, 5, 6));
   check_int(21, add6(1, 2, 3, 4, 5, 6));
   check_int(1234567890, digits10(1, 2, 3, 4, 5, 6, 7, 8, 9, 0));
@@ -700,13 +702,13 @@ void test13(void) {
   test_ok(__func__);
 }
 
-void test14(void) {
+static void test14(void) {
   int a, *b, **c, ***d;
 
   test_ok(__func__);
 }
 
-void test15(void) {
+static void test15(void) {
   int *p, *q, i;
 
   p = 30;
@@ -765,7 +767,7 @@ void test15(void) {
   test_ok(__func__);
 }
 
-void test16(void) {
+static void test16(void) {
   int a[3];
 
   *a = 1;
@@ -785,10 +787,10 @@ void test16(void) {
   test_ok(__func__);
 }
 
-int *test17_01(int *x) { return x + 1; }
-void test17_02(void) {}
-void *test17_03(void *p) { return p; }
-void test17(void) {
+static int *test17_01(int *x) { return x + 1; }
+static void test17_02(void) {}
+static void *test17_03(void *p) { return p; }
+static void test17(void) {
   int a[4];
 
   a[0] = 1;
@@ -805,22 +807,22 @@ void test17(void) {
   test_ok(__func__);
 }
 
-int test18_g;
-int test18_h[3];
-void test18_init(void) {
+static int test18_g;
+static int test18_h[3];
+static void test18_init(void) {
   test18_g = 3;
   test18_h[0] = 1;
   test18_h[1] = 2;
   test18_h[2] = 3;
 }
 
-int test18_add(int n) {
+static int test18_add(int n) {
   test18_g += n;
   test18_h[0] *= test18_h[0];
   test18_h[1] *= test18_h[1];
   test18_h[2] *= test18_h[2];
 }
-void test18(void) {
+static void test18(void) {
   test18_g = 100;
   check_int(test18_g, 100);
 
@@ -834,7 +836,7 @@ void test18(void) {
   test_ok(__func__);
 }
 
-void test19(void) {
+static void test19(void) {
   char x[4];
   x[0] = 'a';
   x[1] = 'b';
@@ -853,7 +855,7 @@ void test19(void) {
   test_ok(__func__);
 }
 
-void test20(void) {
+static void test20(void) {
   puts("hogehoge");
   puts("\n\n\r\r");
   puts("ほげほげ");
@@ -863,7 +865,7 @@ void test20(void) {
   test_ok(__func__);
 }
 
-void test21(void) {
+static void test21(void) {
   int a[3][5], i, j;
 
   for (i = 0; i < 3; i++) {
@@ -891,9 +893,9 @@ void test21(void) {
   test_ok(__func__);
 }
 
-int test22_g;
-void test22_func(int n) { test22_g = n; }
-void test22(void) {
+static int test22_g;
+static void test22_func(int n) { test22_g = n; }
+static void test22(void) {
   int(*a)[3], b[3], (**c)[3];
 
   c = &a;
@@ -915,7 +917,7 @@ void test22(void) {
   test_ok(__func__);
 }
 
-void test23_fun(int a, int b) {
+static void test23_fun(int a, int b) {
   int c, d, e;
   c = 3;
   d = 4;
@@ -945,13 +947,13 @@ void test23_fun(int a, int b) {
   check_int(4, d);
   check_int(7, e);
 }
-void test23(void) {
+static void test23(void) {
   test23_fun(1, 2);
 
   test_ok(__func__);
 }
 
-void test24(void) {
+static void test24(void) {
   char a = 64, b = a, c = a, d = a;
   check_int(256, a + b + c + d);
 
@@ -962,7 +964,7 @@ void test24(void) {
   test_ok(__func__);
 }
 
-void test25(void) {
+static void test25(void) {
   // comment
   /* comment */
   test_ok(__func__);
@@ -971,11 +973,9 @@ void test25(void) {
 struct Test26 {
   int z;
 };
-struct Test26 test26_x;
-struct {
-  int y;
-} test26_y, test26_z;
-void test26(void) {
+static struct Test26 test26_x;
+static struct { int y; } test26_y, test26_z;
+static void test26(void) {
   struct Foo {
     int x, y;
   } s;
@@ -1029,7 +1029,7 @@ void test26(void) {
 }
 
 typedef int test27_type;
-void test27(void) {
+static void test27(void) {
   typedef int x;
   typedef int y(int x);
   typedef int z[3];
@@ -1045,15 +1045,15 @@ void test27(void) {
   test_ok(__func__);
 }
 
-int test28_foo(int, int, int);
-int test28_foo(int a, int b, int c) { return a + b + c; }
-void test28(void) {
+static int test28_foo(int, int, int);
+static int test28_foo(int a, int b, int c) { return a + b + c; }
+static void test28(void) {
   check_int(12, test28_foo(3, 4, 5));
 
   test_ok(__func__);
 }
 
-void test29(void) {
+static void test29(void) {
   int a[7];
   struct Foo {
     int a[9];
@@ -1068,7 +1068,7 @@ void test29(void) {
   test_ok(__func__);
 }
 
-void test30(void) {
+static void test30(void) {
   union {
     int a;
     int b;
@@ -1085,20 +1085,20 @@ void test30(void) {
   test_ok(__func__);
 }
 
-int test31_x = 3;
-void test31(void) {
+static int test31_x = 3;
+static void test31(void) {
   check_int(3, test31_x);
   test_ok(__func__);
 }
 
-long test32_x = 8;
-long *test32_p = &test32_x;
-char test32_fun_char(void) { return 0; }
-short test32_fun_short(void) { return 0; }
-int test32_fun_int(void) { return 0; }
-long test32_fun_long(void) { return 0; }
-int *test32_fun_ptr(void) { return 0; }
-void test32(void) {
+static long test32_x = 8;
+static long *test32_p = &test32_x;
+static char test32_fun_char(void) { return 0; }
+static short test32_fun_short(void) { return 0; }
+static int test32_fun_int(void) { return 0; }
+static long test32_fun_long(void) { return 0; }
+static int *test32_fun_ptr(void) { return 0; }
+static void test32(void) {
   long x = 3;
   int y = 3;
 
@@ -1125,7 +1125,7 @@ void test32(void) {
   test_ok(__func__);
 }
 
-void test33(void) {
+static void test33(void) {
   struct {
     struct {
       int a;
@@ -1150,7 +1150,7 @@ void test33(void) {
   test_ok(__func__);
 }
 
-void test34(void) {
+static void test34(void) {
   char ca = 3, cb = 5;
   check_int(8, ca + cb);
   check_int(-2, ca - cb);
@@ -1226,7 +1226,7 @@ void test34(void) {
   test_ok(__func__);
 }
 
-void test35(void) {
+static void test35(void) {
   char cx = 0;
   cx = cx + 1;
   check_int(1, cx);
@@ -1238,15 +1238,16 @@ void test35(void) {
   test_ok(__func__);
 }
 
-int test36_f(int a), test36_g(int a), a;
-void test36(void) {
+static int test36_f(int test36_a), test36_g(int test36_a), test36_a = 100;
+static void test36(void) {
   check_int(0, test36_f(1) - test36_g(1));
+  check_int(100, test36_a);
   test_ok(__func__);
 }
-int test36_f(int a) { return a; }
-int test36_g(int a) { return a; }
+static int test36_f(int test36_a) { return test36_a; }
+static int test36_g(int test36_a) { return test36_a; }
 
-struct {
+static struct {
   int a;
   int b;
   char c;
@@ -1254,7 +1255,7 @@ struct {
   short e;
   void *f;
 } test37_s = {1, 2, 3, 4, 5, 6};
-struct {
+static struct {
   int a;
   int b;
   char c;
@@ -1262,7 +1263,7 @@ struct {
   short e;
   void *f;
 } test37_t = {{{1}}, {2}, {3}, {{{4}}}, {5}, 6};
-void test37(void) {
+static void test37(void) {
   check_int(1, test37_s.a);
   check_int(2, test37_s.b);
   check_int(3, test37_s.c);
@@ -1310,14 +1311,14 @@ void test37(void) {
   test_ok(__func__);
 }
 
-union {
+static union {
   int a;
   int b;
   char c;
   int d;
   short e;
 } test38_u = {1};
-void test38(void) {
+static void test38(void) {
   check_int(1, test38_u.a);
   check_int(1, test38_u.b);
   check_int(1, test38_u.c);
@@ -1340,7 +1341,7 @@ void test38(void) {
   test_ok(__func__);
 }
 
-struct {
+static struct {
   int a;
   int b;
   union {
@@ -1352,7 +1353,7 @@ struct {
     int y;
   } e;
 } test39_s = {1, 2, {3}, {4, 5}};
-struct {
+static struct {
   int a;
   int b;
   union {
@@ -1365,7 +1366,7 @@ struct {
   } e;
 } test39_t = {21, 22, 23, 24, 25};
 
-void test39(void) {
+static void test39(void) {
   check_int(1, test39_s.a);
   check_int(2, test39_s.b);
   check_int(3, test39_s.c);
@@ -1421,7 +1422,7 @@ void test39(void) {
   test_ok(__func__);
 }
 
-void test40(void) {
+static void test40(void) {
   union {
     struct {
       int a;
@@ -1438,8 +1439,8 @@ void test40(void) {
   test_ok(__func__);
 }
 
-long test41_f(void) { return 111; }
-void test41(void) {
+static long test41_f(void) { return 111; }
+static void test41(void) {
   check_int(111, test41_f());
   check_int(8, sizeof(test41_f()));
 
@@ -1451,14 +1452,19 @@ void test41(void) {
 }
 
 extern int test42_n;
+static int test42_l;
 extern int test42_f(void);
-void test42(void) {
+static int test42_h(void);
+static void test42(void) {
   extern int test42_m;
   extern int test42_g(void);
+
   check_int(8, test42_n);
   check_int(32, test42_f());
   check_int(10, test42_m);
   check_int(64, test42_g());
+  check_int(12, test42_l);
+  check_int(128, test42_h());
 
   test_ok(__func__);
 }
@@ -1468,10 +1474,14 @@ int test42_n;
 int test42_m;
 int test42_m = 10;
 int test42_m;
+static int test42_l;
+static int test42_l = 12;
+static int test42_l;
 int test42_f(void) { return 32; }
 int test42_g(void) { return 64; }
+static int test42_h(void) { return 128; }
 
-void test43(void) {
+static void test43(void) {
   char c1 = 0;
   short int s1 = 1;
   short s2 = 2;
@@ -1493,7 +1503,7 @@ void test43(void) {
   test_ok(__func__);
 }
 
-void test44(void) {
+static void test44(void) {
   signed char sc1 = 0;
   signed short int ss1 = 1;
   signed short ss2 = 2;

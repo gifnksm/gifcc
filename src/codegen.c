@@ -667,7 +667,9 @@ static void gen_func(Function *func) {
   break_labels = new_vector();
   continue_labels = new_vector();
 
-  printf(".global %s\n", func->name);
+  if (!func->is_static) {
+    printf(".global %s\n", func->name);
+  }
   printf("%s:\n", func->name);
 
   // プロローグ
@@ -793,12 +795,16 @@ static void gen_gvar(GlobalVar *gvar) {
   Initializer *init = gvar->init;
   if (init == NULL) {
     printf("  .bss\n");
-    printf(".global %s\n", gvar->name);
+    if (!gvar->is_static) {
+      printf(".global %s\n", gvar->name);
+    }
     printf("%s:\n", gvar->name);
     printf("  .zero %d\n", get_val_size(gvar->type, gvar->range));
   } else {
     printf("  .data\n");
-    printf(".global %s\n", gvar->name);
+    if (!gvar->is_static) {
+      printf(".global %s\n", gvar->name);
+    }
     printf("%s:\n", gvar->name);
     gen_gvar_init(init, gvar->range);
   }
