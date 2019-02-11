@@ -379,7 +379,7 @@ int get_val_align(Type *ty, Range range);
 TranslationUnit *parse(Reader *reader);
 
 char *make_label(void);
-void gen(const Reader *reader, TranslationUnit *tunit);
+void gen(TranslationUnit *tunit);
 
 static inline Range range_join(Range a, Range b) {
   assert(a.start >= 0);

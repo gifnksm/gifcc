@@ -327,7 +327,7 @@ static void dump_expr(Expr *expr, int level) {
   error("未知のノードです: %d\n", expr->ty);
 }
 
-static void dump_stmt(const Reader *reader, Stmt *stmt, int level) {
+static void dump_stmt(Stmt *stmt, int level) {
   switch (stmt->ty) {
   case ST_EXPR:
     dump_range_start(stmt->range);
@@ -343,7 +343,7 @@ static void dump_stmt(const Reader *reader, Stmt *stmt, int level) {
     dump_indent(level);
     printf("{COMPOUND\n");
     for (int i = 0; i < stmt->stmts->len; i++) {
-      dump_stmt(reader, stmt->stmts->data[i], level + 1);
+      dump_stmt(stmt->stmts->data[i], level + 1);
     }
     dump_range_end(stmt->range);
     dump_indent(level);
@@ -354,8 +354,8 @@ static void dump_stmt(const Reader *reader, Stmt *stmt, int level) {
     dump_indent(level);
     printf("{IF\n");
     dump_expr(stmt->cond, level + 1);
-    dump_stmt(reader, stmt->then_stmt, level + 1);
-    dump_stmt(reader, stmt->else_stmt, level + 1);
+    dump_stmt(stmt->then_stmt, level + 1);
+    dump_stmt(stmt->else_stmt, level + 1);
     dump_range_end(stmt->range);
     dump_indent(level);
     printf("}\n");
@@ -365,7 +365,7 @@ static void dump_stmt(const Reader *reader, Stmt *stmt, int level) {
     dump_indent(level);
     printf("{SWITCH\n");
     dump_expr(stmt->cond, level + 1);
-    dump_stmt(reader, stmt->body, level + 1);
+    dump_stmt(stmt->body, level + 1);
     dump_range_end(stmt->range);
     dump_indent(level);
     printf("}\n");
@@ -375,7 +375,7 @@ static void dump_stmt(const Reader *reader, Stmt *stmt, int level) {
     dump_indent(level);
     printf("{CASE\n");
     dump_expr(stmt->expr, level + 1);
-    dump_stmt(reader, stmt->body, level + 1);
+    dump_stmt(stmt->body, level + 1);
     dump_range_end(stmt->range);
     dump_indent(level);
     printf("}\n");
@@ -384,7 +384,7 @@ static void dump_stmt(const Reader *reader, Stmt *stmt, int level) {
     dump_range_start(stmt->range);
     dump_indent(level);
     printf("{DEFAULT\n");
-    dump_stmt(reader, stmt->body, level + 1);
+    dump_stmt(stmt->body, level + 1);
     dump_range_end(stmt->range);
     dump_indent(level);
     printf("}\n");
@@ -393,7 +393,7 @@ static void dump_stmt(const Reader *reader, Stmt *stmt, int level) {
     dump_range_start(stmt->range);
     dump_indent(level);
     printf("{LABEL %s\n", stmt->name);
-    dump_stmt(reader, stmt->body, level + 1);
+    dump_stmt(stmt->body, level + 1);
     dump_range_end(stmt->range);
     dump_indent(level);
     printf("}\n");
@@ -403,7 +403,7 @@ static void dump_stmt(const Reader *reader, Stmt *stmt, int level) {
     dump_indent(level);
     printf("{WHILE\n");
     dump_expr(stmt->cond, level + 1);
-    dump_stmt(reader, stmt->body, level + 1);
+    dump_stmt(stmt->body, level + 1);
     dump_range_end(stmt->range);
     dump_indent(level);
     printf("\n");
@@ -413,7 +413,7 @@ static void dump_stmt(const Reader *reader, Stmt *stmt, int level) {
     dump_indent(level);
     printf("{DO_WHILE\n");
     dump_expr(stmt->cond, level + 1);
-    dump_stmt(reader, stmt->body, level + 1);
+    dump_stmt(stmt->body, level + 1);
     dump_range_end(stmt->range);
     dump_indent(level);
     printf("\n");
@@ -443,7 +443,7 @@ static void dump_stmt(const Reader *reader, Stmt *stmt, int level) {
       dump_indent(level + 1);
       printf("<void>(NULL)\n");
     }
-    dump_stmt(reader, stmt->body, level + 1);
+    dump_stmt(stmt->body, level + 1);
     dump_range_end(stmt->range);
     dump_indent(level);
     printf("\n");
@@ -487,8 +487,7 @@ static void dump_stmt(const Reader *reader, Stmt *stmt, int level) {
   error("未知のノードです: %d\n", stmt->ty);
 }
 
-static void dump_init(const Reader *reader, Initializer *init, Range range,
-                      int level) {
+static void dump_init(Initializer *init, Range range, int level) {
   if (init == NULL) {
     dump_range_start(range);
     dump_indent(level);
@@ -510,7 +509,7 @@ static void dump_init(const Reader *reader, Initializer *init, Range range,
       dump_range_start(range);
       dump_indent(level + 1);
       printf(".%s = \n", name);
-      dump_init(reader, val, range, level + 1);
+      dump_init(val, range, level + 1);
     }
     dump_range_end(range);
     dump_indent(level);
@@ -520,7 +519,7 @@ static void dump_init(const Reader *reader, Initializer *init, Range range,
   assert(false);
 }
 
-static void output_ast(const Reader *reader, TranslationUnit *tunit) {
+static void output_ast(TranslationUnit *tunit) {
   int level = 0;
   for (int i = 0; i < tunit->func_list->len; i++) {
     Function *func = tunit->func_list->data[i];
@@ -530,7 +529,7 @@ static void output_ast(const Reader *reader, TranslationUnit *tunit) {
     printf("FUNCTION ");
     dump_type(func->type);
     printf(" %s = {\n", func->name);
-    dump_stmt(reader, func->body, level + 1);
+    dump_stmt(func->body, level + 1);
     dump_range_end(func->range);
     dump_indent(level);
     printf("}\n");
@@ -544,7 +543,7 @@ static void output_ast(const Reader *reader, TranslationUnit *tunit) {
     dump_type(gvar->type);
     if (gvar->init != NULL) {
       printf(" %s = \n", gvar->name);
-      dump_init(reader, gvar->init, gvar->range, level + 1);
+      dump_init(gvar->init, gvar->range, level + 1);
       dump_range_end(gvar->range);
       dump_indent(level);
       printf("\n");
@@ -627,11 +626,11 @@ int main(int argc, char **argv) {
   TranslationUnit *tunit = parse(reader);
 
   if (output_mode == OUTPUT_AST) {
-    output_ast(reader, tunit);
+    output_ast(tunit);
     return 0;
   }
 
-  gen(reader, tunit);
+  gen(tunit);
 
   return 0;
 }
