@@ -668,6 +668,14 @@ static Expr *new_expr_call(Scope *scope, Expr *callee, Vector *argument,
     // TODO: 定義のない関数の戻り値はintを仮定する
     ret_type = new_type(TY_INT);
   }
+  if (callee->val_type->func_param != NULL) {
+    Vector *params = callee->val_type->func_param;
+    for (int i = 0; i < params->len && i < argument->len; i++) {
+      Param *param = params->data[i];
+      Expr *arg = argument->data[i];
+      argument->data[i] = new_expr_cast(scope, param->type, arg, arg->range);
+    }
+  }
   Expr *expr = new_expr(EX_CALL, ret_type, range);
   expr->callee = callee;
   expr->argument = argument;
