@@ -590,12 +590,20 @@ void test09_03(void) {
   }
   check_int(7, s);
 }
+void test09_04(void) {
+  int x = 5;
+  switch (1)
+  case 0:
+    abort();
+  check_int(5, x);
+}
 void test09(void) {
   check_int(3, test09_01(3));
   check_int(0, test09_01(0));
   check_int(255, test09_01(8));
   test09_02();
   test09_03();
+  test09_04();
 
   test_ok(__func__);
 }

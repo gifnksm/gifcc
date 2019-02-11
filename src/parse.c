@@ -113,9 +113,9 @@ static Stmt *new_stmt_expr(Expr *expr, Range range);
 static Stmt *new_stmt_if(Expr *cond, Stmt *then_stmt, Stmt *else_stmt,
                          Range range);
 static Stmt *new_stmt_switch(Expr *cond, Stmt *body, Range range);
-static Stmt *new_stmt_case(Expr *expr, Range range);
-static Stmt *new_stmt_default(Range range);
-static Stmt *new_stmt_label(FuncCtxt *fcx, char *name, Range range);
+static Stmt *new_stmt_case(Expr *expr, Stmt *body, Range range);
+static Stmt *new_stmt_default(Stmt *body, Range range);
+static Stmt *new_stmt_label(FuncCtxt *fcx, char *name, Stmt *body, Range range);
 static Stmt *new_stmt_while(Expr *cond, Stmt *body, Range range);
 static Stmt *new_stmt_do_while(Expr *cond, Stmt *body, Range range);
 static Stmt *new_stmt_for(Expr *init, Expr *cond, Expr *inc, Stmt *body,
@@ -1140,23 +1140,27 @@ static Stmt *new_stmt_switch(Expr *cond, Stmt *body, Range range) {
   return stmt;
 }
 
-static Stmt *new_stmt_case(Expr *expr, Range range) {
+static Stmt *new_stmt_case(Expr *expr, Stmt *body, Range range) {
   Stmt *stmt = new_stmt(ST_CASE, range);
   stmt->expr = expr;
   stmt->label = make_label();
+  stmt->body = body;
   return stmt;
 }
 
-static Stmt *new_stmt_default(Range range) {
+static Stmt *new_stmt_default(Stmt *body, Range range) {
   Stmt *stmt = new_stmt(ST_DEFAULT, range);
   stmt->label = make_label();
+  stmt->body = body;
   return stmt;
 }
 
-static Stmt *new_stmt_label(FuncCtxt *fcx, char *name, Range range) {
+static Stmt *new_stmt_label(FuncCtxt *fcx, char *name, Stmt *body,
+                            Range range) {
   Stmt *stmt = new_stmt(ST_LABEL, range);
   stmt->name = name;
   stmt->label = make_label();
+  stmt->body = body;
   map_put(fcx->label_map, stmt->name, stmt->label);
   return stmt;
 }
@@ -1799,8 +1803,10 @@ static Stmt *statement(Tokenizer *tokenizer, Scope *scope) {
   case TK_CASE: {
     token_succ(tokenizer);
     Expr *expr = constant_expression(tokenizer, scope);
-    Token *end = token_expect(tokenizer, ':');
-    Stmt *stmt = new_stmt_case(expr, range_join(start->range, end->range));
+    token_expect(tokenizer, ':');
+    Stmt *body = statement(tokenizer, scope);
+    Stmt *stmt =
+        new_stmt_case(expr, body, range_join(start->range, body->range));
     if (scope->func_ctxt->switches->len <= 0) {
       range_error(stmt->range, "switch文中でない箇所にcase文があります");
     }
@@ -1811,8 +1817,9 @@ static Stmt *statement(Tokenizer *tokenizer, Scope *scope) {
   }
   case TK_DEFAULT: {
     token_succ(tokenizer);
-    Token *end = token_expect(tokenizer, ':');
-    Stmt *stmt = new_stmt_default(range_join(start->range, end->range));
+    token_expect(tokenizer, ':');
+    Stmt *body = statement(tokenizer, scope);
+    Stmt *stmt = new_stmt_default(body, range_join(start->range, body->range));
     if (scope->func_ctxt->switches->len <= 0) {
       range_error(stmt->range, "switch文中でない箇所にcase文があります");
     }
@@ -1897,9 +1904,10 @@ static Stmt *statement(Tokenizer *tokenizer, Scope *scope) {
   case TK_IDENT: {
     if (token_peek_ahead(tokenizer, 1)->ty == ':') {
       Token *ident = token_pop(tokenizer);
-      Token *end = token_pop(tokenizer);
-      Stmt *stmt = new_stmt_label(scope->func_ctxt, ident->name,
-                                  range_join(start->range, end->range));
+      token_expect(tokenizer, ':');
+      Stmt *body = statement(tokenizer, scope);
+      Stmt *stmt = new_stmt_label(scope->func_ctxt, ident->name, body,
+                                  range_join(start->range, body->range));
       return stmt;
     }
   }

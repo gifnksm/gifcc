@@ -254,6 +254,10 @@ typedef struct Stmt {
   // ST_WHILE:    while (<cond>) <body>
   // ST_DO_WHILE: do <body> while(<cond>);
   // ST_FOR:      for (<init>; <cond>; <inc>) <body>
+  // ST_CASE:     case: <body>
+  // ST_DEFAULT:  default: <body>
+  // ST_LABEL:    <label>: <body>
+  char *label;
   struct Expr *init;
   struct Expr *cond;
   struct Expr *inc;
@@ -264,9 +268,6 @@ typedef struct Stmt {
   // ST_SWITCH
   Vector *cases;
   struct Stmt *default_case;
-
-  // ST_CASE, ST_DEFAULT, ST_LABEL
-  char *label;
 
   // ST_EXPR:   <expr>;
   // ST_CASE:   case <expr>:

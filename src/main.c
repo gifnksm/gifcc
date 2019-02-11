@@ -375,6 +375,7 @@ static void dump_stmt(const Reader *reader, Stmt *stmt, int level) {
     dump_indent(level);
     printf("{CASE\n");
     dump_expr(stmt->expr, level + 1);
+    dump_stmt(reader, stmt->body, level + 1);
     dump_range_end(stmt->range);
     dump_indent(level);
     printf("}\n");
@@ -382,12 +383,20 @@ static void dump_stmt(const Reader *reader, Stmt *stmt, int level) {
   case ST_DEFAULT:
     dump_range_start(stmt->range);
     dump_indent(level);
-    printf("{DEFAULT}\n");
+    printf("{DEFAULT\n");
+    dump_stmt(reader, stmt->body, level + 1);
+    dump_range_end(stmt->range);
+    dump_indent(level);
+    printf("}\n");
     return;
   case ST_LABEL:
     dump_range_start(stmt->range);
     dump_indent(level);
-    printf("{LABEL %s}\n", stmt->name);
+    printf("{LABEL %s\n", stmt->name);
+    dump_stmt(reader, stmt->body, level + 1);
+    dump_range_end(stmt->range);
+    dump_indent(level);
+    printf("}\n");
     return;
   case ST_WHILE:
     dump_range_start(stmt->range);

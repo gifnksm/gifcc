@@ -548,6 +548,7 @@ static void gen_stmt(const Reader *reader, Stmt *stmt) {
   case ST_DEFAULT:
   case ST_LABEL: {
     printf("%s:\n", stmt->label);
+    gen_stmt(reader, stmt->body);
     return;
   }
   case ST_WHILE: {
