@@ -1329,6 +1329,62 @@ void test38(void) {
   test_ok(__func__);
 }
 
+struct {
+  int a;
+  int b;
+  union {
+    int c;
+    int d;
+  };
+  struct {
+    int x;
+    int y;
+  } e;
+} test39_s = {1, 2, {3}, {4, 5}};
+
+void test39(void) {
+  check_int(1, test39_s.a);
+  check_int(2, test39_s.b);
+  check_int(3, test39_s.c);
+  check_int(3, test39_s.d);
+  check_int(4, test39_s.e.x);
+  check_int(5, test39_s.e.y);
+
+  struct {
+    int a;
+    int b;
+    union {
+      int c;
+      int d;
+    };
+    struct {
+      int x;
+      int y;
+    } e;
+  } s = {11, 12, {13}, {14, 15}};
+  check_int(11, s.a);
+  check_int(12, s.b);
+  check_int(13, s.c);
+  check_int(13, s.d);
+  check_int(14, s.e.x);
+  check_int(15, s.e.y);
+}
+
+void test40(void) {
+  union {
+    struct {
+      int a;
+      int b;
+    };
+    int c;
+    int d;
+  } s = {{1, 2}};
+  check_int(1, s.a);
+  check_int(2, s.b);
+  check_int(1, s.c);
+  check_int(1, s.d);
+}
+
 int main(void) {
   test01();
   test02();
@@ -1367,6 +1423,8 @@ int main(void) {
   test36();
   test37();
   test38();
+  test39();
+  test40();
 
   return 0;
 }

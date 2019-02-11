@@ -141,11 +141,11 @@ static void dump_type_inner(Type *ty) {
   case TY_STRUCT:
     printf("STRUCT %s", ty->tag);
     printf("(");
-    for (int i = 0; i < ty->members->keys->len; i++) {
+    for (int i = 0; i < ty->member_list->len; i++) {
       if (i > 0) {
         printf(", ");
       }
-      Member *member = ty->members->vals->data[i];
+      Member *member = ty->member_list->data[i];
       dump_type_inner(member->type);
       printf(" %s", member->name);
     }
@@ -154,11 +154,11 @@ static void dump_type_inner(Type *ty) {
   case TY_UNION:
     printf("UNION %s", ty->tag);
     printf("(");
-    for (int i = 0; i < ty->members->keys->len; i++) {
+    for (int i = 0; i < ty->member_list->len; i++) {
       if (i > 0) {
         printf(", ");
       }
-      Member *member = ty->members->vals->data[i];
+      Member *member = ty->member_list->data[i];
       dump_type_inner(member->type);
       printf(" %s", member->name);
     }

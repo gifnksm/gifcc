@@ -335,26 +335,27 @@ static void register_member(Type *type, char *member_name, Type *member_type,
     type->member_align = get_val_align(member_type, range);
   }
 
+  Member *member = new_member(member_name, member_type, offset, range);
+  vec_push(type->member_list, member);
   if (member_name == NULL) {
     assert(member_type->ty == TY_STRUCT || member_type->ty == TY_UNION);
-    Map *inner_members = member_type->members;
+    Map *inner_members = member_type->member_name_map;
     for (int i = 0; i < inner_members->keys->len; i++) {
       Member *inner = inner_members->vals->data[i];
-      Member *member =
+      Member *inner_member =
           new_member(inner->name, inner->type, offset + inner->offset, range);
-      if (map_get(type->members, member->name)) {
+      if (map_get(type->member_name_map, inner_member->name)) {
         range_error(range, "同じ名前のメンバ変数が複数あります: %s",
-                    member->name);
+                    inner_member->name);
       }
-      map_put(type->members, member->name, member);
+      map_put(type->member_name_map, inner_member->name, inner_member);
     }
   } else {
-    Member *member = new_member(member_name, member_type, offset, range);
-    if (map_get(type->members, member->name)) {
+    if (map_get(type->member_name_map, member->name)) {
       range_error(range, "同じ名前のメンバ変数が複数あります: %s",
                   member->name);
     }
-    map_put(type->members, member->name, member);
+    map_put(type->member_name_map, member->name, member);
   }
 }
 
@@ -502,7 +503,7 @@ int get_val_size(Type *ty, Range range) {
     range_error(range, "関数型の値サイズを取得しようとしました");
   case TY_STRUCT:
   case TY_UNION:
-    if (ty->members == NULL) {
+    if (ty->member_list == NULL) {
       range_error(range, "不完全型の値のサイズを取得しようとしました");
     }
     return align(ty->member_size, ty->member_align);
@@ -580,7 +581,8 @@ static Type *new_type_struct(int tk, char *tag) {
   Type *type = malloc(sizeof(Type));
   type->ty = tk == TK_STRUCT ? TY_STRUCT : TY_UNION;
   type->tag = tag;
-  type->members = new_map();
+  type->member_name_map = new_map();
+  type->member_list = new_vector();
   type->member_size = 0;
   type->member_align = 0;
   return type;
@@ -590,7 +592,8 @@ static Type *new_type_anon_struct(int tk) {
   assert(tk == TK_STRUCT || tk == TK_UNION);
   Type *type = malloc(sizeof(Type));
   type->ty = tk == TK_STRUCT ? TY_STRUCT : TY_UNION;
-  type->members = NULL;
+  type->member_name_map = NULL;
+  type->member_list = NULL;
   return type;
 }
 
@@ -1094,9 +1097,10 @@ static Expr *new_expr_arrow(Scope *scope, Expr *operand, char *name,
        operand->val_type->ptrof->ty != TY_UNION)) {
     range_error(range, "構造体または共用体以外のメンバへのアクセスです");
   }
-  Member *member = operand->val_type->ptrof->members
-                       ? map_get(operand->val_type->ptrof->members, name)
-                       : NULL;
+  Member *member =
+      operand->val_type->ptrof->member_name_map
+          ? map_get(operand->val_type->ptrof->member_name_map, name)
+          : NULL;
   if (member == NULL) {
     range_error(range, "存在しないメンバへのアクセスです: %s", name);
   }
@@ -1688,11 +1692,12 @@ static Initializer *initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
       init = new_initializer(type, member);
 
       Map *members = new_map();
-      for (int i = 0; i < type->members->vals->len; i++) {
-        map_put(members, type->members->keys->data[i], NULL);
+      for (int i = 0; i < type->member_list->len; i++) {
+        Member *member = type->member_list->data[i];
+        map_put(members, member->name, NULL);
       }
-      for (int i = 0; i < type->members->vals->len; i++) {
-        Member *member = type->members->vals->data[i];
+      for (int i = 0; i < type->member_list->len; i++) {
+        Member *member = type->member_list->data[i];
         members->keys->data[i] = member->name;
         members->vals->data[i] =
             initializer(tokenizer, scope, member->type, member);
@@ -1709,7 +1714,7 @@ static Initializer *initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
 
       Map *members = new_map();
       {
-        Member *member = type->members->vals->data[0];
+        Member *member = type->member_list->data[0];
         map_put(members, member->name, NULL);
         members->vals->data[0] =
             initializer(tokenizer, scope, member->type, member);
@@ -1895,9 +1900,11 @@ static void gen_init(Scope *scope, Vector *stmts, Initializer *init,
 
   if (init->members != NULL) {
     for (int i = 0; i < init->members->keys->len; i++) {
+      char *name = init->members->keys->data[i];
+      Initializer *meminit = init->members->vals->data[i];
       Expr *mem =
-          new_expr_dot(scope, dest, init->members->keys->data[i], dest->range);
-      gen_init(scope, stmts, init->members->vals->data[i], mem);
+          name != NULL ? new_expr_dot(scope, dest, name, dest->range) : dest;
+      gen_init(scope, stmts, meminit, mem);
     }
     return;
   }

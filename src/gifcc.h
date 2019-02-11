@@ -179,7 +179,8 @@ typedef struct Type {
   struct Type *func_ret;
   Vector *func_param;
   char *tag;
-  Map *members;
+  Map *member_name_map;
+  Vector *member_list;
   int member_size;
   int member_align;
 } Type;
