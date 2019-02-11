@@ -1478,6 +1478,8 @@ void test43(void) {
   int i1 = 3;
   long int l1 = 4;
   long l2 = 5;
+  long long int ll1 = 6;
+  long long ll2 = 7;
 
   check_int(0, c1);
   check_int(1, s1);
@@ -1485,6 +1487,8 @@ void test43(void) {
   check_int(3, i1);
   check_int(4, l1);
   check_int(5, l2);
+  check_int(6, ll1);
+  check_int(7, ll2);
 
   test_ok(__func__);
 }
@@ -1496,7 +1500,9 @@ void test44(void) {
   signed int si1 = 3;
   signed long int sl1 = 4;
   signed long sl2 = 5;
-  signed s1 = 6;
+  signed long long int sll1 = 6;
+  signed long long sll2 = 7;
+  signed s1 = 8;
 
   check_int(0, sc1);
   check_int(1, ss1);
@@ -1504,6 +1510,9 @@ void test44(void) {
   check_int(3, si1);
   check_int(4, sl1);
   check_int(5, sl2);
+  check_int(6, sll1);
+  check_int(7, sll2);
+  check_int(8, s1);
 
   test_ok(__func__);
 }

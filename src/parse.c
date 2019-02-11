@@ -428,7 +428,7 @@ static bool is_sametype(Type *ty1, Type *ty2) {
 
 static bool is_integer_type(Type *ty) {
   return ty->ty == TY_INT || ty->ty == TY_SHORT || ty->ty == TY_LONG ||
-         ty->ty == TY_CHAR || ty->ty == TY_SCHAR;
+         ty->ty == TY_LLONG || ty->ty == TY_CHAR || ty->ty == TY_SCHAR;
 }
 static bool is_arith_type(Type *ty) { return is_integer_type(ty); }
 static bool is_ptr_type(Type *ty) { return ty->ty == TY_PTR; }
@@ -495,6 +495,8 @@ int get_val_size(Type *ty, Range range) {
     return sizeof(short);
   case TY_LONG:
     return sizeof(long);
+  case TY_LLONG:
+    return sizeof(long long);
   case TY_PTR:
     return sizeof(void *);
   case TY_ARRAY:
@@ -525,6 +527,8 @@ int get_val_align(Type *ty, Range range) {
     return alignof(int);
   case TY_LONG:
     return alignof(long);
+  case TY_LLONG:
+    return alignof(long long);
   case TY_PTR:
     return alignof(void *);
   case TY_ARRAY:
@@ -752,6 +756,11 @@ static Expr *new_expr_cast(Scope *scope, Type *val_type, Expr *operand,
       operand->val_type = val_type;
       operand->num_val.type = val_type->ty;
       return operand;
+    case TY_LLONG:
+      SET_NUMBER_VAL(operand->num_val.llong_val, &operand->num_val);
+      operand->val_type = val_type;
+      operand->num_val.type = val_type->ty;
+      return operand;
     case TY_CHAR:
       SET_NUMBER_VAL(operand->num_val.char_val, &operand->num_val);
       operand->val_type = val_type;
@@ -864,6 +873,14 @@ static Number eval_binop(int op, type_t type, Number na, Number nb,
 
   case TY_LONG: {
     long a, b, *r = &num.long_val;
+    SET_NUMBER_VAL(a, &na);
+    SET_NUMBER_VAL(b, &nb);
+    BINOP(op, num, r, a, b);
+    break;
+  }
+
+  case TY_LLONG: {
+    long long a, b, *r = &num.llong_val;
     SET_NUMBER_VAL(a, &na);
     SET_NUMBER_VAL(b, &nb);
     BINOP(op, num, r, a, b);
@@ -1537,6 +1554,10 @@ static Type *type_specifier(Scope *scope, Tokenizer *tokenizer) {
     (void)token_consume(tokenizer, TK_INT);
     return new_type(TY_SHORT);
   case TK_LONG:
+    if (token_consume(tokenizer, TK_LONG)) {
+      (void)token_consume(tokenizer, TK_INT);
+      return new_type(TY_LLONG);
+    }
     (void)token_consume(tokenizer, TK_INT);
     return new_type(TY_LONG);
 
@@ -1552,6 +1573,10 @@ static Type *type_specifier(Scope *scope, Tokenizer *tokenizer) {
       return new_type(TY_SHORT);
     }
     if (token_consume(tokenizer, TK_LONG)) {
+      if (token_consume(tokenizer, TK_LONG)) {
+        (void)token_consume(tokenizer, TK_INT);
+        return new_type(TY_LLONG);
+      }
       (void)token_consume(tokenizer, TK_INT);
       return new_type(TY_LONG);
     }
@@ -1767,6 +1792,7 @@ static Initializer *initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
     case TY_INT:
     case TY_SHORT:
     case TY_LONG:
+    case TY_LLONG:
     case TY_CHAR:
     case TY_SCHAR:
     case TY_PTR: {

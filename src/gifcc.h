@@ -101,15 +101,18 @@ typedef struct {
                             ? (dest) = (num)->int_val                          \
                             : (((num)->type == TY_LONG)                        \
                                    ? (dest) = (num)->long_val                  \
-                                   : (((num)->type == TY_PTR)                  \
-                                          ? (dest) = (num)->ptr_val            \
-                                          : abort()))))))
+                                   : (((num)->type == TY_LLONG)                \
+                                          ? (dest) = (num)->llong_val          \
+                                          : (((num)->type == TY_PTR)           \
+                                                 ? (dest) = (num)->ptr_val     \
+                                                 : abort())))))))
 
 typedef enum {
   TY_VOID,
   TY_INT,
   TY_SHORT,
   TY_LONG,
+  TY_LLONG,
   TY_CHAR,
   TY_SCHAR,
   TY_PTR,
@@ -127,6 +130,7 @@ typedef struct Number {
     short short_val;
     int int_val;
     long long_val;
+    long long llong_val;
     intptr_t ptr_val;
   };
 } Number;

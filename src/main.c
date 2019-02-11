@@ -40,6 +40,9 @@ static void dump_number(Number num) {
   case TY_LONG:
     printf("%ld", num.long_val);
     break;
+  case TY_LLONG:
+    printf("%lld", num.llong_val);
+    break;
   case TY_PTR:
     printf("%" PRIdPTR, num.ptr_val);
     break;
@@ -108,6 +111,9 @@ static void dump_type_inner(Type *ty) {
     return;
   case TY_LONG:
     printf("long");
+    return;
+  case TY_LLONG:
+    printf("long long");
     return;
   case TY_CHAR:
     printf("char");

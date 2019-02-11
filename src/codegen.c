@@ -130,6 +130,9 @@ static char *num2str(Number num, Range range) {
   case TY_LONG:
     sprintf(buf, "%ld", num.long_val);
     break;
+  case TY_LLONG:
+    sprintf(buf, "%lld", num.llong_val);
+    break;
   case TY_PTR:
     sprintf(buf, "%" PRIdPTR, num.ptr_val);
     break;
@@ -736,6 +739,9 @@ static void gen_gvar_init(Initializer *init, Range range) {
         break;
       case TY_LONG:
         printf("  .quad %ld\n", init->expr->num_val.long_val);
+        break;
+      case TY_LLONG:
+        printf("  .quad %lld\n", init->expr->num_val.llong_val);
         break;
       case TY_PTR:
         printf("  .quad %" PRIdPTR "\n", init->expr->num_val.ptr_val);
