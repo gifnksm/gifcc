@@ -29,16 +29,19 @@ void test01(void) {
 void test02_01(void) {
   int a = 2, b = 2;
   check_int(4, a + b);
+  return;
 }
 void test02_02(void) {
   int a = 3;
   int b = 5 * 6 - 8;
   check_int(14, a + b / 2);
+  return;
 }
 void test02_03(void) {
   int a, b;
   b = (a = 5);
   check_int(10, a + b);
+  return;
 }
 void test02(void) {
   test02_01();

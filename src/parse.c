@@ -1190,8 +1190,12 @@ static Stmt *new_stmt_goto(char *name, Range range) {
 
 static Stmt *new_stmt_return(Scope *scope, Expr *expr, Range range) {
   Stmt *stmt = new_stmt(ST_RETURN, range);
-  stmt->expr =
-      new_expr_cast(scope, scope->func_ctxt->type->func_ret, expr, expr->range);
+  if (expr != NULL) {
+    stmt->expr = new_expr_cast(scope, scope->func_ctxt->type->func_ret, expr,
+                               expr->range);
+  } else {
+    stmt->expr = NULL;
+  }
   return stmt;
 }
 

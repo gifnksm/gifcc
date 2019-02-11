@@ -457,11 +457,17 @@ static void dump_stmt(const Reader *reader, Stmt *stmt, int level) {
   case ST_RETURN:
     dump_range_start(stmt->range);
     dump_indent(level);
-    printf("{RETURN\n");
-    dump_expr(stmt->expr, level + 1);
-    dump_range_end(stmt->range);
-    dump_indent(level);
-    printf("}\n");
+    if (stmt->expr != NULL) {
+      printf("{RETURN\n");
+      dump_range_start(stmt->range);
+      dump_indent(level + 1);
+      printf("<void>(NULL)\n");
+      dump_range_end(stmt->range);
+      dump_indent(level);
+      printf("}\n");
+    } else {
+      printf("{RETURN}\n");
+    }
     return;
   case ST_NULL:
     dump_range_start(stmt->range);
