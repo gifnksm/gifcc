@@ -1299,6 +1299,36 @@ void test37(void) {
   test_ok(__func__);
 }
 
+union {
+  int a;
+  int b;
+  char c;
+  int d;
+  short e;
+} test38_u = {1};
+void test38(void) {
+  check_int(1, test38_u.a);
+  check_int(1, test38_u.b);
+  check_int(1, test38_u.c);
+  check_int(1, test38_u.d);
+  check_int(1, test38_u.e);
+
+  union U {
+    int a;
+    int b;
+    char c;
+    int d;
+    short e;
+  } u = {11};
+  check_int(11, u.a);
+  check_int(11, u.b);
+  check_int(11, u.c);
+  check_int(11, u.d);
+  check_int(11, u.e);
+
+  test_ok(__func__);
+}
+
 int main(void) {
   test01();
   test02();
@@ -1336,6 +1366,7 @@ int main(void) {
   test35();
   test36();
   test37();
+  test38();
 
   return 0;
 }

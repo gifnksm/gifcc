@@ -1704,11 +1704,24 @@ static Initializer *initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
       init->members = members;
       break;
     }
+    case TY_UNION: {
+      init = new_initializer(type, member);
+
+      Map *members = new_map();
+      {
+        Member *member = type->members->vals->data[0];
+        map_put(members, member->name, NULL);
+        members->vals->data[0] =
+            initializer(tokenizer, scope, member->type, member);
+        (void)token_consume(tokenizer, ',');
+      }
+      init->members = members;
+      break;
+    }
     case TY_VOID:
     case TY_ARRAY:
     case TY_FUNC:
-    case TY_UNION:
-      range_error(token->range, "構造体ではありません");
+      range_error(token->range, "初期化できない型です: %d", type->ty);
     }
     token_expect(tokenizer, '}');
     return init;
