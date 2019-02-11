@@ -15,6 +15,7 @@ typedef struct GlobalCtxt {
 
 typedef struct FuncCtxt {
   char *name;
+  Type *type;
   int stack_size;
   Vector *switches;
   Map *label_map;
@@ -48,7 +49,7 @@ typedef struct VarDef {
 
 static Number new_number_size(int val);
 static GlobalCtxt *new_global_ctxt(void);
-static FuncCtxt *new_func_ctxt(char *name);
+static FuncCtxt *new_func_ctxt(char *name, Type *type);
 static Scope *new_scope(GlobalCtxt *gcx, FuncCtxt *fcx, Scope *outer);
 static Scope *new_global_scope(GlobalCtxt *gcx);
 static Scope *new_func_scope(Scope *global, FuncCtxt *fcx);
@@ -117,7 +118,7 @@ static Stmt *new_stmt_do_while(Expr *cond, Stmt *body, Range range);
 static Stmt *new_stmt_for(Expr *init, Expr *cond, Expr *inc, Stmt *body,
                           Range range);
 static Stmt *new_stmt_goto(char *name, Range range);
-static Stmt *new_stmt_return(Expr *expr, Range range);
+static Stmt *new_stmt_return(Scope *scope, Expr *expr, Range range);
 static Stmt *new_stmt_compound(Vector *stmts, Range range);
 
 // expression
@@ -191,10 +192,11 @@ static GlobalCtxt *new_global_ctxt(void) {
   return gcx;
 }
 
-static FuncCtxt *new_func_ctxt(char *name) {
+static FuncCtxt *new_func_ctxt(char *name, Type *type) {
   FuncCtxt *fcx = malloc(sizeof(FuncCtxt));
 
   fcx->name = name;
+  fcx->type = type;
   fcx->stack_size = 0;
   fcx->switches = new_vector();
   fcx->label_map = new_map();
@@ -1147,9 +1149,10 @@ static Stmt *new_stmt_goto(char *name, Range range) {
   return stmt;
 }
 
-static Stmt *new_stmt_return(Expr *expr, Range range) {
+static Stmt *new_stmt_return(Scope *scope, Expr *expr, Range range) {
   Stmt *stmt = new_stmt(ST_RETURN, range);
-  stmt->expr = expr;
+  stmt->expr =
+      new_expr_cast(scope, scope->func_ctxt->type->func_ret, expr, expr->range);
   return stmt;
 }
 
@@ -1753,7 +1756,7 @@ static Stmt *statement(Tokenizer *tokenizer, Scope *scope) {
       expr = expression(tokenizer, scope);
     }
     Token *end = token_expect(tokenizer, ';');
-    return new_stmt_return(expr, range_join(start->range, end->range));
+    return new_stmt_return(scope, expr, range_join(start->range, end->range));
   }
   case '{': {
     Scope *inner = new_inner_scope(scope);
@@ -1820,7 +1823,7 @@ static Stmt *compound_statement(Tokenizer *tokenizer, Scope *scope) {
 
 static Function *function_definition(Tokenizer *tokenizer, Scope *global_scope,
                                      Type *type, char *name, Range start) {
-  FuncCtxt *fcx = new_func_ctxt(name);
+  FuncCtxt *fcx = new_func_ctxt(name, type);
   Scope *scope = new_func_scope(global_scope, fcx);
   for (int i = 0; i < type->func_param->len; i++) {
     Param *param = type->func_param->data[i];
