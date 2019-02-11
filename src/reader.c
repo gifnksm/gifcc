@@ -14,6 +14,7 @@ struct Reader {
   IntVector *line_offset;
 };
 
+static void print_source(Range range);
 static char *read_whole_file(Reader *reader, FILE *file);
 
 Reader *new_reader(FILE *file, const char *filename) {
@@ -144,6 +145,40 @@ noreturn void range_error_raw_v(Range range, const char *dbg_file, int dbg_line,
   vfprintf(stderr, fmt, ap);
   fprintf(stderr, " (DEBUG:%s:%d)\n", dbg_file, dbg_line);
 
+  print_source(range);
+
+  exit(1);
+}
+
+__attribute__((format(printf, 4, 5))) void
+range_warn_raw(Range range, const char *dbg_file, int dbg_line, const char *fmt,
+               ...) {
+  va_list ap;
+  va_start(ap, fmt);
+  range_warn_raw_v(range, dbg_file, dbg_line, fmt, ap);
+}
+void range_warn_raw_v(Range range, const char *dbg_file, int dbg_line,
+                      const char *fmt, va_list ap) {
+  int start_line, start_column;
+  reader_get_position(range.reader, range.start, &start_line, &start_column);
+  int end_line, end_column;
+  reader_get_position(range.reader, range.start + range.len - 1, &end_line,
+                      &end_column);
+  fprintf(stderr, "%s:%d:%d: warning: ", reader_get_filename(range.reader),
+          start_line, start_column);
+  vfprintf(stderr, fmt, ap);
+  fprintf(stderr, " (DEBUG:%s:%d)\n", dbg_file, dbg_line);
+
+  print_source(range);
+}
+
+static void print_source(Range range) {
+  int start_line, start_column;
+  reader_get_position(range.reader, range.start, &start_line, &start_column);
+  int end_line, end_column;
+  reader_get_position(range.reader, range.start + range.len - 1, &end_line,
+                      &end_column);
+
   for (int line = start_line; line <= end_line; line++) {
     char *line_str = reader_get_line(range.reader, line);
     int line_len = strlen(line_str);
@@ -166,8 +201,6 @@ noreturn void range_error_raw_v(Range range, const char *dbg_file, int dbg_line,
     }
     fprintf(stderr, "\n");
   }
-
-  exit(1);
 }
 
 static char *read_whole_file(Reader *reader, FILE *file) {

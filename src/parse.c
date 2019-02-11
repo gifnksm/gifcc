@@ -642,7 +642,7 @@ static Expr *new_expr_ident(Scope *scope, char *name, Range range) {
       svar = NULL;
     }
   } else {
-    // 未知の識別子はint型のグローバル変数として扱う
+    range_warn(range, "未定義の識別子です: %s", name);
     ty = EX_GLOBAL_VAR;
     type = new_type(TY_INT);
     svar = NULL;
@@ -678,7 +678,7 @@ static Expr *new_expr_call(Scope *scope, Expr *callee, Vector *argument,
   if (is_func_type(callee->val_type)) {
     ret_type = callee->val_type->func_ret;
   } else {
-    // TODO: 定義のない関数の戻り値はintを仮定する
+    range_warn(range, "未知の関数です");
     ret_type = new_type(TY_INT);
   }
   if (callee->val_type->func_param != NULL) {

@@ -353,6 +353,15 @@ range_error_raw(Range range, const char *dbg_file, int dbg_line,
 noreturn void range_error_raw_v(Range range, const char *dbg_file, int dbg_line,
                                 const char *fmt, va_list ap);
 
+#define range_warn(range, fmt, ...)                                            \
+  range_warn_raw((range), __FILE__, __LINE__, (fmt), ##__VA_ARGS__)
+__attribute__((format(printf, 4, 5))) void range_warn_raw(Range range,
+                                                          const char *dbg_file,
+                                                          int dbg_line,
+                                                          const char *fmt, ...);
+void range_warn_raw_v(Range range, const char *dbg_file, int dbg_line,
+                      const char *fmt, va_list ap);
+
 Tokenizer *new_tokenizer(Reader *reader);
 void token_succ(Tokenizer *tokenizer);
 Token *token_peek(Tokenizer *tokenizer);
