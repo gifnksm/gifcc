@@ -391,7 +391,7 @@ int get_val_size(Type *ty, Range range);
 int get_val_align(Type *ty, Range range);
 TranslationUnit *parse(Reader *reader);
 
-char *make_label(void);
+char *make_label(const char *s);
 void gen(TranslationUnit *tunit);
 
 static inline Range range_join(Range a, Range b) {

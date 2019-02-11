@@ -268,9 +268,11 @@ static VarDef *register_var(Scope *scope, Token *name, Type *type, Range range,
       ty = DEF_STACK_VAR;
       svar = register_stack_var(scope, name, type, range);
     } else {
+      char buf[256];
+      sprintf(buf, "%s.%s", scope->func_ctxt->name, name->name);
       ty = DEF_GLOBAL_VAR;
       gvar = register_global_var(scope, name, type, range, is_static);
-      gvar->name = make_label();
+      gvar->name = make_label(buf);
     }
   } else {
     ty = DEF_GLOBAL_VAR;
@@ -711,7 +713,7 @@ static Expr *new_expr_str(Scope *scope, char *val, Range range) {
   Type *type = new_type_ptr(new_type(TY_CHAR));
   Expr *expr = new_expr(EX_STR, type, range);
 
-  expr->name = make_label();
+  expr->name = make_label("str");
   StringLiteral *str = malloc(sizeof(StringLiteral));
   str->name = expr->name;
   str->val = val;
@@ -1216,14 +1218,14 @@ static Stmt *new_stmt_switch(Expr *cond, Stmt *body, Range range) {
 static Stmt *new_stmt_case(Expr *expr, Stmt *body, Range range) {
   Stmt *stmt = new_stmt(ST_CASE, range);
   stmt->expr = expr;
-  stmt->label = make_label();
+  stmt->label = make_label("case");
   stmt->body = body;
   return stmt;
 }
 
 static Stmt *new_stmt_default(Stmt *body, Range range) {
   Stmt *stmt = new_stmt(ST_DEFAULT, range);
-  stmt->label = make_label();
+  stmt->label = make_label("default");
   stmt->body = body;
   return stmt;
 }
@@ -1232,7 +1234,7 @@ static Stmt *new_stmt_label(FuncCtxt *fcx, char *name, Stmt *body,
                             Range range) {
   Stmt *stmt = new_stmt(ST_LABEL, range);
   stmt->name = name;
-  stmt->label = make_label();
+  stmt->label = make_label(name);
   stmt->body = body;
   map_put(fcx->label_map, stmt->name, stmt->label);
   return stmt;

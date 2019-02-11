@@ -83,10 +83,10 @@ static const Reg *get_int_reg(Type *ty, Range range) {
   }
 }
 
-char *make_label(void) {
+char *make_label(const char *s) {
   static int count = 0;
   char buf[256];
-  sprintf(buf, ".L%d", count++);
+  sprintf(buf, ".L.%s.%d", s, count++);
   return strdup(buf);
 }
 
@@ -271,8 +271,8 @@ static void gen_expr(Expr *expr) {
     return;
   }
   if (expr->ty == EX_LOGAND) {
-    char *false_label = make_label();
-    char *end_label = make_label();
+    char *false_label = make_label("logand.false");
+    char *end_label = make_label("logand.end");
     gen_expr(expr->lhs);
     printf("  pop rax\n");
     printf("  cmp %s, 0\n", r->rax);
@@ -290,8 +290,8 @@ static void gen_expr(Expr *expr) {
   }
 
   if (expr->ty == EX_LOGOR) {
-    char *true_label = make_label();
-    char *end_label = make_label();
+    char *true_label = make_label("logor.true");
+    char *end_label = make_label("logor.end");
     gen_expr(expr->lhs);
     printf("  pop rax\n");
     printf("  cmp %s, 0\n", r->rax);
@@ -309,8 +309,8 @@ static void gen_expr(Expr *expr) {
   }
 
   if (expr->ty == EX_COND) {
-    char *else_label = make_label();
-    char *end_label = make_label();
+    char *else_label = make_label("cond.else");
+    char *end_label = make_label("cond.end");
     gen_expr(expr->cond);
     printf("  pop rax\n");
     printf("  cmp %s, 0\n", r->rax);
@@ -515,8 +515,8 @@ static void gen_stmt(Stmt *stmt) {
     return;
   }
   case ST_IF: {
-    char *else_label = make_label();
-    char *end_label = make_label();
+    char *else_label = make_label("if.else");
+    char *end_label = make_label("if.end");
     gen_expr(stmt->cond);
     printf("  pop rax\n");
     printf("  cmp rax, 0\n");
@@ -529,7 +529,7 @@ static void gen_stmt(Stmt *stmt) {
     return;
   }
   case ST_SWITCH: {
-    char *end_label = make_label();
+    char *end_label = make_label("switch.end");
     gen_expr(stmt->cond);
     for (int i = 0; i < stmt->cases->len; i++) {
       Stmt *case_expr = stmt->cases->data[i];
@@ -560,8 +560,8 @@ static void gen_stmt(Stmt *stmt) {
     return;
   }
   case ST_WHILE: {
-    char *cond_label = make_label();
-    char *end_label = make_label();
+    char *cond_label = make_label("while.cond");
+    char *end_label = make_label("while.end");
     printf("%s:\n", cond_label);
     gen_expr(stmt->cond);
     printf("  pop rax\n");
@@ -579,9 +579,9 @@ static void gen_stmt(Stmt *stmt) {
     return;
   }
   case ST_DO_WHILE: {
-    char *loop_label = make_label();
-    char *cond_label = make_label();
-    char *end_label = make_label();
+    char *loop_label = make_label("do_while.loop");
+    char *cond_label = make_label("do_while.cond");
+    char *end_label = make_label("do_while.end");
     printf("%s:\n", loop_label);
 
     vec_push(break_labels, end_label);
@@ -599,9 +599,9 @@ static void gen_stmt(Stmt *stmt) {
     return;
   }
   case ST_FOR: {
-    char *cond_label = make_label();
-    char *inc_label = make_label();
-    char *end_label = make_label();
+    char *cond_label = make_label("for.cond");
+    char *inc_label = make_label("for.inc");
+    char *end_label = make_label("for.end");
     if (stmt->init != NULL) {
       gen_expr(stmt->init);
     }
@@ -664,7 +664,7 @@ static void gen_stmt(Stmt *stmt) {
 }
 
 static void gen_func(Function *func) {
-  epilogue_label = make_label();
+  epilogue_label = make_label("func.epi");
   func_ctxt = func;
   break_labels = new_vector();
   continue_labels = new_vector();
