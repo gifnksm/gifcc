@@ -1674,6 +1674,48 @@ static void direct_declarator(Scope *scope, Tokenizer *tokenizer,
   *placeholder = *base_type;
 }
 
+static Initializer *struct_initializer(Tokenizer *tokenizer, Scope *scope,
+                                       Type *type, Member *member) {
+  assert(type->ty == TY_STRUCT);
+  Initializer *init = new_initializer(type, member);
+
+  Map *members = new_map();
+  for (int i = 0; i < type->member_list->len; i++) {
+    Member *member = type->member_list->data[i];
+    map_put(members, member->name, NULL);
+  }
+  for (int i = 0; i < type->member_list->len; i++) {
+    Member *member = type->member_list->data[i];
+    members->keys->data[i] = member->name;
+    members->vals->data[i] =
+        initializer(tokenizer, scope, member->type, member);
+    if (i < type->member_list->len - 1 &&
+        token_consume(tokenizer, ',') == NULL) {
+      break;
+    }
+  }
+
+  init->members = members;
+  return init;
+}
+
+static Initializer *union_initializer(Tokenizer *tokenizer, Scope *scope,
+                                      Type *type, Member *member) {
+  assert(type->ty == TY_UNION);
+  Initializer *init = new_initializer(type, member);
+
+  Map *members = new_map();
+  {
+    Member *member = type->member_list->data[0];
+    map_put(members, member->name, NULL);
+    members->vals->data[0] =
+        initializer(tokenizer, scope, member->type, member);
+  }
+  init->members = members;
+
+  return init;
+}
+
 static Initializer *initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
                                 Member *member) {
   Token *token;
@@ -1689,38 +1731,11 @@ static Initializer *initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
       break;
     }
     case TY_STRUCT: {
-      init = new_initializer(type, member);
-
-      Map *members = new_map();
-      for (int i = 0; i < type->member_list->len; i++) {
-        Member *member = type->member_list->data[i];
-        map_put(members, member->name, NULL);
-      }
-      for (int i = 0; i < type->member_list->len; i++) {
-        Member *member = type->member_list->data[i];
-        members->keys->data[i] = member->name;
-        members->vals->data[i] =
-            initializer(tokenizer, scope, member->type, member);
-        if (token_consume(tokenizer, ',') == NULL) {
-          break;
-        }
-      }
-
-      init->members = members;
+      init = struct_initializer(tokenizer, scope, type, member);
       break;
     }
     case TY_UNION: {
-      init = new_initializer(type, member);
-
-      Map *members = new_map();
-      {
-        Member *member = type->member_list->data[0];
-        map_put(members, member->name, NULL);
-        members->vals->data[0] =
-            initializer(tokenizer, scope, member->type, member);
-        (void)token_consume(tokenizer, ',');
-      }
-      init->members = members;
+      init = union_initializer(tokenizer, scope, type, member);
       break;
     }
     case TY_VOID:
@@ -1728,10 +1743,17 @@ static Initializer *initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
     case TY_FUNC:
       range_error(token->range, "初期化できない型です: %d", type->ty);
     }
+    (void)token_consume(tokenizer, ',');
     token_expect(tokenizer, '}');
     return init;
   };
 
+  if (type->ty == TY_STRUCT) {
+    return struct_initializer(tokenizer, scope, type, member);
+  }
+  if (type->ty == TY_UNION) {
+    return union_initializer(tokenizer, scope, type, member);
+  }
   {
     Initializer *init = new_initializer(type, member);
     Expr *expr = assignment_expression(tokenizer, scope);

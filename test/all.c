@@ -1341,6 +1341,18 @@ struct {
     int y;
   } e;
 } test39_s = {1, 2, {3}, {4, 5}};
+struct {
+  int a;
+  int b;
+  union {
+    int c;
+    int d;
+  };
+  struct {
+    int x;
+    int y;
+  } e;
+} test39_t = {21, 22, 23, 24, 25};
 
 void test39(void) {
   check_int(1, test39_s.a);
@@ -1349,6 +1361,13 @@ void test39(void) {
   check_int(3, test39_s.d);
   check_int(4, test39_s.e.x);
   check_int(5, test39_s.e.y);
+
+  check_int(21, test39_t.a);
+  check_int(22, test39_t.b);
+  check_int(23, test39_t.c);
+  check_int(23, test39_t.d);
+  check_int(24, test39_t.e.x);
+  check_int(25, test39_t.e.y);
 
   struct {
     int a;
@@ -1368,6 +1387,25 @@ void test39(void) {
   check_int(13, s.d);
   check_int(14, s.e.x);
   check_int(15, s.e.y);
+
+  struct {
+    int a;
+    int b;
+    union {
+      int c;
+      int d;
+    };
+    struct {
+      int x;
+      int y;
+    } e;
+  } t = {31, 32, 33, 34, 35};
+  check_int(31, t.a);
+  check_int(32, t.b);
+  check_int(33, t.c);
+  check_int(33, t.d);
+  check_int(34, t.e.x);
+  check_int(35, t.e.y);
 }
 
 void test40(void) {
