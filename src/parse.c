@@ -1455,6 +1455,7 @@ static Expr *constant_expression(Tokenizer *tokenizer, Scope *scope) {
 static Vector *declaration(Tokenizer *tokenizer, Scope *scope) {
   Vector *def_list = new_vector();
   bool is_typedef = token_consume(tokenizer, TK_TYPEDEF);
+  bool is_extern = token_consume(tokenizer, TK_EXTERN);
   Type *base_type = type_specifier(scope, tokenizer);
   if (token_consume(tokenizer, ';')) {
     return def_list;
@@ -1467,6 +1468,8 @@ static Vector *declaration(Tokenizer *tokenizer, Scope *scope) {
 
   if (is_typedef) {
     register_typedef(scope, name->name, type);
+  } else if (is_extern) {
+    register_decl(scope, name->name, type, NULL);
   } else {
     if (is_func_type(type)) {
       VarDef *def = register_func(scope, name, type);
@@ -1489,6 +1492,8 @@ static Vector *declaration(Tokenizer *tokenizer, Scope *scope) {
     declarator(scope, tokenizer, base_type, &name, &type, &range);
     if (is_typedef) {
       register_typedef(scope, name->name, type);
+    } else if (is_extern) {
+      register_decl(scope, name->name, type, NULL);
     } else {
       if (is_func_type(type)) {
         (void)register_func(scope, name, type);
@@ -1956,7 +1961,8 @@ static Stmt *compound_statement(Tokenizer *tokenizer, Scope *scope) {
   Vector *stmts = new_vector();
   while (!token_consume(tokenizer, '}')) {
     Token *token = token_peek(tokenizer);
-    if (token_is_typename(scope, token) || token->ty == TK_TYPEDEF) {
+    if (token_is_typename(scope, token) || token->ty == TK_TYPEDEF ||
+        token->ty == TK_EXTERN) {
       Vector *def_list = declaration(tokenizer, scope);
 
       for (int i = 0; i < def_list->len; i++) {

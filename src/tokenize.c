@@ -29,7 +29,8 @@ static const LongToken LONG_IDENT_TOKENS[] = {
     {"break", TK_BREAK},   {"continue", TK_CONTINUE},
     {"return", TK_RETURN}, {"struct", TK_STRUCT},
     {"union", TK_UNION},   {"typedef", TK_TYPEDEF},
-    {"sizeof", TK_SIZEOF}, {NULL, '\0'},
+    {"sizeof", TK_SIZEOF}, {"extern", TK_EXTERN},
+    {NULL, '\0'},
 };
 static const LongToken LONG_PUNCT_TOKENS[] = {
     {"==", TK_EQEQ},       {"!=", TK_NOTEQ},      {"<<=", TK_LSHIFT_ASSIGN},

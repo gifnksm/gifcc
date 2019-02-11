@@ -1417,6 +1417,8 @@ void test39(void) {
   check_int(33, t.d);
   check_int(34, t.e.x);
   check_int(35, t.e.y);
+
+  test_ok(__func__);
 }
 
 void test40(void) {
@@ -1432,6 +1434,8 @@ void test40(void) {
   check_int(2, s.b);
   check_int(1, s.c);
   check_int(1, s.d);
+
+  test_ok(__func__);
 }
 
 long test41_f(void) { return 111; }
@@ -1442,7 +1446,26 @@ void test41(void) {
   long (*ptr)(void) = test41_f;
   check_int(111, ptr());
   check_int(8, sizeof(ptr()));
+
+  test_ok(__func__);
 }
+
+extern int test42_n;
+extern int test42_f(void);
+void test42(void) {
+  extern int test42_m;
+  extern int test42_g(void);
+  check_int(8, test42_n);
+  check_int(32, test42_f());
+  check_int(10, test42_m);
+  check_int(64, test42_g());
+
+  test_ok(__func__);
+}
+int test42_n = 8;
+int test42_m = 10;
+int test42_f(void) { return 32; }
+int test42_g(void) { return 64; }
 
 int main(void) {
   test01();

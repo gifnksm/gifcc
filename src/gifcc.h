@@ -76,6 +76,7 @@ enum {
   TK_UNION,         // `union`
   TK_TYPEDEF,       // `typedef`
   TK_SIZEOF,        // `sizeof`
+  TK_EXTERN,        // `extern`
   TK_EOF,           // 入力の終わりを表すトークン
 };
 
