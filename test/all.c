@@ -1489,6 +1489,25 @@ void test43(void) {
   test_ok(__func__);
 }
 
+void test44(void) {
+  signed char sc1 = 0;
+  signed short int ss1 = 1;
+  signed short ss2 = 2;
+  signed int si1 = 3;
+  signed long int sl1 = 4;
+  signed long sl2 = 5;
+  signed s1 = 6;
+
+  check_int(0, sc1);
+  check_int(1, ss1);
+  check_int(2, ss2);
+  check_int(3, si1);
+  check_int(4, sl1);
+  check_int(5, sl2);
+
+  test_ok(__func__);
+}
+
 int main(void) {
   test01();
   test02();
@@ -1532,6 +1551,7 @@ int main(void) {
   test41();
   test42();
   test43();
+  test44();
 
   return 0;
 }

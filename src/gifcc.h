@@ -60,6 +60,7 @@ enum {
   TK_SHORT,         // `short`
   TK_LONG,          // `long`
   TK_CHAR,          // `char`
+  TK_SIGNED,        // `signed`
   TK_IF,            // `if`
   TK_ELSE,          // `else`
   TK_SWITCH,        // `switch`
@@ -92,15 +93,17 @@ typedef struct {
 #define SET_NUMBER_VAL(dest, num)                                              \
   (((num)->type == TY_CHAR)                                                    \
        ? (dest) = (num)->char_val                                              \
-       : (((num)->type == TY_SHORT)                                            \
-              ? (dest) = (num)->short_val                                      \
-              : (((num)->type == TY_INT)                                       \
-                     ? (dest) = (num)->int_val                                 \
-                     : (((num)->type == TY_LONG)                               \
-                            ? (dest) = (num)->long_val                         \
-                            : (((num)->type == TY_PTR)                         \
-                                   ? (dest) = (num)->ptr_val                   \
-                                   : abort())))))
+       : ((num)->type == TY_SCHAR                                              \
+              ? (dest) = (num)->schar_val                                      \
+              : (((num)->type == TY_SHORT)                                     \
+                     ? (dest) = (num)->short_val                               \
+                     : (((num)->type == TY_INT)                                \
+                            ? (dest) = (num)->int_val                          \
+                            : (((num)->type == TY_LONG)                        \
+                                   ? (dest) = (num)->long_val                  \
+                                   : (((num)->type == TY_PTR)                  \
+                                          ? (dest) = (num)->ptr_val            \
+                                          : abort()))))))
 
 typedef enum {
   TY_VOID,
@@ -108,6 +111,7 @@ typedef enum {
   TY_SHORT,
   TY_LONG,
   TY_CHAR,
+  TY_SCHAR,
   TY_PTR,
   TY_ARRAY,
   TY_FUNC,
@@ -119,6 +123,7 @@ typedef struct Number {
   type_t type;
   union {
     char char_val;
+    signed char schar_val;
     short short_val;
     int int_val;
     long long_val;

@@ -121,6 +121,9 @@ static char *num2str(Number num, Range range) {
   case TY_CHAR:
     sprintf(buf, "%hhd", num.char_val);
     break;
+  case TY_SCHAR:
+    sprintf(buf, "%hhd", num.schar_val);
+    break;
   case TY_SHORT:
     sprintf(buf, "%hd", num.short_val);
     break;
@@ -723,10 +726,13 @@ static void gen_gvar_init(Initializer *init, Range range) {
         printf("  .long %d\n", init->expr->num_val.int_val);
         break;
       case TY_CHAR:
-        printf("  .byte %d\n", init->expr->num_val.int_val);
+        printf("  .byte %hhd\n", init->expr->num_val.char_val);
+        break;
+      case TY_SCHAR:
+        printf("  .byte %hhd\n", init->expr->num_val.schar_val);
         break;
       case TY_SHORT:
-        printf("  .word %d\n", init->expr->num_val.int_val);
+        printf("  .word %hd\n", init->expr->num_val.short_val);
         break;
       case TY_LONG:
         printf("  .quad %ld\n", init->expr->num_val.long_val);

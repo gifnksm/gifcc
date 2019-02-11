@@ -28,6 +28,9 @@ static void dump_number(Number num) {
   case TY_CHAR:
     printf("%hhd", num.char_val);
     break;
+  case TY_SCHAR:
+    printf("%hhd", num.schar_val);
+    break;
   case TY_SHORT:
     printf("%hd", num.short_val);
     break;
@@ -108,6 +111,9 @@ static void dump_type_inner(Type *ty) {
     return;
   case TY_CHAR:
     printf("char");
+    return;
+  case TY_SCHAR:
+    printf("signed char");
     return;
   case TY_PTR:
     printf("PTR(");

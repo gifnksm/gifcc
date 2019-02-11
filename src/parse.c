@@ -428,7 +428,7 @@ static bool is_sametype(Type *ty1, Type *ty2) {
 
 static bool is_integer_type(Type *ty) {
   return ty->ty == TY_INT || ty->ty == TY_SHORT || ty->ty == TY_LONG ||
-         ty->ty == TY_CHAR;
+         ty->ty == TY_CHAR || ty->ty == TY_SCHAR;
 }
 static bool is_arith_type(Type *ty) { return is_integer_type(ty); }
 static bool is_ptr_type(Type *ty) { return ty->ty == TY_PTR; }
@@ -439,7 +439,8 @@ static Type *integer_promoted(Scope *scope, Expr **e) {
     return NULL;
   }
   // CHAR, SHORT は INT へ昇格する
-  if ((*e)->val_type->ty == TY_CHAR || (*e)->val_type->ty == TY_SHORT) {
+  if ((*e)->val_type->ty == TY_CHAR || (*e)->val_type->ty == TY_SCHAR ||
+      (*e)->val_type->ty == TY_SHORT) {
     *e = new_expr_cast(scope, new_type(TY_INT), *e, (*e)->range);
   }
   return (*e)->val_type;
@@ -469,6 +470,7 @@ static bool token_is_typename(Scope *scope, Token *token) {
   case TK_SHORT:
   case TK_LONG:
   case TK_CHAR:
+  case TK_SIGNED:
   case TK_STRUCT:
   case TK_UNION:
     return true;
@@ -485,6 +487,8 @@ int get_val_size(Type *ty, Range range) {
     return sizeof(void);
   case TY_CHAR:
     return sizeof(char);
+  case TY_SCHAR:
+    return sizeof(signed char);
   case TY_INT:
     return sizeof(int);
   case TY_SHORT:
@@ -513,6 +517,8 @@ int get_val_align(Type *ty, Range range) {
     return alignof(void);
   case TY_CHAR:
     return alignof(char);
+  case TY_SCHAR:
+    return alignof(signed char);
   case TY_SHORT:
     return alignof(short);
   case TY_INT:
@@ -751,6 +757,11 @@ static Expr *new_expr_cast(Scope *scope, Type *val_type, Expr *operand,
       operand->val_type = val_type;
       operand->num_val.type = val_type->ty;
       return operand;
+    case TY_SCHAR:
+      SET_NUMBER_VAL(operand->num_val.schar_val, &operand->num_val);
+      operand->val_type = val_type;
+      operand->num_val.type = val_type->ty;
+      return operand;
     case TY_PTR:
       SET_NUMBER_VAL(operand->num_val.ptr_val, &operand->num_val);
       operand->val_type = val_type;
@@ -862,6 +873,7 @@ static Number eval_binop(int op, type_t type, Number na, Number nb,
   case TY_VOID:
   case TY_SHORT:
   case TY_CHAR:
+  case TY_SCHAR:
   case TY_PTR:
   case TY_ARRAY:
   case TY_FUNC:
@@ -1516,6 +1528,7 @@ static Type *type_specifier(Scope *scope, Tokenizer *tokenizer) {
   switch (token->ty) {
   case TK_VOID:
     return new_type(TY_VOID);
+
   case TK_CHAR:
     return new_type(TY_CHAR);
   case TK_INT:
@@ -1526,6 +1539,24 @@ static Type *type_specifier(Scope *scope, Tokenizer *tokenizer) {
   case TK_LONG:
     (void)token_consume(tokenizer, TK_INT);
     return new_type(TY_LONG);
+
+  case TK_SIGNED:
+    if (token_consume(tokenizer, TK_CHAR)) {
+      return new_type(TY_SCHAR);
+    }
+    if (token_consume(tokenizer, TK_INT)) {
+      return new_type(TY_INT);
+    }
+    if (token_consume(tokenizer, TK_SHORT)) {
+      (void)token_consume(tokenizer, TK_INT);
+      return new_type(TY_SHORT);
+    }
+    if (token_consume(tokenizer, TK_LONG)) {
+      (void)token_consume(tokenizer, TK_INT);
+      return new_type(TY_LONG);
+    }
+    return new_type(TY_INT);
+
   case TK_STRUCT:
   case TK_UNION:
     return struct_or_union_specifier(scope, tokenizer, token);
@@ -1737,6 +1768,7 @@ static Initializer *initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
     case TY_SHORT:
     case TY_LONG:
     case TY_CHAR:
+    case TY_SCHAR:
     case TY_PTR: {
       init = initializer(tokenizer, scope, type, member);
       break;
