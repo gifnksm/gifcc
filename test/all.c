@@ -1227,6 +1227,14 @@ void test35(void) {
   test_ok(__func__);
 }
 
+int test36_f(int a), test36_g(int a), a;
+void test36(void) {
+  check_int(0, test36_f(1) - test36_g(1));
+  test_ok(__func__);
+}
+int test36_f(int a) { return a; }
+int test36_g(int a) { return a; }
+
 int main(void) {
   test01();
   test02();
@@ -1262,6 +1270,7 @@ int main(void) {
   test33();
   test34();
   test35();
+  test36();
 
   return 0;
 }

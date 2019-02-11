@@ -1440,11 +1440,15 @@ static Vector *declaration(Tokenizer *tokenizer, Scope *scope) {
     if (is_typedef) {
       register_typedef(scope, name->name, type);
     } else {
-      VarDef *def = register_var(scope, name, type, range);
-      if (token_consume(tokenizer, '=')) {
-        def->init = initializer(tokenizer, scope, type);
+      if (is_func_type(type)) {
+        (void)register_func(scope, name, type);
+      } else {
+        VarDef *def = register_var(scope, name, type, range);
+        if (token_consume(tokenizer, '=')) {
+          def->init = initializer(tokenizer, scope, type);
+        }
+        vec_push(def_list, def);
       }
-      vec_push(def_list, def);
     }
   }
   token_expect(tokenizer, ';');
