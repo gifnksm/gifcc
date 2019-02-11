@@ -331,9 +331,8 @@ bool reader_consume(Reader *reader, char ch);
 bool reader_consume_str(Reader *reader, const char *str);
 void reader_expect(Reader *reader, char ch);
 int reader_get_offset(const Reader *reader);
-const char *reader_get_filename(const Reader *reader);
-void reader_get_position(const Reader *reader, int offset, int *line,
-                         int *column);
+void reader_get_position(const Reader *reader, int offset,
+                         const char **filename, int *line, int *column);
 char *reader_get_source(const Reader *reader, Range range);
 char *reader_get_line(const Reader *reader, int line);
 #define reader_error_here(reader, fmt, ...)                                    \

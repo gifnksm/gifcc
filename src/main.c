@@ -54,9 +54,10 @@ static void output_token(Reader *reader) {
   Token *token;
   do {
     token = token_pop(tokenizer);
+    const char *filename;
     int line, column;
-    reader_get_position(reader, token->range.start, &line, &column);
-    printf("%s:%d:%d:\t%-8s", reader_get_filename(reader), line, column,
+    reader_get_position(reader, token->range.start, &filename, &line, &column);
+    printf("%s:%d:%d:\t%-8s", filename, line, column,
            token_kind_to_str(token->ty));
     switch (token->ty) {
     case TK_NUM:
@@ -77,18 +78,18 @@ static void output_token(Reader *reader) {
 }
 
 static void dump_range_start(Range range) {
-  if (range.start >= 0) {
-    int line, column;
-    reader_get_position(range.reader, range.start, &line, &column);
-    printf("%s:%d:%d\t", reader_get_filename(range.reader), line, column);
-  } else {
-    printf("%s:__:_\t", reader_get_filename(range.reader));
-  }
-}
-static void dump_range_end(Range range) {
+  const char *filename;
   int line, column;
-  reader_get_position(range.reader, range.start + range.len, &line, &column);
-  printf("%s:%d:%d\t", reader_get_filename(range.reader), line, column);
+  reader_get_position(range.reader, range.start, &filename, &line, &column);
+  printf("%s:%d:%d\t", filename, line, column);
+}
+
+static void dump_range_end(Range range) {
+  const char *filename;
+  int line, column;
+  reader_get_position(range.reader, range.start + range.len, &filename, &line,
+                      &column);
+  printf("%s:%d:%d\t", filename, line, column);
 }
 static void dump_indent(int level) { printf("%*s", 2 * level, ""); }
 static void dump_type_inner(Type *ty) {

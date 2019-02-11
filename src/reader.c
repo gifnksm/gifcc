@@ -85,12 +85,11 @@ void reader_expect(Reader *reader, char ch) {
 }
 
 int reader_get_offset(const Reader *reader) { return reader->offset; }
-const char *reader_get_filename(const Reader *reader) {
-  return reader->filename;
-}
-void reader_get_position(const Reader *reader, int offset, int *line,
-                         int *column) {
+
+void reader_get_position(const Reader *reader, int offset,
+                         const char **filename, int *line, int *column) {
   assert(reader->line_offset->len > 0);
+  *filename = reader->filename;
   for (int i = reader->line_offset->len - 1; i >= 0; i--) {
     int line_start = reader->line_offset->data[i];
     if (line_start <= offset) {
@@ -135,13 +134,16 @@ range_error_raw(Range range, const char *dbg_file, int dbg_line,
 
 noreturn void range_error_raw_v(Range range, const char *dbg_file, int dbg_line,
                                 const char *fmt, va_list ap) {
+  const char *start_filename;
   int start_line, start_column;
-  reader_get_position(range.reader, range.start, &start_line, &start_column);
+  reader_get_position(range.reader, range.start, &start_filename, &start_line,
+                      &start_column);
+  const char *end_filename;
   int end_line, end_column;
-  reader_get_position(range.reader, range.start + range.len - 1, &end_line,
-                      &end_column);
-  fprintf(stderr, "%s:%d:%d: error: ", reader_get_filename(range.reader),
-          start_line, start_column);
+  reader_get_position(range.reader, range.start + range.len - 1, &end_filename,
+                      &end_line, &end_column);
+  fprintf(stderr, "%s:%d:%d: error: ", start_filename, start_line,
+          start_column);
   vfprintf(stderr, fmt, ap);
   fprintf(stderr, " (DEBUG:%s:%d)\n", dbg_file, dbg_line);
 
@@ -159,13 +161,16 @@ range_warn_raw(Range range, const char *dbg_file, int dbg_line, const char *fmt,
 }
 void range_warn_raw_v(Range range, const char *dbg_file, int dbg_line,
                       const char *fmt, va_list ap) {
+  const char *start_filename;
   int start_line, start_column;
-  reader_get_position(range.reader, range.start, &start_line, &start_column);
+  reader_get_position(range.reader, range.start, &start_filename, &start_line,
+                      &start_column);
+  const char *end_filename;
   int end_line, end_column;
-  reader_get_position(range.reader, range.start + range.len - 1, &end_line,
-                      &end_column);
-  fprintf(stderr, "%s:%d:%d: warning: ", reader_get_filename(range.reader),
-          start_line, start_column);
+  reader_get_position(range.reader, range.start + range.len - 1, &end_filename,
+                      &end_line, &end_column);
+  fprintf(stderr, "%s:%d:%d: warning: ", start_filename, start_line,
+          start_column);
   vfprintf(stderr, fmt, ap);
   fprintf(stderr, " (DEBUG:%s:%d)\n", dbg_file, dbg_line);
 
@@ -173,11 +178,14 @@ void range_warn_raw_v(Range range, const char *dbg_file, int dbg_line,
 }
 
 static void print_source(Range range) {
+  const char *start_filename;
   int start_line, start_column;
-  reader_get_position(range.reader, range.start, &start_line, &start_column);
+  reader_get_position(range.reader, range.start, &start_filename, &start_line,
+                      &start_column);
+  const char *end_filename;
   int end_line, end_column;
-  reader_get_position(range.reader, range.start + range.len - 1, &end_line,
-                      &end_column);
+  reader_get_position(range.reader, range.start + range.len - 1, &end_filename,
+                      &end_line, &end_column);
 
   for (int line = start_line; line <= end_line; line++) {
     char *line_str = reader_get_line(range.reader, line);
