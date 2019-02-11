@@ -677,6 +677,9 @@ static Expr *new_expr_call(Scope *scope, Expr *callee, Vector *argument,
   Type *ret_type;
   if (is_func_type(callee->val_type)) {
     ret_type = callee->val_type->func_ret;
+  } else if (is_ptr_type(callee->val_type) &&
+             is_func_type(callee->val_type->ptrof)) {
+    ret_type = callee->val_type->ptrof->func_ret;
   } else {
     range_warn(range, "未知の関数です");
     ret_type = new_type(TY_INT);

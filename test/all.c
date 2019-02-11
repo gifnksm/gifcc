@@ -1426,6 +1426,16 @@ void test40(void) {
   check_int(1, s.d);
 }
 
+long test41_f(void) { return 111; }
+void test41(void) {
+  check_int(111, test41_f());
+  check_int(8, sizeof(test41_f()));
+
+  long (*ptr)(void) = test41_f;
+  check_int(111, ptr());
+  check_int(8, sizeof(ptr()));
+}
+
 int main(void) {
   test01();
   test02();
@@ -1466,6 +1476,7 @@ int main(void) {
   test38();
   test39();
   test40();
+  test41();
 
   return 0;
 }
