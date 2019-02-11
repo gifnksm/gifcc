@@ -84,6 +84,7 @@ static Type *new_type_func(Type *ret_type, Vector *func_param);
 static Type *new_type_struct(int tk, char *tag);
 static Type *new_type_anon_struct(int tk);
 static Expr *coerce_array2ptr(Scope *scope, Expr *expr);
+static Expr *coerce_func2ptr(Scope *scope, Expr *expr);
 static Expr *new_expr(int ty, Type *val_type, Range range);
 static Expr *new_expr_num(Number val, Range range);
 static Expr *new_expr_ident(Scope *scope, char *name, Range range);
@@ -585,6 +586,12 @@ static Expr *coerce_array2ptr(Scope *scope, Expr *expr) {
   }
   return expr;
 }
+static Expr *coerce_func2ptr(Scope *scope, Expr *expr) {
+  if (is_func_type(expr->val_type)) {
+    return new_expr_unary(scope, '&', expr, expr->range);
+  }
+  return expr;
+}
 
 static Expr *new_expr(int ty, Type *val_type, Range range) {
   Expr *expr = malloc(sizeof(Expr));
@@ -670,6 +677,7 @@ static Expr *new_expr_call(Scope *scope, Expr *callee, Vector *argument,
 static Expr *new_expr_postfix(Scope *scope, int ty, Expr *operand,
                               Range range) {
   operand = coerce_array2ptr(scope, operand);
+  operand = coerce_func2ptr(scope, operand);
 
   Expr *expr = new_expr(ty, operand->val_type, range);
   expr->lhs = operand;
@@ -688,6 +696,7 @@ static Expr *new_expr_postfix(Scope *scope, int ty, Expr *operand,
 static Expr *new_expr_cast(Scope *scope, Type *val_type, Expr *operand,
                            Range range) {
   operand = coerce_array2ptr(scope, operand);
+  operand = coerce_func2ptr(scope, operand);
 
   if (is_sametype(operand->val_type, val_type)) {
     return operand;
@@ -738,8 +747,9 @@ static Expr *new_expr_cast(Scope *scope, Type *val_type, Expr *operand,
 
 static Expr *new_expr_unary(Scope *scope, int ty, Expr *operand, Range range) {
   if (ty != '&') {
-    // & 以外は array は ptr とみなす
+    // & 以外は array, func は ptr とみなす
     operand = coerce_array2ptr(scope, operand);
+    operand = coerce_func2ptr(scope, operand);
   }
 
   Type *val_type;
@@ -842,7 +852,9 @@ static Number eval_binop(int op, type_t type, Number na, Number nb,
 static Expr *new_expr_binop(Scope *scope, int op, Expr *lhs, Expr *rhs,
                             Range range) {
   lhs = coerce_array2ptr(scope, lhs);
+  lhs = coerce_func2ptr(scope, lhs);
   rhs = coerce_array2ptr(scope, rhs);
+  rhs = coerce_func2ptr(scope, rhs);
 
   Type *val_type;
   switch (op) {
@@ -1016,8 +1028,11 @@ static Expr *new_expr_binop(Scope *scope, int op, Expr *lhs, Expr *rhs,
 static Expr *new_expr_cond(Scope *scope, Expr *cond, Expr *then_expr,
                            Expr *else_expr, Range range) {
   cond = coerce_array2ptr(scope, cond);
+  cond = coerce_func2ptr(scope, cond);
   then_expr = coerce_array2ptr(scope, then_expr);
+  then_expr = coerce_func2ptr(scope, then_expr);
   else_expr = coerce_array2ptr(scope, else_expr);
+  else_expr = coerce_func2ptr(scope, else_expr);
 
   if (!is_sametype(then_expr->val_type, else_expr->val_type)) {
     range_error(range, "条件演算子の両辺の型が異なります: %d, %d",
@@ -1033,7 +1048,9 @@ static Expr *new_expr_cond(Scope *scope, Expr *cond, Expr *then_expr,
 static Expr *new_expr_index(Scope *scope, Expr *array, Expr *index,
                             Range range) {
   array = coerce_array2ptr(scope, array);
+  array = coerce_func2ptr(scope, array);
   index = coerce_array2ptr(scope, index);
+  index = coerce_func2ptr(scope, index);
 
   return new_expr_unary(scope, '*',
                         new_expr_binop(scope, '+', array, index, range), range);
