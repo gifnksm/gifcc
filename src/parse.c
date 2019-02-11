@@ -99,7 +99,7 @@ static Expr *new_expr_cast(Scope *scope, Type *val_type, Expr *operand,
 static Expr *new_expr_unary(Scope *scope, int ty, Expr *operand, Range range);
 static Number eval_binop(int op, type_t type, Number na, Number nb,
                          Range range);
-static Expr *new_expr_binop(Scope *scope, int ty, Expr *lhs, Expr *rhs,
+static Expr *new_expr_binop(Scope *scope, int op, Expr *lhs, Expr *rhs,
                             Range range);
 static Expr *new_expr_cond(Scope *scope, Expr *cond, Expr *then_expr,
                            Expr *else_expr, Range range);
@@ -1298,18 +1298,15 @@ static Expr *unary_expression(Tokenizer *tokenizer, Scope *scope) {
     if (token_peek(tokenizer)->ty != '(' ||
         !token_is_typename(scope, token_peek_ahead(tokenizer, 1))) {
       Expr *expr = unary_expression(tokenizer, scope);
-      // TODO: size_t を使う
       return new_expr_num(
           new_number_size(get_val_size(expr->val_type, expr->range)),
           range_join(token->range, expr->range));
-    } else {
-      token_expect(tokenizer, '(');
-      Type *type = type_name(scope, tokenizer);
-      Token *end = token_expect(tokenizer, ')');
-      // TODO: size_t を使う
-      return new_expr_num(new_number_size(get_val_size(type, end->range)),
-                          range_join(token->range, end->range));
     }
+    token_expect(tokenizer, '(');
+    Type *type = type_name(scope, tokenizer);
+    Token *end = token_expect(tokenizer, ')');
+    return new_expr_num(new_number_size(get_val_size(type, end->range)),
+                        range_join(token->range, end->range));
   }
   return postfix_expression(tokenizer, scope);
 }
