@@ -259,7 +259,8 @@ static void dump_expr(Expr *expr, int level) {
     dump_range_start(expr->range);
     dump_indent(level);
     dump_type(expr->val_type);
-    printf("(GLOBAL_VAR %s)\n", expr->name);
+    printf("(GLOBAL_VAR %s@%s)\n", expr->name,
+           expr->global_var ? expr->global_var->name : NULL);
     return;
   case EX_STR:
     dump_range_start(expr->range);

@@ -1527,6 +1527,40 @@ static void test44(void) {
   test_ok(__func__);
 }
 
+static int test45_n = 8;
+static int test45_f(void) {
+  static int x = 0;
+  return x++;
+}
+static int test45_g(void) {
+  int s = 0;
+  static int x = 0;
+  {
+    static int x = 0;
+    s += x;
+    x += 10;
+  }
+  s += x;
+  x++;
+  return s;
+}
+static void test45(void) {
+  static int x = 0;
+  check_int(8, test45_n);
+  check_int(0, test45_f());
+  check_int(1, test45_f());
+  check_int(2, test45_f());
+  check_int(0, x);
+  x = 100;
+  check_int(3, test45_f());
+
+  check_int(0, test45_g());
+  check_int(11, test45_g());
+  check_int(22, test45_g());
+
+  test_ok(__func__);
+}
+
 int main(void) {
   test01();
   test02();
@@ -1571,6 +1605,7 @@ int main(void) {
   test42();
   test43();
   test44();
+  test45();
 
   return 0;
 }

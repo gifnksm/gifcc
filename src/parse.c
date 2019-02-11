@@ -24,6 +24,7 @@ typedef struct FuncCtxt {
 typedef struct Decl {
   Type *type;
   StackVar *stack_var;
+  GlobalVar *global_var;
 } Decl;
 
 typedef struct Scope {
@@ -62,9 +63,12 @@ static VarDef *register_var(Scope *scope, Token *name, Type *type, Range range,
 static VarDef *register_func(Scope *scope, Token *name, Type *type);
 static StackVar *register_stack_var(Scope *scope, Token *name, Type *type,
                                     Range range);
+static GlobalVar *register_global_var(Scope *scope, Token *name, Type *type,
+                                      Range range, bool is_static);
 static void register_member(Type *type, char *member_name, Type *member_type,
                             Range range);
-static bool register_decl(Scope *scope, char *name, Type *type, StackVar *svar);
+static bool register_decl(Scope *scope, char *name, Type *type, StackVar *svar,
+                          GlobalVar *gvar);
 static Decl *get_decl(Scope *scope, char *name);
 static bool register_tag(Scope *scope, char *tag, Type *type);
 static Type *get_tag(Scope *scope, char *tag);
@@ -260,12 +264,17 @@ static VarDef *register_var(Scope *scope, Token *name, Type *type, Range range,
   StackVar *svar = NULL;
   GlobalVar *gvar = NULL;
   if (scope->func_ctxt != NULL) {
-    ty = DEF_STACK_VAR;
-    svar = register_stack_var(scope, name, type, range);
+    if (!is_static) {
+      ty = DEF_STACK_VAR;
+      svar = register_stack_var(scope, name, type, range);
+    } else {
+      ty = DEF_GLOBAL_VAR;
+      gvar = register_global_var(scope, name, type, range, is_static);
+      gvar->name = make_label();
+    }
   } else {
     ty = DEF_GLOBAL_VAR;
-    (void)register_decl(scope, name->name, type, NULL);
-    gvar = new_global_variable(type, name->name, range, is_static);
+    gvar = register_global_var(scope, name, type, range, is_static);
   }
 
   VarDef *def = malloc(sizeof(VarDef));
@@ -279,7 +288,7 @@ static VarDef *register_var(Scope *scope, Token *name, Type *type, Range range,
 }
 
 static VarDef *register_func(Scope *scope, Token *name, Type *type) {
-  (void)register_decl(scope, name->name, type, NULL);
+  (void)register_decl(scope, name->name, type, NULL, NULL);
 
   VarDef *def = malloc(sizeof(VarDef));
   def->type = DEF_FUNC;
@@ -307,11 +316,25 @@ static StackVar *register_stack_var(Scope *scope, Token *name, Type *type,
   var->range = range;
   fcx->stack_size += get_val_size(type, range);
 
-  if (!register_decl(scope, name->name, type, var)) {
+  if (!register_decl(scope, name->name, type, var, NULL)) {
     range_error(range, "同じ名前のローカル変数が複数あります: %s", name->name);
   }
 
   return var;
+}
+
+static GlobalVar *register_global_var(Scope *scope, Token *name, Type *type,
+                                      Range range, bool is_static) {
+  GlobalVar *gvar = new_global_variable(type, name->name, range, is_static);
+  if (!register_decl(scope, name->name, type, NULL, gvar)) {
+    Decl *decl = get_decl(scope, name->name);
+    if (decl->global_var == NULL) {
+      decl->global_var = gvar;
+    } else {
+      gvar = decl->global_var;
+    }
+  }
+  return gvar;
 }
 
 static void register_member(Type *type, char *member_name, Type *member_type,
@@ -359,14 +382,15 @@ static void register_member(Type *type, char *member_name, Type *member_type,
   }
 }
 
-static bool register_decl(Scope *scope, char *name, Type *type,
-                          StackVar *svar) {
+static bool register_decl(Scope *scope, char *name, Type *type, StackVar *svar,
+                          GlobalVar *gvar) {
   if (map_get(scope->decl_map, name)) {
     return false;
   }
   Decl *decl = malloc(sizeof(Decl));
   decl->type = type;
   decl->stack_var = svar;
+  decl->global_var = gvar;
   map_put(scope->decl_map, name, decl);
   return true;
 }
@@ -656,25 +680,30 @@ static Expr *new_expr_ident(Scope *scope, char *name, Range range) {
   }
   Decl *decl = get_decl(scope, name);
   StackVar *svar;
+  GlobalVar *gvar;
   if (decl != NULL) {
     if (decl->stack_var != NULL) {
       ty = EX_STACK_VAR;
       type = decl->type;
       svar = decl->stack_var;
+      gvar = NULL;
     } else {
       ty = EX_GLOBAL_VAR;
       type = decl->type;
       svar = NULL;
+      gvar = decl->global_var;
     }
   } else {
     range_warn(range, "未定義の識別子です: %s", name);
     ty = EX_GLOBAL_VAR;
     type = new_type(TY_INT);
     svar = NULL;
+    gvar = new_global_variable(type, name, range, false);
   }
   Expr *expr = new_expr(ty, type, range);
   expr->name = name;
   expr->stack_var = svar;
+  expr->global_var = gvar;
   return expr;
 }
 
@@ -1514,7 +1543,7 @@ static Vector *declaration(Tokenizer *tokenizer, Scope *scope) {
   if (is_typedef) {
     register_typedef(scope, name->name, type);
   } else if (is_extern) {
-    register_decl(scope, name->name, type, NULL);
+    register_decl(scope, name->name, type, NULL, NULL);
   } else {
     if (is_func_type(type)) {
       VarDef *def = register_func(scope, name, type);
@@ -1538,7 +1567,7 @@ static Vector *declaration(Tokenizer *tokenizer, Scope *scope) {
     if (is_typedef) {
       register_typedef(scope, name->name, type);
     } else if (is_extern) {
-      register_decl(scope, name->name, type, NULL);
+      register_decl(scope, name->name, type, NULL, NULL);
     } else {
       if (is_func_type(type)) {
         (void)register_func(scope, name, type);
@@ -2043,17 +2072,25 @@ static Stmt *compound_statement(Tokenizer *tokenizer, Scope *scope) {
       Vector *def_list = declaration(tokenizer, scope);
       for (int i = 0; i < def_list->len; i++) {
         VarDef *def = def_list->data[i];
-        if (def->type != DEF_STACK_VAR) {
-          assert(def->type == DEF_FUNC);
+        switch (def->type) {
+        case DEF_FUNC:
           range_error(def->name->range, "関数内で関数は定義できません");
-        }
-        Initializer *init = def->init;
-        if (init == NULL) {
-          continue;
-        }
+        case DEF_GLOBAL_VAR:
+          vec_push(scope->global_ctxt->gvar_list, def->global_var);
+          // range_error(def->name->range,
+          // "staticのローカル変数は未サポートです");
+          break;
+        case DEF_STACK_VAR: {
+          Initializer *init = def->init;
+          if (init == NULL) {
+            continue;
+          }
 
-        Expr *dest = new_expr_ident(scope, def->name->name, def->name->range);
-        gen_init(scope, stmts, init, dest);
+          Expr *dest = new_expr_ident(scope, def->name->name, def->name->range);
+          gen_init(scope, stmts, init, dest);
+          break;
+        }
+        }
       }
 
       continue;

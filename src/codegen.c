@@ -100,7 +100,8 @@ static void gen_lval(Expr *expr) {
     return;
   }
   if (expr->ty == EX_GLOBAL_VAR) {
-    printf("  lea rax, %s[rip]\n", expr->name);
+    printf("  lea rax, %s[rip]\n",
+           expr->global_var ? expr->global_var->name : expr->name);
     printf("  push rax\n");
     return;
   }
@@ -166,7 +167,8 @@ static void gen_expr(Expr *expr) {
   }
 
   if (expr->ty == EX_GLOBAL_VAR) {
-    printf("  mov %s, %s[rip]\n", r->rax, expr->name);
+    printf("  mov %s, %s[rip]\n", r->rax,
+           expr->global_var ? expr->global_var->name : expr->name);
     printf("  push rax\n");
     return;
   }
@@ -725,28 +727,29 @@ static void gen_func(Function *func) {
 
 static void gen_gvar_init(Initializer *init, Range range) {
   if (init->expr != NULL) {
-    if (init->expr->ty == EX_NUM) {
-      switch (init->expr->val_type->ty) {
+    Expr *expr = init->expr;
+    if (expr->ty == EX_NUM) {
+      switch (expr->val_type->ty) {
       case TY_INT:
-        printf("  .long %d\n", init->expr->num_val.int_val);
+        printf("  .long %d\n", expr->num_val.int_val);
         break;
       case TY_CHAR:
-        printf("  .byte %hhd\n", init->expr->num_val.char_val);
+        printf("  .byte %hhd\n", expr->num_val.char_val);
         break;
       case TY_SCHAR:
-        printf("  .byte %hhd\n", init->expr->num_val.schar_val);
+        printf("  .byte %hhd\n", expr->num_val.schar_val);
         break;
       case TY_SHORT:
-        printf("  .word %hd\n", init->expr->num_val.short_val);
+        printf("  .word %hd\n", expr->num_val.short_val);
         break;
       case TY_LONG:
-        printf("  .quad %ld\n", init->expr->num_val.long_val);
+        printf("  .quad %ld\n", expr->num_val.long_val);
         break;
       case TY_LLONG:
-        printf("  .quad %lld\n", init->expr->num_val.llong_val);
+        printf("  .quad %lld\n", expr->num_val.llong_val);
         break;
       case TY_PTR:
-        printf("  .quad %" PRIdPTR "\n", init->expr->num_val.ptr_val);
+        printf("  .quad %" PRIdPTR "\n", expr->num_val.ptr_val);
         break;
       case TY_VOID:
       case TY_ARRAY:
@@ -755,12 +758,13 @@ static void gen_gvar_init(Initializer *init, Range range) {
       case TY_UNION:
         range_error(range, "int型ではありません");
       }
-    } else if (init->expr->ty == '&' && init->expr->lhs == NULL &&
-               init->expr->rhs != NULL) {
-      if (init->expr->rhs->ty != EX_GLOBAL_VAR) {
+    } else if (expr->ty == '&' && expr->lhs == NULL && expr->rhs != NULL) {
+      if (expr->rhs->ty != EX_GLOBAL_VAR) {
         range_error(range, "グローバル変数以外へのポインタです");
       }
-      printf("  .quad %s\n", init->expr->rhs->name);
+      Expr *gvar = expr->rhs;
+      printf("  .quad %s\n",
+             gvar->global_var != NULL ? gvar->global_var->name : gvar->name);
     } else {
       range_error(range, "数値でもポインタでもありません");
     }

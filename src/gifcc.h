@@ -249,6 +249,7 @@ typedef struct Expr {
   Vector *argument;
 
   StackVar *stack_var;
+  GlobalVar *global_var;
 
   // EX_CAST: (<val_type>)<expr>
   struct Expr *expr;
