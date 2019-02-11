@@ -1514,16 +1514,18 @@ static Vector *declaration(Tokenizer *tokenizer, Scope *scope) {
 static Type *type_specifier(Scope *scope, Tokenizer *tokenizer) {
   Token *token = token_pop(tokenizer);
   switch (token->ty) {
+  case TK_VOID:
+    return new_type(TY_VOID);
   case TK_CHAR:
     return new_type(TY_CHAR);
   case TK_INT:
     return new_type(TY_INT);
   case TK_SHORT:
+    (void)token_consume(tokenizer, TK_INT);
     return new_type(TY_SHORT);
   case TK_LONG:
+    (void)token_consume(tokenizer, TK_INT);
     return new_type(TY_LONG);
-  case TK_VOID:
-    return new_type(TY_VOID);
   case TK_STRUCT:
   case TK_UNION:
     return struct_or_union_specifier(scope, tokenizer, token);

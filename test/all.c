@@ -1471,6 +1471,24 @@ int test42_m;
 int test42_f(void) { return 32; }
 int test42_g(void) { return 64; }
 
+void test43(void) {
+  char c1 = 0;
+  short int s1 = 1;
+  short s2 = 2;
+  int i1 = 3;
+  long int l1 = 4;
+  long l2 = 5;
+
+  check_int(0, c1);
+  check_int(1, s1);
+  check_int(2, s2);
+  check_int(3, i1);
+  check_int(4, l1);
+  check_int(5, l2);
+
+  test_ok(__func__);
+}
+
 int main(void) {
   test01();
   test02();
@@ -1513,6 +1531,7 @@ int main(void) {
   test40();
   test41();
   test42();
+  test43();
 
   return 0;
 }
