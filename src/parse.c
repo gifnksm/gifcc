@@ -166,8 +166,8 @@ static void declarator(Scope *scope, Tokenizer *tokenizer, Type *base_type,
 static void direct_declarator(Scope *scope, Tokenizer *tokenizer,
                               Type *base_type, Token **name, Type **type,
                               Range *range);
-static Initializer *initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
-                                Member *member);
+static void initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
+                        Member *member, Initializer **init);
 
 // statement
 static Stmt *statement(Tokenizer *tokenizer, Scope *scope);
@@ -1558,7 +1558,7 @@ static Vector *declaration(Tokenizer *tokenizer, Scope *scope) {
     } else {
       VarDef *def = register_var(scope, name, type, range, is_static);
       if (token_consume(tokenizer, '=')) {
-        def->init = initializer(tokenizer, scope, type, NULL);
+        initializer(tokenizer, scope, type, NULL, &def->init);
       }
       vec_push(def_list, def);
     }
@@ -1576,7 +1576,7 @@ static Vector *declaration(Tokenizer *tokenizer, Scope *scope) {
       } else {
         VarDef *def = register_var(scope, name, type, range, is_static);
         if (token_consume(tokenizer, '=')) {
-          def->init = initializer(tokenizer, scope, type, NULL);
+          initializer(tokenizer, scope, type, NULL, &def->init);
         }
         vec_push(def_list, def);
       }
@@ -1788,53 +1788,53 @@ static void direct_declarator(Scope *scope, Tokenizer *tokenizer,
   *placeholder = *base_type;
 }
 
-static Initializer *struct_initializer(Tokenizer *tokenizer, Scope *scope,
-                                       Type *type, Member *member) {
+static void struct_initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
+                               Member *member, Initializer **init) {
   assert(type->ty == TY_STRUCT);
-  Initializer *init = new_initializer(type, member);
-
-  Map *members = new_map();
-  for (int i = 0; i < type->member_list->len; i++) {
-    Member *member = type->member_list->data[i];
-    map_put(members, member->name, NULL);
+  if (*init == NULL) {
+    *init = new_initializer(type, member);
+    (*init)->members = new_map();
+    for (int i = 0; i < type->member_list->len; i++) {
+      Member *member = type->member_list->data[i];
+      map_put((*init)->members, member->name, NULL);
+    }
   }
+
   for (int i = 0; i < type->member_list->len; i++) {
+    Initializer *meminit = NULL;
     Member *member = type->member_list->data[i];
-    members->keys->data[i] = member->name;
-    members->vals->data[i] =
-        initializer(tokenizer, scope, member->type, member);
+    initializer(tokenizer, scope, member->type, member, &meminit);
+    (*init)->members->keys->data[i] = member->name;
+    (*init)->members->vals->data[i] = meminit;
     if (i < type->member_list->len - 1 &&
         token_consume(tokenizer, ',') == NULL) {
       break;
     }
   }
-
-  init->members = members;
-  return init;
 }
 
-static Initializer *union_initializer(Tokenizer *tokenizer, Scope *scope,
-                                      Type *type, Member *member) {
+static void union_initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
+                              Member *member, Initializer **init) {
   assert(type->ty == TY_UNION);
-  Initializer *init = new_initializer(type, member);
-
-  Map *members = new_map();
-  {
-    Member *member = type->member_list->data[0];
-    map_put(members, member->name, NULL);
-    members->vals->data[0] =
-        initializer(tokenizer, scope, member->type, member);
+  if (*init == NULL) {
+    *init = new_initializer(type, member);
+    (*init)->members = new_map();
+    map_put((*init)->members, NULL, NULL);
   }
-  init->members = members;
 
-  return init;
+  {
+    Initializer *meminit = NULL;
+    Member *member = type->member_list->data[0];
+    initializer(tokenizer, scope, member->type, member, &meminit);
+    (*init)->members->keys->data[0] = member->name;
+    (*init)->members->vals->data[0] = meminit;
+  }
 }
 
-static Initializer *initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
-                                Member *member) {
+static void initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
+                        Member *member, Initializer **init) {
   Token *token;
   if ((token = token_consume(tokenizer, '{')) != NULL) {
-    Initializer *init;
     switch (type->ty) {
     case TY_INT:
     case TY_SHORT:
@@ -1843,15 +1843,15 @@ static Initializer *initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
     case TY_CHAR:
     case TY_SCHAR:
     case TY_PTR: {
-      init = initializer(tokenizer, scope, type, member);
+      initializer(tokenizer, scope, type, member, init);
       break;
     }
     case TY_STRUCT: {
-      init = struct_initializer(tokenizer, scope, type, member);
+      struct_initializer(tokenizer, scope, type, member, init);
       break;
     }
     case TY_UNION: {
-      init = union_initializer(tokenizer, scope, type, member);
+      union_initializer(tokenizer, scope, type, member, init);
       break;
     }
     case TY_VOID:
@@ -1861,20 +1861,22 @@ static Initializer *initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
     }
     (void)token_consume(tokenizer, ',');
     token_expect(tokenizer, '}');
-    return init;
+    return;
   };
 
   if (type->ty == TY_STRUCT) {
-    return struct_initializer(tokenizer, scope, type, member);
+    struct_initializer(tokenizer, scope, type, member, init);
+    return;
   }
   if (type->ty == TY_UNION) {
-    return union_initializer(tokenizer, scope, type, member);
+    union_initializer(tokenizer, scope, type, member, init);
+    return;
   }
+
   {
-    Initializer *init = new_initializer(type, member);
+    *init = new_initializer(type, member);
     Expr *expr = assignment_expression(tokenizer, scope);
-    init->expr = new_expr_cast(scope, type, expr, expr->range);
-    return init;
+    (*init)->expr = new_expr_cast(scope, type, expr, expr->range);
   }
 }
 
