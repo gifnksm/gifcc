@@ -1913,6 +1913,58 @@ static void test48(void) {
   test_ok(__func__);
 }
 
+static int test49_a0[] = {};
+static int test49_a4[] = {1, 2, 3, 4};
+static int test49_a6[6] = {1, 2, 3, 4};
+static void test49(void) {
+  check_int(0, sizeof(test49_a0));
+  check_int(sizeof(int) * 4, sizeof(test49_a4));
+  check_int(sizeof(int) * 6, sizeof(test49_a6));
+  check_int(1, test49_a4[0]);
+  check_int(2, test49_a4[1]);
+  check_int(3, test49_a4[2]);
+  check_int(4, test49_a4[3]);
+  check_int(1, test49_a6[0]);
+  check_int(2, test49_a6[1]);
+  check_int(3, test49_a6[2]);
+  check_int(4, test49_a6[3]);
+  check_int(0, test49_a6[4]);
+  check_int(0, test49_a6[5]);
+
+  int a0[] = {};
+  int a4[] = {1, 2, 3, 4};
+  int a6[6] = {1, 2, 3, 4};
+  check_int(0, sizeof(a0));
+  check_int(sizeof(int) * 4, sizeof(a4));
+  check_int(sizeof(int) * 6, sizeof(a6));
+  check_int(1, a4[0]);
+  check_int(2, a4[1]);
+  check_int(3, a4[2]);
+  check_int(4, a4[3]);
+  check_int(1, a6[0]);
+  check_int(2, a6[1]);
+  check_int(3, a6[2]);
+  check_int(4, a6[3]);
+  check_int(0, a6[4]);
+  check_int(0, a6[5]);
+
+  static int s_a0[] = {};
+  static int s_a4[] = {1, 2, 3, 4};
+  static int s_a6[6] = {1, 2, 3, 4};
+  check_int(0, sizeof(s_a0));
+  check_int(sizeof(int) * 4, sizeof(s_a4));
+  check_int(1, s_a4[0]);
+  check_int(2, s_a4[1]);
+  check_int(3, s_a4[2]);
+  check_int(4, s_a4[3]);
+  check_int(1, s_a6[0]);
+  check_int(2, s_a6[1]);
+  check_int(3, s_a6[2]);
+  check_int(4, s_a6[3]);
+  check_int(0, s_a6[4]);
+  check_int(0, s_a6[5]);
+}
+
 int main(void) {
   test01();
   test02();
@@ -1961,6 +2013,7 @@ int main(void) {
   test46();
   test47();
   test48();
+  test49();
 
   return 0;
 }

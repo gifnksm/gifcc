@@ -1,5 +1,6 @@
 #include "gifcc.h"
 #include <assert.h>
+#include <limits.h>
 #include <stdalign.h>
 #include <stdarg.h>
 #include <stdbool.h>
@@ -16,7 +17,7 @@ typedef struct GlobalCtxt {
 typedef struct FuncCtxt {
   char *name;
   Type *type;
-  int stack_size;
+  Vector *var_list;
   Vector *switches;
   Map *label_map;
 } FuncCtxt;
@@ -88,6 +89,7 @@ static noreturn void binop_type_error_raw(int ty, Expr *lhs, Expr *rhs,
 static Type *new_type(int ty);
 static Type *new_type_ptr(Type *base_type);
 static Type *new_type_array(Type *base_type, Number len);
+static Type *new_type_unsized_array(Type *base_type);
 static Type *new_type_func(Type *ret_type, Vector *func_param);
 static Type *new_type_struct(int tk, char *tag);
 static Type *new_type_anon_struct(int tk);
@@ -238,7 +240,7 @@ static FuncCtxt *new_func_ctxt(char *name, Type *type) {
 
   fcx->name = name;
   fcx->type = type;
-  fcx->stack_size = 0;
+  fcx->var_list = new_vector();
   fcx->switches = new_vector();
   fcx->label_map = new_map();
 
@@ -334,11 +336,10 @@ static StackVar *register_stack_var(Scope *scope, Token *name, Type *type,
   FuncCtxt *fcx = scope->func_ctxt;
 
   StackVar *var = malloc(sizeof(StackVar));
-  fcx->stack_size = align(fcx->stack_size, get_val_align(type, range));
-  var->offset = fcx->stack_size;
+  var->offset = INT_MIN; // Initialize with invalid value
   var->type = type;
   var->range = range;
-  fcx->stack_size += get_val_size(type, range);
+  vec_push(fcx->var_list, var);
 
   if (!register_decl(scope, name->name, type, var, NULL)) {
     range_error(range, "同じ名前のローカル変数が複数あります: %s", name->name);
@@ -563,6 +564,9 @@ int get_val_size(Type *ty, Range range) {
   case TY_PTR:
     return sizeof(void *);
   case TY_ARRAY:
+    if (ty->array_len < 0) {
+      range_error(range, "不完全な配列型のサイズを取得しようとしました");
+    }
     return get_val_size(ty->ptrof, range) * ty->array_len;
   case TY_FUNC:
     range_error(range, "関数型の値サイズを取得しようとしました");
@@ -634,6 +638,14 @@ static Type *new_type_array(Type *base_type, Number len) {
   ptrtype->ty = TY_ARRAY;
   ptrtype->ptrof = base_type;
   ptrtype->array_len = l;
+  return ptrtype;
+}
+
+static Type *new_type_unsized_array(Type *base_type) {
+  Type *ptrtype = malloc(sizeof(Type));
+  ptrtype->ty = TY_ARRAY;
+  ptrtype->ptrof = base_type;
+  ptrtype->array_len = -1;
   return ptrtype;
 }
 
@@ -1723,7 +1735,11 @@ static Type *type_name(Scope *scope, Tokenizer *tokenizer) {
     type = new_type_ptr(type);
   }
   while (token_consume(tokenizer, '[')) {
-    type = new_type_array(type, token_expect(tokenizer, TK_NUM)->num_val);
+    if (token_peek(tokenizer)->ty == ']') {
+      type = new_type_unsized_array(type);
+    } else {
+      type = new_type_array(type, token_expect(tokenizer, TK_NUM)->num_val);
+    }
     token_expect(tokenizer, ']');
   }
   return type;
@@ -1767,8 +1783,12 @@ static void direct_declarator(Scope *scope, Tokenizer *tokenizer,
   while (true) {
     if (token_consume(tokenizer, '[')) {
       Type *inner = malloc(sizeof(Type));
-      *placeholder =
-          *new_type_array(inner, token_expect(tokenizer, TK_NUM)->num_val);
+      if (token_peek(tokenizer)->ty == ']') {
+        *placeholder = *new_type_unsized_array(inner);
+      } else {
+        *placeholder =
+            *new_type_array(inner, token_expect(tokenizer, TK_NUM)->num_val);
+      }
       placeholder = inner;
       Token *end = token_expect(tokenizer, ']');
       *range = range_join(*range, end->range);
@@ -1930,8 +1950,16 @@ static void array_initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
     *init = new_initializer(type);
   }
 
-  int max_len = type->array_len;
+  if (token_peek(tokenizer)->ty == '}') {
+    if (type->array_len < 0) {
+      type->array_len = (*init)->elements->len;
+    }
+    return;
+  }
+
+  int max_len = type->array_len < 0 ? INT_MAX : type->array_len;
   for (int i = 0; i < max_len; i++) {
+    vec_extend((*init)->elements, i + 1);
     Initializer *eleminit = (*init)->elements->data[i];
     initializer(tokenizer, scope, type->ptrof, &eleminit);
     (*init)->elements->data[i] = eleminit;
@@ -1941,6 +1969,10 @@ static void array_initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
     if (token_peek(tokenizer)->ty == '.') {
       break;
     }
+  }
+
+  if (type->array_len < 0) {
+    type->array_len = (*init)->elements->len;
   }
 }
 
@@ -2244,12 +2276,20 @@ static Function *function_definition(Tokenizer *tokenizer, Scope *global_scope,
 
   Stmt *body = compound_statement(tokenizer, scope);
 
+  int stack_size = 0;
+  for (int i = 0; i < fcx->var_list->len; i++) {
+    StackVar *svar = fcx->var_list->data[i];
+    stack_size = align(stack_size, get_val_align(svar->type, svar->range));
+    svar->offset = stack_size;
+    stack_size += get_val_size(svar->type, svar->range);
+  }
+
   Function *func = malloc(sizeof(Function));
   func->name = name;
   func->type = type;
   func->is_static = is_static;
   func->range = range_join(start, body->range);
-  func->stack_size = fcx->stack_size;
+  func->stack_size = stack_size;
   func->label_map = fcx->label_map;
   func->body = body;
 
