@@ -1725,13 +1725,60 @@ static union {
     long c;
   } y;
 } test47_t = {.y.b = 200, .y.a = 100};
-
 static void test47(void) {
   check_int(1, test47_s.x.a);
   check_int(2, test47_s.x.b);
   check_int(100, test47_t.y.a);
   check_int(200, test47_t.y.b);
   check_int(0, test47_t.y.c);
+
+  union {
+    struct {
+      int a;
+      int b;
+    } x;
+  } s = {1, 2};
+  union {
+    struct {
+      int a;
+      int b;
+    } x;
+    struct {
+      long a;
+      long b;
+      long c;
+    } y;
+  } t = {.y.b = 200, .y.a = 100};
+
+  check_int(1, s.x.a);
+  check_int(2, s.x.b);
+  check_int(100, t.y.a);
+  check_int(200, t.y.b);
+  check_int(0, t.y.c);
+
+  static union {
+    struct {
+      int a;
+      int b;
+    } x;
+  } s_s = {1, 2};
+  static union {
+    struct {
+      int a;
+      int b;
+    } x;
+    struct {
+      long a;
+      long b;
+      long c;
+    } y;
+  } s_t = {.y.b = 200, .y.a = 100};
+
+  check_int(1, s_s.x.a);
+  check_int(2, s_s.x.b);
+  check_int(100, s_t.y.a);
+  check_int(200, s_t.y.b);
+  check_int(0, s_t.y.c);
 
   test_ok(__func__);
 }
