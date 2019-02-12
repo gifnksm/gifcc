@@ -1983,6 +1983,22 @@ static void test49(void) {
   check_int(0, s_ax[2]);
   check_int(8, s_ax[3]);
   check_int(9, s_ax[4]);
+
+  test_ok(__func__);
+}
+
+static void test50(void) {
+  char *s = "abc"
+            "def";
+
+  check_int('a', s[0]);
+  check_int('b', s[1]);
+  check_int('c', s[2]);
+  check_int('d', s[3]);
+  check_int('e', s[4]);
+  check_int('f', s[5]);
+
+  test_ok(__func__);
 }
 
 int main(void) {
@@ -2034,6 +2050,7 @@ int main(void) {
   test47();
   test48();
   test49();
+  test50();
 
   return 0;
 }
