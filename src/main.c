@@ -506,6 +506,7 @@ static void dump_init(Initializer *init, Range range, int level) {
     dump_range_start(range);
     dump_indent(level);
     printf("NULL\n");
+    return;
   }
 
   if (init->expr != NULL) {

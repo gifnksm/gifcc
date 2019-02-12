@@ -1561,6 +1561,151 @@ static void test45(void) {
   test_ok(__func__);
 }
 
+static struct {
+  int a;
+  int b;
+} test46_s = {.b = 123, .a = 456};
+static struct {
+  int a;
+  int b;
+  struct {
+    int a;
+    int b;
+  } c;
+  int d;
+  int e;
+} test46_t = {1, .c.a = 3, 4, 5};
+static struct {
+  int a;
+  int b;
+  struct {
+    int c;
+    int d;
+  };
+  struct {
+    int e;
+    int f;
+  };
+  int g;
+  int h;
+} test46_u = {1, .c = 3, .f = 5};
+static void test46(void) {
+  check_int(456, test46_s.a);
+  check_int(123, test46_s.b);
+
+  check_int(1, test46_t.a);
+  check_int(0, test46_t.b);
+  check_int(3, test46_t.c.a);
+  check_int(4, test46_t.c.b);
+  check_int(5, test46_t.d);
+  check_int(0, test46_t.e);
+
+  check_int(1, test46_u.a);
+  check_int(0, test46_u.b);
+  check_int(3, test46_u.c);
+  check_int(0, test46_u.d);
+  check_int(0, test46_u.e);
+  check_int(5, test46_u.f);
+  check_int(0, test46_u.g);
+  check_int(0, test46_u.h);
+
+  struct {
+    int a;
+    int b;
+  } s = {.b = 123, .a = 456};
+  struct {
+    int a;
+    int b;
+    struct {
+      int a;
+      int b;
+    } c;
+    int d;
+    int e;
+  } t = {1, .c.a = 3, 4, 5};
+  static struct {
+    int a;
+    int b;
+    struct {
+      int c;
+      int d;
+    };
+    struct {
+      int e;
+      int f;
+    };
+    int g;
+    int h;
+  } u = {1, .c = 3, .f = 5};
+  check_int(456, s.a);
+  check_int(123, s.b);
+
+  check_int(1, t.a);
+  check_int(0, t.b);
+  check_int(3, t.c.a);
+  check_int(4, t.c.b);
+  check_int(5, t.d);
+  check_int(0, t.e);
+
+  check_int(1, u.a);
+  check_int(0, u.b);
+  check_int(3, u.c);
+  check_int(0, u.d);
+  check_int(0, u.e);
+  check_int(5, u.f);
+  check_int(0, u.g);
+  check_int(0, u.h);
+
+  static struct {
+    int a;
+    int b;
+  } s_s = {.b = 123, .a = 456};
+  static struct {
+    int a;
+    int b;
+    struct {
+      int a;
+      int b;
+    } c;
+    int d;
+    int e;
+  } s_t = {1, .c.a = 3, 4, 5};
+
+  static struct {
+    int a;
+    int b;
+    struct {
+      int c;
+      int d;
+    };
+    struct {
+      int e;
+      int f;
+    };
+    int g;
+    int h;
+  } s_u = {1, .c = 3, .f = 5};
+
+  check_int(456, s_s.a);
+  check_int(123, s_s.b);
+
+  check_int(1, s_t.a);
+  check_int(0, s_t.b);
+  check_int(3, s_t.c.a);
+  check_int(4, s_t.c.b);
+  check_int(5, s_t.d);
+  check_int(0, s_t.e);
+
+  check_int(1, s_u.a);
+  check_int(0, s_u.b);
+  check_int(3, s_u.c);
+  check_int(0, s_u.d);
+  check_int(0, s_u.e);
+  check_int(5, s_u.f);
+  check_int(0, s_u.g);
+  check_int(0, s_u.h);
+}
+
 int main(void) {
   test01();
   test02();
@@ -1606,6 +1751,7 @@ int main(void) {
   test43();
   test44();
   test45();
+  test46();
 
   return 0;
 }

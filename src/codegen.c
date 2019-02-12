@@ -775,6 +775,9 @@ static void gen_gvar_init(Initializer *init, Range range) {
     int offset = 0;
     for (int i = 0; i < init->members->keys->len; i++) {
       Initializer *meminit = init->members->vals->data[i];
+      if (meminit == NULL) {
+        continue;
+      }
       Member *member = meminit->member;
       if (offset < member->offset) {
         printf("  .zero %d\n", member->offset - offset);

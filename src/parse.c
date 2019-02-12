@@ -1789,7 +1789,8 @@ static void direct_declarator(Scope *scope, Tokenizer *tokenizer,
 }
 
 static void struct_initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
-                               Member *member, Initializer **init) {
+                               Member *member, bool brace_root,
+                               Initializer **init) {
   assert(type->ty == TY_STRUCT);
   if (*init == NULL) {
     *init = new_initializer(type, member);
@@ -1800,14 +1801,57 @@ static void struct_initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
     }
   }
 
-  for (int i = 0; i < type->member_list->len; i++) {
-    Initializer *meminit = NULL;
-    Member *member = type->member_list->data[i];
-    initializer(tokenizer, scope, member->type, member, &meminit);
-    (*init)->members->keys->data[i] = member->name;
-    (*init)->members->vals->data[i] = meminit;
-    if (i < type->member_list->len - 1 &&
-        token_consume(tokenizer, ',') == NULL) {
+  while (true) {
+    int idx = 0;
+
+    // initializer with designator
+    if (token_peek(tokenizer)->ty == '.' &&
+        token_peek_ahead(tokenizer, 1)->ty == TK_IDENT) {
+      Token *ident = token_peek_ahead(tokenizer, 1);
+      for (int i = 0; i < type->member_list->len; i++) {
+        Member *member = type->member_list->data[i];
+        if (member->name == NULL || strcmp(member->name, ident->name) == 0) {
+          if (member->name != NULL) {
+            token_expect(tokenizer, '.');
+            token_expect(tokenizer, TK_IDENT);
+            token_consume(tokenizer, '=');
+          }
+          Token *current = token_peek(tokenizer);
+          Initializer *meminit = (*init)->members->vals->data[i];
+          // if name is null, try parsing designator as inner struct's
+          // designator
+          initializer(tokenizer, scope, member->type, member, &meminit);
+          if (token_peek(tokenizer) == current) {
+            // if the designator is not found in inner struct, continue to next
+            // member
+            continue;
+          }
+          idx = i + 1;
+          (*init)->members->keys->data[i] = member->name;
+          (*init)->members->vals->data[i] = meminit;
+          token_consume(tokenizer, ',');
+          break;
+        }
+      }
+    }
+
+    // initializers without designator.
+    if (token_peek(tokenizer)->ty != '.' && token_peek(tokenizer)->ty != '}') {
+      for (int i = idx; i < type->member_list->len; i++) {
+        Initializer *meminit = (*init)->members->vals->data[i];
+        Member *member = type->member_list->data[i];
+        initializer(tokenizer, scope, member->type, member, &meminit);
+        (*init)->members->keys->data[i] = member->name;
+        (*init)->members->vals->data[i] = meminit;
+        if ((i < type->member_list->len - 1 &&
+             token_consume(tokenizer, ',') == NULL) ||
+            (token_peek(tokenizer)->ty == '.')) {
+          break;
+        }
+      }
+    }
+
+    if (!brace_root || token_peek(tokenizer)->ty != '.') {
       break;
     }
   }
@@ -1847,7 +1891,7 @@ static void initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
       break;
     }
     case TY_STRUCT: {
-      struct_initializer(tokenizer, scope, type, member, init);
+      struct_initializer(tokenizer, scope, type, member, true, init);
       break;
     }
     case TY_UNION: {
@@ -1865,7 +1909,7 @@ static void initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
   };
 
   if (type->ty == TY_STRUCT) {
-    struct_initializer(tokenizer, scope, type, member, init);
+    struct_initializer(tokenizer, scope, type, member, false, init);
     return;
   }
   if (type->ty == TY_UNION) {
