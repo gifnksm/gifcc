@@ -27,6 +27,12 @@ void *vec_peek(Vector *vec) {
   return vec->data[vec->len - 1];
 }
 
+void vec_extend(Vector *vec, int len) {
+  while (vec->len < len) {
+    vec_push(vec, NULL);
+  }
+}
+
 Map *new_map(void) {
   Map *map = malloc(sizeof(Map));
   map->keys = new_vector();

@@ -1783,6 +1783,136 @@ static void test47(void) {
   test_ok(__func__);
 }
 
+static int test48_array[4] = {1, 2, 3};
+static struct {
+  int a;
+  int b[4];
+  int c;
+} test48_s = {1, 2, 3, .c = 4};
+static struct {
+  int a;
+  int b[4];
+  int c;
+} test48_t = {1, 2, 3, 4, 5, 6};
+static struct {
+  int a;
+  int b[4];
+  int c;
+} test48_u = {1, {2, 3, 4, 5}, 6};
+static void test48(void) {
+  check_int(1, test48_array[0]);
+  check_int(2, test48_array[1]);
+  check_int(3, test48_array[2]);
+  check_int(0, test48_array[3]);
+
+  check_int(1, test48_s.a);
+  check_int(2, test48_s.b[0]);
+  check_int(3, test48_s.b[1]);
+  check_int(0, test48_s.b[2]);
+  check_int(0, test48_s.b[3]);
+  check_int(4, test48_s.c);
+
+  check_int(1, test48_t.a);
+  check_int(2, test48_t.b[0]);
+  check_int(3, test48_t.b[1]);
+  check_int(4, test48_t.b[2]);
+  check_int(5, test48_t.b[3]);
+  check_int(6, test48_t.c);
+
+  check_int(1, test48_u.a);
+  check_int(2, test48_u.b[0]);
+  check_int(3, test48_u.b[1]);
+  check_int(4, test48_u.b[2]);
+  check_int(5, test48_u.b[3]);
+  check_int(6, test48_u.c);
+
+  int array[4] = {1, 2, 3};
+  struct {
+    int a;
+    int b[4];
+    int c;
+  } s = {1, 2, 3, .c = 4};
+  struct {
+    int a;
+    int b[4];
+    int c;
+  } t = {1, 2, 3, 4, 5, 6};
+  struct {
+    int a;
+    int b[4];
+    int c;
+  } u = {1, {2, 3, 4, 5}, 6};
+  check_int(1, array[0]);
+  check_int(2, array[1]);
+  check_int(3, array[2]);
+  check_int(0, array[3]);
+
+  check_int(1, s.a);
+  check_int(2, s.b[0]);
+  check_int(3, s.b[1]);
+  check_int(0, s.b[2]);
+  check_int(0, s.b[3]);
+  check_int(4, s.c);
+
+  check_int(1, t.a);
+  check_int(2, t.b[0]);
+  check_int(3, t.b[1]);
+  check_int(4, t.b[2]);
+  check_int(5, t.b[3]);
+  check_int(6, t.c);
+
+  check_int(1, u.a);
+  check_int(2, u.b[0]);
+  check_int(3, u.b[1]);
+  check_int(4, u.b[2]);
+  check_int(5, u.b[3]);
+  check_int(6, u.c);
+
+  static int s_array[4] = {1, 2, 3};
+  static struct {
+    int a;
+    int b[4];
+    int c;
+  } s_s = {1, 2, 3, .c = 4};
+  static struct {
+    int a;
+    int b[4];
+    int c;
+  } s_t = {1, 2, 3, 4, 5, 6};
+  static struct {
+    int a;
+    int b[4];
+    int c;
+  } s_u = {1, {2, 3, 4, 5}, 6};
+  check_int(1, s_array[0]);
+  check_int(2, s_array[1]);
+  check_int(3, s_array[2]);
+  check_int(0, s_array[3]);
+
+  check_int(1, s_s.a);
+  check_int(2, s_s.b[0]);
+  check_int(3, s_s.b[1]);
+  check_int(0, s_s.b[2]);
+  check_int(0, s_s.b[3]);
+  check_int(4, s_s.c);
+
+  check_int(1, s_t.a);
+  check_int(2, s_t.b[0]);
+  check_int(3, s_t.b[1]);
+  check_int(4, s_t.b[2]);
+  check_int(5, s_t.b[3]);
+  check_int(6, s_t.c);
+
+  check_int(1, s_u.a);
+  check_int(2, s_u.b[0]);
+  check_int(3, s_u.b[1]);
+  check_int(4, s_u.b[2]);
+  check_int(5, s_u.b[3]);
+  check_int(6, s_u.c);
+
+  test_ok(__func__);
+}
+
 int main(void) {
   test01();
   test02();
@@ -1830,6 +1960,7 @@ int main(void) {
   test45();
   test46();
   test47();
+  test48();
 
   return 0;
 }

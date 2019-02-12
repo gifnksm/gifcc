@@ -798,6 +798,20 @@ static void gen_gvar_init(Initializer *init, Range range) {
     assert(offset == ty_size);
     return;
   }
+
+  if (init->elements != NULL) {
+    assert(init->type->ty == TY_ARRAY);
+    for (int i = 0; i < init->elements->len; i++) {
+      Initializer *meminit = init->elements->data[i];
+      if (meminit == NULL) {
+        printf("  .zero %d\n", get_val_size(init->type->ptrof, range));
+        continue;
+      }
+      gen_gvar_init(meminit, range);
+    }
+    return;
+  }
+
   assert(false);
 }
 

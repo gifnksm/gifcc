@@ -201,6 +201,7 @@ typedef struct Expr Expr;
 typedef struct Initializer {
   Type *type;
   Map *members;
+  Vector *elements;
   Expr *expr;
 } Initializer;
 
@@ -325,6 +326,7 @@ Vector *new_vector(void);
 void vec_push(Vector *vec, void *elem);
 void *vec_pop(Vector *vec);
 void *vec_peek(Vector *vec);
+void vec_extend(Vector *vec, int len);
 Map *new_map(void);
 void map_put(Map *map, char *key, void *val);
 void *map_get(Map *map, char *key);

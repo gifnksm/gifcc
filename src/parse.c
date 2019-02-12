@@ -198,6 +198,29 @@ static Number new_number_size(int val) {
 static Initializer *new_initializer(Type *type) {
   Initializer *init = malloc(sizeof(Initializer));
   init->type = type;
+  init->members = NULL;
+  init->elements = NULL;
+  switch (type->ty) {
+  case TY_STRUCT:
+    init->members = new_map();
+    for (int i = 0; i < type->member_list->len; i++) {
+      Member *member = type->member_list->data[i];
+      map_put(init->members, member->name, NULL);
+    }
+    break;
+  case TY_UNION:
+    init->members = new_map();
+    if (type->member_list->len > 0) {
+      map_put(init->members, NULL, NULL);
+    }
+    break;
+  case TY_ARRAY:
+    init->elements = new_vector();
+    vec_extend(init->elements, type->array_len);
+    break;
+  default:
+    break;
+  }
   return init;
 }
 
@@ -1792,11 +1815,6 @@ static void struct_initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
   assert(type->ty == TY_STRUCT);
   if (*init == NULL) {
     *init = new_initializer(type);
-    (*init)->members = new_map();
-    for (int i = 0; i < type->member_list->len; i++) {
-      Member *member = type->member_list->data[i];
-      map_put((*init)->members, member->name, NULL);
-    }
   }
 
   while (true) {
@@ -1860,8 +1878,6 @@ static void union_initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
   assert(type->ty == TY_UNION);
   if (*init == NULL) {
     *init = new_initializer(type);
-    (*init)->members = new_map();
-    map_put((*init)->members, NULL, NULL);
   }
 
   while (true) {
@@ -1907,6 +1923,27 @@ static void union_initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
   }
 }
 
+static void array_initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
+                              Initializer **init) {
+  assert(type->ty == TY_ARRAY);
+  if (*init == NULL) {
+    *init = new_initializer(type);
+  }
+
+  int max_len = type->array_len;
+  for (int i = 0; i < max_len; i++) {
+    Initializer *eleminit = (*init)->elements->data[i];
+    initializer(tokenizer, scope, type->ptrof, &eleminit);
+    (*init)->elements->data[i] = eleminit;
+    if ((i < max_len - 1 && token_consume(tokenizer, ',') == NULL)) {
+      break;
+    }
+    if (token_peek(tokenizer)->ty == '.') {
+      break;
+    }
+  }
+}
+
 static void initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
                         Initializer **init) {
   Token *token;
@@ -1918,20 +1955,19 @@ static void initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
     case TY_LLONG:
     case TY_CHAR:
     case TY_SCHAR:
-    case TY_PTR: {
+    case TY_PTR:
       initializer(tokenizer, scope, type, init);
       break;
-    }
-    case TY_STRUCT: {
+    case TY_STRUCT:
       struct_initializer(tokenizer, scope, type, true, init);
       break;
-    }
-    case TY_UNION: {
+    case TY_UNION:
       union_initializer(tokenizer, scope, type, true, init);
       break;
-    }
-    case TY_VOID:
     case TY_ARRAY:
+      array_initializer(tokenizer, scope, type, init);
+      break;
+    case TY_VOID:
     case TY_FUNC:
       range_error(token->range, "初期化できない型です: %d", type->ty);
     }
@@ -1946,6 +1982,10 @@ static void initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
   }
   if (type->ty == TY_UNION) {
     union_initializer(tokenizer, scope, type, false, init);
+    return;
+  }
+  if (type->ty == TY_ARRAY) {
+    array_initializer(tokenizer, scope, type, init);
     return;
   }
 
@@ -2127,6 +2167,16 @@ static void gen_init(Scope *scope, Vector *stmts, Initializer *init,
     return;
   }
 
+  if (init->elements != NULL) {
+    for (int i = 0; i < init->elements->len; i++) {
+      Expr *index = new_expr_num(new_number_int(i), dest->range);
+      Initializer *meminit = init->elements->data[i];
+      Expr *mem = new_expr_index(scope, dest, index, dest->range);
+      gen_init(scope, stmts, meminit, mem);
+    }
+    return;
+  }
+
   if (init->expr != NULL) {
     Expr *expr = new_expr_binop(scope, '=', dest, init->expr,
                                 range_join(dest->range, init->expr->range));
@@ -2134,6 +2184,7 @@ static void gen_init(Scope *scope, Vector *stmts, Initializer *init,
     vec_push(stmts, s);
     return;
   }
+
   assert(false);
 }
 

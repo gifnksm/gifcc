@@ -531,6 +531,23 @@ static void dump_init(Initializer *init, Range range, int level) {
     printf("}\n");
     return;
   }
+  if (init->elements != NULL) {
+    dump_range_start(range);
+    dump_indent(level);
+    dump_type(init->type);
+    printf("{\n");
+    for (int i = 0; i < init->elements->len; i++) {
+      Initializer *val = init->elements->data[i];
+      dump_range_start(range);
+      dump_indent(level + 1);
+      printf(".[%d] = \n", i);
+      dump_init(val, range, level + 1);
+    }
+    dump_range_end(range);
+    dump_indent(level);
+    printf("}\n");
+    return;
+  }
   assert(false);
 }
 
