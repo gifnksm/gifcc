@@ -1704,6 +1704,36 @@ static void test46(void) {
   check_int(5, s_u.f);
   check_int(0, s_u.g);
   check_int(0, s_u.h);
+
+  test_ok(__func__);
+}
+
+static union {
+  struct {
+    int a;
+    int b;
+  } x;
+} test47_s = {1, 2};
+static union {
+  struct {
+    int a;
+    int b;
+  } x;
+  struct {
+    long a;
+    long b;
+    long c;
+  } y;
+} test47_t = {.y.b = 200, .y.a = 100};
+
+static void test47(void) {
+  check_int(1, test47_s.x.a);
+  check_int(2, test47_s.x.b);
+  check_int(100, test47_t.y.a);
+  check_int(200, test47_t.y.b);
+  check_int(0, test47_t.y.c);
+
+  test_ok(__func__);
 }
 
 int main(void) {
@@ -1752,6 +1782,7 @@ int main(void) {
   test44();
   test45();
   test46();
+  test47();
 
   return 0;
 }
