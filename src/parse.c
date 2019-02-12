@@ -50,7 +50,7 @@ typedef struct VarDef {
 
 static Number new_number_int(int val);
 static Number new_number_size(int val);
-static Initializer *new_initializer(Type *type, Member *member);
+static Initializer *new_initializer(Type *type);
 static GlobalCtxt *new_global_ctxt(void);
 static FuncCtxt *new_func_ctxt(char *name, Type *type);
 static Scope *new_scope(GlobalCtxt *gcx, FuncCtxt *fcx, Scope *outer);
@@ -167,7 +167,7 @@ static void direct_declarator(Scope *scope, Tokenizer *tokenizer,
                               Type *base_type, Token **name, Type **type,
                               Range *range);
 static void initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
-                        Member *member, Initializer **init);
+                        Initializer **init);
 
 // statement
 static Stmt *statement(Tokenizer *tokenizer, Scope *scope);
@@ -195,10 +195,9 @@ static Number new_number_size(int val) {
   return (Number){.type = TY_LONG, .ptr_val = val};
 }
 
-static Initializer *new_initializer(Type *type, Member *member) {
+static Initializer *new_initializer(Type *type) {
   Initializer *init = malloc(sizeof(Initializer));
   init->type = type;
-  init->member = member;
   return init;
 }
 
@@ -1558,7 +1557,7 @@ static Vector *declaration(Tokenizer *tokenizer, Scope *scope) {
     } else {
       VarDef *def = register_var(scope, name, type, range, is_static);
       if (token_consume(tokenizer, '=')) {
-        initializer(tokenizer, scope, type, NULL, &def->init);
+        initializer(tokenizer, scope, type, &def->init);
       }
       vec_push(def_list, def);
     }
@@ -1576,7 +1575,7 @@ static Vector *declaration(Tokenizer *tokenizer, Scope *scope) {
       } else {
         VarDef *def = register_var(scope, name, type, range, is_static);
         if (token_consume(tokenizer, '=')) {
-          initializer(tokenizer, scope, type, NULL, &def->init);
+          initializer(tokenizer, scope, type, &def->init);
         }
         vec_push(def_list, def);
       }
@@ -1789,11 +1788,10 @@ static void direct_declarator(Scope *scope, Tokenizer *tokenizer,
 }
 
 static void struct_initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
-                               Member *member, bool brace_root,
-                               Initializer **init) {
+                               bool brace_root, Initializer **init) {
   assert(type->ty == TY_STRUCT);
   if (*init == NULL) {
-    *init = new_initializer(type, member);
+    *init = new_initializer(type);
     (*init)->members = new_map();
     for (int i = 0; i < type->member_list->len; i++) {
       Member *member = type->member_list->data[i];
@@ -1820,7 +1818,7 @@ static void struct_initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
           Initializer *meminit = (*init)->members->vals->data[i];
           // if name is null, try parsing designator as inner struct/union's
           // designator
-          initializer(tokenizer, scope, member->type, member, &meminit);
+          initializer(tokenizer, scope, member->type, &meminit);
           if (token_peek(tokenizer) == current) {
             // if the designator is not found in inner struct/union, continue to
             // next member
@@ -1840,7 +1838,7 @@ static void struct_initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
       for (int i = idx; i < type->member_list->len; i++) {
         Initializer *meminit = (*init)->members->vals->data[i];
         Member *member = type->member_list->data[i];
-        initializer(tokenizer, scope, member->type, member, &meminit);
+        initializer(tokenizer, scope, member->type, &meminit);
         (*init)->members->keys->data[i] = member->name;
         (*init)->members->vals->data[i] = meminit;
         if ((i < type->member_list->len - 1 &&
@@ -1858,11 +1856,10 @@ static void struct_initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
 }
 
 static void union_initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
-                              Member *member, bool brace_root,
-                              Initializer **init) {
+                              bool brace_root, Initializer **init) {
   assert(type->ty == TY_UNION);
   if (*init == NULL) {
-    *init = new_initializer(type, member);
+    *init = new_initializer(type);
     (*init)->members = new_map();
     map_put((*init)->members, NULL, NULL);
   }
@@ -1883,7 +1880,7 @@ static void union_initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
           Initializer *meminit = (*init)->members->vals->data[0];
           // if name is null, try parsing designator as inner struct/union's
           // designator
-          initializer(tokenizer, scope, member->type, member, &meminit);
+          initializer(tokenizer, scope, member->type, &meminit);
           if (token_peek(tokenizer) == current) {
             // if the designator is not found in inner struct/union, continue to
             // next member
@@ -1898,7 +1895,7 @@ static void union_initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
     } else {
       Initializer *meminit = (*init)->members->vals->data[0];
       Member *member = type->member_list->data[0];
-      initializer(tokenizer, scope, member->type, member, &meminit);
+      initializer(tokenizer, scope, member->type, &meminit);
       (*init)->members->keys->data[0] = member->name;
       (*init)->members->vals->data[0] = meminit;
       break;
@@ -1911,7 +1908,7 @@ static void union_initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
 }
 
 static void initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
-                        Member *member, Initializer **init) {
+                        Initializer **init) {
   Token *token;
   if ((token = token_consume(tokenizer, '{')) != NULL) {
     switch (type->ty) {
@@ -1922,15 +1919,15 @@ static void initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
     case TY_CHAR:
     case TY_SCHAR:
     case TY_PTR: {
-      initializer(tokenizer, scope, type, member, init);
+      initializer(tokenizer, scope, type, init);
       break;
     }
     case TY_STRUCT: {
-      struct_initializer(tokenizer, scope, type, member, true, init);
+      struct_initializer(tokenizer, scope, type, true, init);
       break;
     }
     case TY_UNION: {
-      union_initializer(tokenizer, scope, type, member, true, init);
+      union_initializer(tokenizer, scope, type, true, init);
       break;
     }
     case TY_VOID:
@@ -1944,16 +1941,16 @@ static void initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
   };
 
   if (type->ty == TY_STRUCT) {
-    struct_initializer(tokenizer, scope, type, member, false, init);
+    struct_initializer(tokenizer, scope, type, false, init);
     return;
   }
   if (type->ty == TY_UNION) {
-    union_initializer(tokenizer, scope, type, member, false, init);
+    union_initializer(tokenizer, scope, type, false, init);
     return;
   }
 
   {
-    *init = new_initializer(type, member);
+    *init = new_initializer(type);
     Expr *expr = assignment_expression(tokenizer, scope);
     (*init)->expr = new_expr_cast(scope, type, expr, expr->range);
   }

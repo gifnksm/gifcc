@@ -771,18 +771,22 @@ static void gen_gvar_init(Initializer *init, Range range) {
   }
 
   if (init->members != NULL) {
+    assert(init->type->ty == TY_STRUCT || init->type->ty == TY_UNION);
+    assert(init->members->keys->len <= 1 || init->type->ty == TY_STRUCT);
     int offset = 0;
     for (int i = 0; i < init->members->keys->len; i++) {
       Initializer *meminit = init->members->vals->data[i];
       if (meminit == NULL) {
         continue;
       }
-      Member *member = meminit->member;
-      if (offset < member->offset) {
-        printf("  .zero %d\n", member->offset - offset);
-        offset = member->offset;
+      if (i > 0) {
+        Member *member = init->type->member_list->data[i];
+        if (offset < member->offset) {
+          printf("  .zero %d\n", member->offset - offset);
+          offset = member->offset;
+        }
+        assert(offset == member->offset);
       }
-      assert(offset == member->offset);
       gen_gvar_init(meminit, range);
       offset += get_val_size(meminit->type, range);
     }

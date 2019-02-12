@@ -200,7 +200,6 @@ typedef struct Member Member;
 typedef struct Expr Expr;
 typedef struct Initializer {
   Type *type;
-  Member *member;
   Map *members;
   Expr *expr;
 } Initializer;
