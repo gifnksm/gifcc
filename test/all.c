@@ -1536,7 +1536,7 @@ static int test45_g(void) {
   int s = 0;
   static int x = 0;
   {
-    static int x = 0;
+    static int x = 10;
     s += x;
     x += 10;
   }
@@ -1554,9 +1554,9 @@ static void test45(void) {
   x = 100;
   check_int(3, test45_f());
 
-  check_int(0, test45_g());
-  check_int(11, test45_g());
-  check_int(22, test45_g());
+  check_int(10, test45_g());
+  check_int(21, test45_g());
+  check_int(32, test45_g());
 
   test_ok(__func__);
 }

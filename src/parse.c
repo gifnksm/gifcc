@@ -2080,9 +2080,8 @@ static Stmt *compound_statement(Tokenizer *tokenizer, Scope *scope) {
         case DEF_FUNC:
           range_error(def->name->range, "関数内で関数は定義できません");
         case DEF_GLOBAL_VAR:
+          def->global_var->init = def->init;
           vec_push(scope->global_ctxt->gvar_list, def->global_var);
-          // range_error(def->name->range,
-          // "staticのローカル変数は未サポートです");
           break;
         case DEF_STACK_VAR: {
           Initializer *init = def->init;
