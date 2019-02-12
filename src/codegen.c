@@ -640,15 +640,14 @@ static void gen_stmt(Stmt *stmt) {
       range_error(stmt->range,
                   "ループでもswitch文中でもない箇所にbreakがあります");
     }
-    printf("  jmp %s\n", (char *)break_labels->data[break_labels->len - 1]);
+    printf("  jmp %s\n", (char *)vec_peek(break_labels));
     return;
   }
   case ST_CONTINUE: {
     if (continue_labels->len <= 0) {
       range_error(stmt->range, "ループ中でない箇所にcontinueがあります");
     }
-    printf("  jmp %s\n",
-           (char *)continue_labels->data[continue_labels->len - 1]);
+    printf("  jmp %s\n", (char *)vec_peek(continue_labels));
     return;
   }
   case ST_RETURN: {

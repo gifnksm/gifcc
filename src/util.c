@@ -22,6 +22,11 @@ void vec_push(Vector *vec, void *elem) {
 
 void *vec_pop(Vector *vec) { return vec->data[vec->len--]; }
 
+void *vec_peek(Vector *vec) {
+  assert(vec->len > 0);
+  return vec->data[vec->len - 1];
+}
+
 Map *new_map(void) {
   Map *map = malloc(sizeof(Map));
   map->keys = new_vector();

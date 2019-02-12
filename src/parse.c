@@ -2000,8 +2000,7 @@ static Stmt *statement(Tokenizer *tokenizer, Scope *scope) {
     if (scope->func_ctxt->switches->len <= 0) {
       range_error(stmt->range, "switch文中でない箇所にcase文があります");
     }
-    Stmt *switch_stmt =
-        scope->func_ctxt->switches->data[scope->func_ctxt->switches->len - 1];
+    Stmt *switch_stmt = vec_peek(scope->func_ctxt->switches);
     vec_push(switch_stmt->cases, stmt);
     return stmt;
   }
@@ -2013,8 +2012,7 @@ static Stmt *statement(Tokenizer *tokenizer, Scope *scope) {
     if (scope->func_ctxt->switches->len <= 0) {
       range_error(stmt->range, "switch文中でない箇所にcase文があります");
     }
-    Stmt *switch_expr =
-        scope->func_ctxt->switches->data[scope->func_ctxt->switches->len - 1];
+    Stmt *switch_expr = vec_peek(scope->func_ctxt->switches);
     switch_expr->default_case = stmt;
     return stmt;
   }
