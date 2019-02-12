@@ -50,7 +50,7 @@ $(OUTDIR)/%.s: %.c $(GIFCC) | $(OUTDIR)/
 $(OUTDIR)/%: $(OUTDIR)/%.s
 	gcc -o $@ $<
 
-$(OUTDIR)/%.gcc: %.c
+$(OUTDIR)/%.gcc: %.c | $(OUTDIR)/
 	gcc -w -o $@ $<
 
 %/:
