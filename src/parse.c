@@ -1957,17 +1957,48 @@ static void array_initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
     return;
   }
 
-  int max_len = type->array_len < 0 ? INT_MAX : type->array_len;
-  for (int i = 0; i < max_len; i++) {
-    vec_extend((*init)->elements, i + 1);
-    Initializer *eleminit = (*init)->elements->data[i];
-    initializer(tokenizer, scope, type->ptrof, &eleminit);
-    (*init)->elements->data[i] = eleminit;
-    if ((i < max_len - 1 && token_consume(tokenizer, ',') == NULL)) {
-      break;
+  while (true) {
+    int idx = 0;
+
+    if (token_consume(tokenizer, '[')) {
+      Token *num = token_expect(tokenizer, TK_NUM);
+      token_expect(tokenizer, ']');
+      token_consume(tokenizer, '=');
+      int i;
+      SET_NUMBER_VAL(i, &num->num_val);
+      if (type->array_len < 0) {
+        vec_extend((*init)->elements, i + 1);
+      } else {
+        if (i >= type->array_len) {
+          range_error(num->range, "配列サイズを超過するインデックスです: %d",
+                      i);
+        }
+      }
+      Initializer *eleminit = (*init)->elements->data[i];
+      initializer(tokenizer, scope, type->ptrof, &eleminit);
+      (*init)->elements->data[i] = eleminit;
+      token_consume(tokenizer, ',');
+      idx = i + 1;
     }
-    if (token_peek(tokenizer)->ty == '.') {
-      break;
+
+    if (token_peek(tokenizer)->ty != '[') {
+      int max_len = type->array_len < 0 ? INT_MAX : type->array_len;
+      for (int i = idx; i < max_len; i++) {
+        vec_extend((*init)->elements, i + 1);
+        Initializer *eleminit = (*init)->elements->data[i];
+        initializer(tokenizer, scope, type->ptrof, &eleminit);
+        (*init)->elements->data[i] = eleminit;
+        if ((i < max_len - 1 && token_consume(tokenizer, ',') == NULL)) {
+          break;
+        }
+        if (token_peek(tokenizer)->ty == '[' ||
+            token_peek(tokenizer)->ty == '.') {
+          break;
+        }
+      }
+      if (token_peek(tokenizer)->ty != '[') {
+        break;
+      }
     }
   }
 

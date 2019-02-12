@@ -1916,10 +1916,12 @@ static void test48(void) {
 static int test49_a0[] = {};
 static int test49_a4[] = {1, 2, 3, 4};
 static int test49_a6[6] = {1, 2, 3, 4};
+static int test49_ax[] = {1, [3] = 8, 9};
 static void test49(void) {
   check_int(0, sizeof(test49_a0));
   check_int(sizeof(int) * 4, sizeof(test49_a4));
   check_int(sizeof(int) * 6, sizeof(test49_a6));
+  check_int(sizeof(int) * 5, sizeof(test49_ax));
   check_int(1, test49_a4[0]);
   check_int(2, test49_a4[1]);
   check_int(3, test49_a4[2]);
@@ -1930,13 +1932,20 @@ static void test49(void) {
   check_int(4, test49_a6[3]);
   check_int(0, test49_a6[4]);
   check_int(0, test49_a6[5]);
+  check_int(1, test49_ax[0]);
+  check_int(0, test49_ax[1]);
+  check_int(0, test49_ax[2]);
+  check_int(8, test49_ax[3]);
+  check_int(9, test49_ax[4]);
 
   int a0[] = {};
   int a4[] = {1, 2, 3, 4};
   int a6[6] = {1, 2, 3, 4};
+  int ax[] = {1, [3] = 8, 9};
   check_int(0, sizeof(a0));
   check_int(sizeof(int) * 4, sizeof(a4));
   check_int(sizeof(int) * 6, sizeof(a6));
+  check_int(sizeof(int) * 5, sizeof(ax));
   check_int(1, a4[0]);
   check_int(2, a4[1]);
   check_int(3, a4[2]);
@@ -1947,10 +1956,16 @@ static void test49(void) {
   check_int(4, a6[3]);
   check_int(0, a6[4]);
   check_int(0, a6[5]);
+  check_int(1, ax[0]);
+  check_int(0, ax[1]);
+  check_int(0, ax[2]);
+  check_int(8, ax[3]);
+  check_int(9, ax[4]);
 
   static int s_a0[] = {};
   static int s_a4[] = {1, 2, 3, 4};
   static int s_a6[6] = {1, 2, 3, 4};
+  static int s_ax[] = {1, [3] = 8, 9};
   check_int(0, sizeof(s_a0));
   check_int(sizeof(int) * 4, sizeof(s_a4));
   check_int(1, s_a4[0]);
@@ -1963,6 +1978,11 @@ static void test49(void) {
   check_int(4, s_a6[3]);
   check_int(0, s_a6[4]);
   check_int(0, s_a6[5]);
+  check_int(1, s_ax[0]);
+  check_int(0, s_ax[1]);
+  check_int(0, s_ax[2]);
+  check_int(8, s_ax[3]);
+  check_int(9, s_ax[4]);
 }
 
 int main(void) {
