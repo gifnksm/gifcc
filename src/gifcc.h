@@ -6,6 +6,8 @@
 #include <stdio.h>
 #include <stdnoreturn.h>
 
+#define NEW(type) ((type *)calloc(1, sizeof(type)))
+
 typedef struct {
   void **data;
   int capacity;

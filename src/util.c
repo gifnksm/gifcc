@@ -5,7 +5,7 @@
 #include <string.h>
 
 Vector *new_vector(void) {
-  Vector *vec = malloc(sizeof(Vector));
+  Vector *vec = NEW(Vector);
   vec->data = NULL;
   vec->capacity = 0;
   vec->len = 0;
@@ -34,7 +34,7 @@ void vec_extend(Vector *vec, int len) {
 }
 
 Map *new_map(void) {
-  Map *map = malloc(sizeof(Map));
+  Map *map = NEW(Map);
   map->keys = new_vector();
   map->vals = new_vector();
   return map;
@@ -55,7 +55,7 @@ void *map_get(Map *map, char *key) {
 }
 
 String *new_string(void) {
-  String *str = malloc(sizeof(String));
+  String *str = NEW(String);
   str->data = NULL;
   str->capacity = 0;
   str->len = 0;
@@ -70,7 +70,7 @@ void str_push(String *str, char elem) {
 }
 
 IntVector *new_int_vector(void) {
-  IntVector *vec = malloc(sizeof(IntVector));
+  IntVector *vec = NEW(IntVector);
   vec->data = NULL;
   vec->capacity = 0;
   vec->len = 0;

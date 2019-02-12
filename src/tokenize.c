@@ -261,20 +261,20 @@ static Token *read_token(Reader *reader, bool *read_eof) {
 }
 
 static Token *new_token(int ty) {
-  Token *token = malloc(sizeof(Token));
+  Token *token = NEW(Token);
   token->ty = ty;
   return token;
 }
 
 static Token *new_token_num(Number val) {
-  Token *token = malloc(sizeof(Token));
+  Token *token = NEW(Token);
   token->ty = TK_NUM;
   token->num_val = val;
   return token;
 }
 
 static Token *new_token_ident(char *name) {
-  Token *token = malloc(sizeof(Token));
+  Token *token = NEW(Token);
   token->ty = TK_IDENT;
   for (int i = 0; LONG_IDENT_TOKENS[i].str != NULL; i++) {
     const LongToken *tk = &LONG_IDENT_TOKENS[i];
@@ -288,7 +288,7 @@ static Token *new_token_ident(char *name) {
 }
 
 static Token *new_token_str(char *str) {
-  Token *token = malloc(sizeof(Token));
+  Token *token = NEW(Token);
   token->ty = TK_STR;
   token->str = str;
   return token;

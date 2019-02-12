@@ -18,7 +18,7 @@ static void print_source(Range range);
 static char *read_whole_file(Reader *reader, FILE *file);
 
 Reader *new_reader(FILE *file, const char *filename) {
-  Reader *reader = malloc(sizeof(Reader));
+  Reader *reader = NEW(Reader);
 
   reader->source = NULL;
   reader->filename = filename;

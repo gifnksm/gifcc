@@ -198,7 +198,7 @@ static Number new_number_size(int val) {
 }
 
 static Initializer *new_initializer(Type *type) {
-  Initializer *init = malloc(sizeof(Initializer));
+  Initializer *init = NEW(Initializer);
   init->type = type;
   init->members = NULL;
   init->elements = NULL;
@@ -227,7 +227,7 @@ static Initializer *new_initializer(Type *type) {
 }
 
 static GlobalCtxt *new_global_ctxt(void) {
-  GlobalCtxt *gcx = malloc(sizeof(GlobalCtxt));
+  GlobalCtxt *gcx = NEW(GlobalCtxt);
   gcx->func_list = new_vector();
   gcx->gvar_list = new_vector();
   gcx->str_list = new_vector();
@@ -236,7 +236,7 @@ static GlobalCtxt *new_global_ctxt(void) {
 }
 
 static FuncCtxt *new_func_ctxt(char *name, Type *type) {
-  FuncCtxt *fcx = malloc(sizeof(FuncCtxt));
+  FuncCtxt *fcx = NEW(FuncCtxt);
 
   fcx->name = name;
   fcx->type = type;
@@ -248,7 +248,7 @@ static FuncCtxt *new_func_ctxt(char *name, Type *type) {
 }
 
 static Scope *new_scope(GlobalCtxt *gcx, FuncCtxt *fcx, Scope *outer) {
-  Scope *scope = malloc(sizeof(Scope));
+  Scope *scope = NEW(Scope);
   scope->decl_map = new_map();
   scope->typedef_map = new_map();
   scope->tag_map = new_map();
@@ -275,7 +275,7 @@ static Member *new_member(char *name, Type *type, int offset, Range range) {
   if (type->ty == TY_VOID) {
     range_error(range, "void型のメンバーです: %s", name);
   }
-  Member *member = malloc(sizeof(Member));
+  Member *member = NEW(Member);
   member->name = name;
   member->type = type;
   member->offset = offset;
@@ -303,7 +303,7 @@ static VarDef *register_var(Scope *scope, Token *name, Type *type, Range range,
     gvar = register_global_var(scope, name, type, range, is_static);
   }
 
-  VarDef *def = malloc(sizeof(VarDef));
+  VarDef *def = NEW(VarDef);
   def->type = ty;
   def->name = name;
   def->init = NULL;
@@ -316,7 +316,7 @@ static VarDef *register_var(Scope *scope, Token *name, Type *type, Range range,
 static VarDef *register_func(Scope *scope, Token *name, Type *type) {
   (void)register_decl(scope, name->name, type, NULL, NULL);
 
-  VarDef *def = malloc(sizeof(VarDef));
+  VarDef *def = NEW(VarDef);
   def->type = DEF_FUNC;
   def->name = name;
   def->init = NULL;
@@ -335,7 +335,7 @@ static StackVar *register_stack_var(Scope *scope, Token *name, Type *type,
 
   FuncCtxt *fcx = scope->func_ctxt;
 
-  StackVar *var = malloc(sizeof(StackVar));
+  StackVar *var = NEW(StackVar);
   var->offset = INT_MIN; // Initialize with invalid value
   var->type = type;
   var->range = range;
@@ -412,7 +412,7 @@ static bool register_decl(Scope *scope, char *name, Type *type, StackVar *svar,
   if (map_get(scope->decl_map, name)) {
     return false;
   }
-  Decl *decl = malloc(sizeof(Decl));
+  Decl *decl = NEW(Decl);
   decl->type = type;
   decl->stack_var = svar;
   decl->global_var = gvar;
@@ -619,13 +619,13 @@ static noreturn void binop_type_error_raw(int ty, Expr *lhs, Expr *rhs,
 }
 
 static Type *new_type(int ty) {
-  Type *type = malloc(sizeof(Type));
+  Type *type = NEW(Type);
   type->ty = ty;
   return type;
 }
 
 static Type *new_type_ptr(Type *base_type) {
-  Type *ptrtype = malloc(sizeof(Type));
+  Type *ptrtype = NEW(Type);
   ptrtype->ty = TY_PTR;
   ptrtype->ptrof = base_type;
   return ptrtype;
@@ -634,7 +634,7 @@ static Type *new_type_ptr(Type *base_type) {
 static Type *new_type_array(Type *base_type, Number len) {
   int l;
   SET_NUMBER_VAL(l, &len);
-  Type *ptrtype = malloc(sizeof(Type));
+  Type *ptrtype = NEW(Type);
   ptrtype->ty = TY_ARRAY;
   ptrtype->ptrof = base_type;
   ptrtype->array_len = l;
@@ -642,7 +642,7 @@ static Type *new_type_array(Type *base_type, Number len) {
 }
 
 static Type *new_type_unsized_array(Type *base_type) {
-  Type *ptrtype = malloc(sizeof(Type));
+  Type *ptrtype = NEW(Type);
   ptrtype->ty = TY_ARRAY;
   ptrtype->ptrof = base_type;
   ptrtype->array_len = -1;
@@ -650,7 +650,7 @@ static Type *new_type_unsized_array(Type *base_type) {
 }
 
 static Type *new_type_func(Type *ret_type, Vector *func_param) {
-  Type *funtype = malloc(sizeof(Type));
+  Type *funtype = NEW(Type);
   funtype->ty = TY_FUNC;
   funtype->func_ret = ret_type;
   funtype->func_param = func_param;
@@ -659,7 +659,7 @@ static Type *new_type_func(Type *ret_type, Vector *func_param) {
 
 static Type *new_type_struct(int tk, char *tag) {
   assert(tk == TK_STRUCT || tk == TK_UNION);
-  Type *type = malloc(sizeof(Type));
+  Type *type = NEW(Type);
   type->ty = tk == TK_STRUCT ? TY_STRUCT : TY_UNION;
   type->tag = tag;
   type->member_name_map = new_map();
@@ -671,7 +671,7 @@ static Type *new_type_struct(int tk, char *tag) {
 
 static Type *new_type_anon_struct(int tk) {
   assert(tk == TK_STRUCT || tk == TK_UNION);
-  Type *type = malloc(sizeof(Type));
+  Type *type = NEW(Type);
   type->ty = tk == TK_STRUCT ? TY_STRUCT : TY_UNION;
   type->member_name_map = NULL;
   type->member_list = NULL;
@@ -692,7 +692,7 @@ static Expr *coerce_func2ptr(Scope *scope, Expr *expr) {
 }
 
 static Expr *new_expr(int ty, Type *val_type, Range range) {
-  Expr *expr = malloc(sizeof(Expr));
+  Expr *expr = NEW(Expr);
   expr->ty = ty;
   expr->val_type = val_type;
   expr->range = range;
@@ -748,7 +748,7 @@ static Expr *new_expr_str(Scope *scope, char *val, Range range) {
   Expr *expr = new_expr(EX_STR, type, range);
 
   expr->name = make_label("str");
-  StringLiteral *str = malloc(sizeof(StringLiteral));
+  StringLiteral *str = NEW(StringLiteral);
   str->name = expr->name;
   str->val = val;
   vec_push(scope->global_ctxt->str_list, str);
@@ -1219,7 +1219,7 @@ static Expr *new_expr_arrow(Scope *scope, Expr *operand, char *name,
 }
 
 static Stmt *new_stmt(int ty, Range range) {
-  Stmt *stmt = malloc(sizeof(Stmt));
+  Stmt *stmt = NEW(Stmt);
   stmt->ty = ty;
   stmt->range = range;
   return stmt;
@@ -1759,7 +1759,7 @@ static void declarator(Scope *scope, Tokenizer *tokenizer, Type *base_type,
 static void direct_declarator(Scope *scope, Tokenizer *tokenizer,
                               Type *base_type, Token **name, Type **type,
                               Range *range) {
-  Type *placeholder = malloc(sizeof(Type));
+  Type *placeholder = NEW(Type);
   *range = token_peek(tokenizer)->range;
 
   {
@@ -1782,7 +1782,7 @@ static void direct_declarator(Scope *scope, Tokenizer *tokenizer,
 
   while (true) {
     if (token_consume(tokenizer, '[')) {
-      Type *inner = malloc(sizeof(Type));
+      Type *inner = NEW(Type);
       if (token_peek(tokenizer)->ty == ']') {
         *placeholder = *new_type_unsized_array(inner);
       } else {
@@ -1804,7 +1804,7 @@ static void direct_declarator(Scope *scope, Tokenizer *tokenizer,
       } else {
         while (true) {
           Type *base_type = type_specifier(scope, tokenizer);
-          Param *param = malloc(sizeof(Param));
+          Param *param = NEW(Param);
           declarator(scope, tokenizer, base_type, &param->name, &param->type,
                      &param->range);
           vec_push(params, param);
@@ -1818,7 +1818,7 @@ static void direct_declarator(Scope *scope, Tokenizer *tokenizer,
 
       *range = range_join(*range, end->range);
 
-      Type *inner = malloc(sizeof(Type));
+      Type *inner = NEW(Type);
       *placeholder = *new_type_func(inner, params);
       placeholder = inner;
       continue;
@@ -2315,7 +2315,7 @@ static Function *function_definition(Tokenizer *tokenizer, Scope *global_scope,
     stack_size += get_val_size(svar->type, svar->range);
   }
 
-  Function *func = malloc(sizeof(Function));
+  Function *func = NEW(Function);
   func->name = name;
   func->type = type;
   func->is_static = is_static;
@@ -2329,7 +2329,7 @@ static Function *function_definition(Tokenizer *tokenizer, Scope *global_scope,
 
 static GlobalVar *new_global_variable(Type *type, char *name, Range range,
                                       bool is_static) {
-  GlobalVar *gvar = malloc(sizeof(GlobalVar));
+  GlobalVar *gvar = NEW(GlobalVar);
   gvar->type = type;
   gvar->name = name;
   gvar->range = range;
@@ -2379,7 +2379,7 @@ static TranslationUnit *translation_unit(Tokenizer *tokenizer) {
     }
   }
 
-  TranslationUnit *tunit = malloc(sizeof(TranslationUnit));
+  TranslationUnit *tunit = NEW(TranslationUnit);
   tunit->func_list = gcx->func_list;
   tunit->gvar_list = gcx->gvar_list;
   tunit->str_list = gcx->str_list;
