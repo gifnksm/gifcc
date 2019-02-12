@@ -30,7 +30,8 @@ test-gifcc: $(OUTDIR)/gifcc
 test:  test-gifcc
 
 test-compile: $(OUTDIR)/gifcc
-	$(MAKE) -C test
+	$(MAKE) -C test gcc-run
+	$(MAKE) -C test run
 .PHONY: test-compile
 test: test-compile
 
