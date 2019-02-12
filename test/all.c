@@ -1997,6 +1997,12 @@ static void test50(void) {
   check_int('d', s[3]);
   check_int('e', s[4]);
   check_int('f', s[5]);
+  check_int(1, s[0] == 'a');
+  check_int(1, s[1] == 'b');
+  check_int(1, s[2] == 'c');
+  check_int(1, s[3] == 'd');
+  check_int(1, s[4] == 'e');
+  check_int(1, s[5] == 'f');
 
   test_ok(__func__);
 }

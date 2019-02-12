@@ -1116,6 +1116,7 @@ static Expr *new_expr_binop(Scope *scope, int op, Expr *lhs, Expr *rhs,
   case EX_GTEQ:
   case EX_EQEQ:
   case EX_NOTEQ:
+    val_type = arith_converted(scope, &lhs, &rhs);
     val_type = new_type(TY_INT);
     break;
   // and
