@@ -2007,6 +2007,27 @@ static void test50(void) {
   test_ok(__func__);
 }
 
+enum test51_enum {
+  TEST51_X,
+  TEST51_Y = 3,
+  TEST51_Z,
+  TEST51_W = 8,
+};
+static void test51(void) {
+  check_int(0, TEST51_X);
+  check_int(3, TEST51_Y);
+  check_int(4, TEST51_Z);
+  check_int(8, TEST51_W);
+
+  enum test51_enum x = TEST51_Z;
+  check_int(7, x + 3);
+
+  enum { X1 = 8, Y1, Z1 } z = Y1;
+  check_int(9, z);
+
+  test_ok(__func__);
+}
+
 int main(void) {
   test01();
   test02();
@@ -2057,6 +2078,7 @@ int main(void) {
   test48();
   test49();
   test50();
+  test51();
 
   return 0;
 }

@@ -46,6 +46,9 @@ static void dump_number(Number num) {
   case TY_PTR:
     printf("%" PRIdPTR, num.ptr_val);
     break;
+  case TY_ENUM:
+    printf("%d", num.enum_val);
+    break;
   case TY_VOID:
   case TY_ARRAY:
   case TY_FUNC:
@@ -176,6 +179,9 @@ static void dump_type_inner(Type *ty) {
       printf(" %s", member->name);
     }
     printf(")");
+    return;
+  case TY_ENUM:
+    printf("enum %s", ty->tag);
     return;
   }
   error("未知の型です: %d\n", ty->ty);

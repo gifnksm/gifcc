@@ -137,6 +137,9 @@ static char *num2str(Number num, Range range) {
   case TY_PTR:
     sprintf(buf, "%" PRIdPTR, num.ptr_val);
     break;
+  case TY_ENUM:
+    sprintf(buf, "%d", num.enum_val);
+    break;
   case TY_VOID:
     sprintf(buf, "0");
     break;
@@ -749,6 +752,9 @@ static void gen_gvar_init(Initializer *init, Range range) {
         break;
       case TY_PTR:
         printf("  .quad %" PRIdPTR "\n", expr->num_val.ptr_val);
+        break;
+      case TY_ENUM:
+        printf("  .long %d\n", expr->num_val.enum_val);
         break;
       case TY_VOID:
       case TY_ARRAY:

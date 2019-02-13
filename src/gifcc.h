@@ -77,6 +77,7 @@ enum {
   TK_RETURN,        // `return`
   TK_STRUCT,        // `struct`
   TK_UNION,         // `union`
+  TK_ENUM,          // `enum`
   TK_SIZEOF,        // `sizeof`
   TK_TYPEDEF,       // `typedef`
   TK_EXTERN,        // `extern`
@@ -108,7 +109,10 @@ typedef struct {
                                           ? (dest) = (num)->llong_val          \
                                           : (((num)->type == TY_PTR)           \
                                                  ? (dest) = (num)->ptr_val     \
-                                                 : abort())))))))
+                                                 : ((num)->type == TY_ENUM)    \
+                                                       ? (dest) =              \
+                                                             (num)->enum_val   \
+                                                       : abort())))))))
 
 typedef enum {
   TY_VOID,
@@ -123,6 +127,7 @@ typedef enum {
   TY_FUNC,
   TY_STRUCT,
   TY_UNION,
+  TY_ENUM,
 } type_t;
 
 typedef struct Number {
@@ -135,6 +140,7 @@ typedef struct Number {
     long long_val;
     long long llong_val;
     intptr_t ptr_val;
+    int enum_val;
   };
 } Number;
 

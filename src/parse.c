@@ -26,6 +26,7 @@ typedef struct Decl {
   Type *type;
   StackVar *stack_var;
   GlobalVar *global_var;
+  Number *num_val;
 } Decl;
 
 typedef struct Scope {
@@ -69,7 +70,7 @@ static GlobalVar *register_global_var(Scope *scope, Token *name, Type *type,
 static void register_member(Type *type, char *member_name, Type *member_type,
                             Range range);
 static bool register_decl(Scope *scope, char *name, Type *type, StackVar *svar,
-                          GlobalVar *gvar);
+                          GlobalVar *gvar, Number *num_val);
 static Decl *get_decl(Scope *scope, char *name);
 static bool register_tag(Scope *scope, char *tag, Type *type);
 static Type *get_tag(Scope *scope, char *tag);
@@ -93,6 +94,7 @@ static Type *new_type_unsized_array(Type *base_type);
 static Type *new_type_func(Type *ret_type, Vector *func_param);
 static Type *new_type_struct(int tk, char *tag);
 static Type *new_type_anon_struct(int tk);
+static Type *new_type_enum(char *tag);
 static Expr *coerce_array2ptr(Scope *scope, Expr *expr);
 static Expr *coerce_func2ptr(Scope *scope, Expr *expr);
 static Expr *new_expr(int ty, Type *val_type, Range range);
@@ -162,6 +164,9 @@ static Type *type_specifier(Scope *scope, Tokenizer *tokenizer);
 static void struct_declaration(Scope *scope, Tokenizer *tokenizer, Type *type);
 static Type *struct_or_union_specifier(Scope *scope, Tokenizer *tokenizer,
                                        Token *token);
+static void enumerator(Scope *scope, Tokenizer *tokenizer, Type *type,
+                       int *val);
+static Type *enum_specifier(Scope *scope, Tokenizer *tokenizer, Token *token);
 static Type *type_name(Scope *scope, Tokenizer *tokenizer);
 static void declarator(Scope *scope, Tokenizer *tokenizer, Type *base_type,
                        Token **name, Type **type, Range *range);
@@ -191,7 +196,7 @@ TranslationUnit *parse(Reader *reader) {
 }
 
 static Number new_number_int(int val) {
-  return (Number){.type = TY_INT, .ptr_val = val};
+  return (Number){.type = TY_INT, .int_val = val};
 }
 static Number new_number_size(int val) {
   return (Number){.type = TY_LONG, .ptr_val = val};
@@ -314,7 +319,7 @@ static VarDef *register_var(Scope *scope, Token *name, Type *type, Range range,
 }
 
 static VarDef *register_func(Scope *scope, Token *name, Type *type) {
-  (void)register_decl(scope, name->name, type, NULL, NULL);
+  (void)register_decl(scope, name->name, type, NULL, NULL, NULL);
 
   VarDef *def = NEW(VarDef);
   def->type = DEF_FUNC;
@@ -341,7 +346,7 @@ static StackVar *register_stack_var(Scope *scope, Token *name, Type *type,
   var->range = range;
   vec_push(fcx->var_list, var);
 
-  if (!register_decl(scope, name->name, type, var, NULL)) {
+  if (!register_decl(scope, name->name, type, var, NULL, NULL)) {
     range_error(range, "同じ名前のローカル変数が複数あります: %s", name->name);
   }
 
@@ -351,7 +356,7 @@ static StackVar *register_stack_var(Scope *scope, Token *name, Type *type,
 static GlobalVar *register_global_var(Scope *scope, Token *name, Type *type,
                                       Range range, bool is_static) {
   GlobalVar *gvar = new_global_variable(type, name->name, range, is_static);
-  if (!register_decl(scope, name->name, type, NULL, gvar)) {
+  if (!register_decl(scope, name->name, type, NULL, gvar, NULL)) {
     Decl *decl = get_decl(scope, name->name);
     if (decl->global_var == NULL) {
       decl->global_var = gvar;
@@ -408,7 +413,7 @@ static void register_member(Type *type, char *member_name, Type *member_type,
 }
 
 static bool register_decl(Scope *scope, char *name, Type *type, StackVar *svar,
-                          GlobalVar *gvar) {
+                          GlobalVar *gvar, Number *num_val) {
   if (map_get(scope->decl_map, name)) {
     return false;
   }
@@ -416,6 +421,7 @@ static bool register_decl(Scope *scope, char *name, Type *type, StackVar *svar,
   decl->type = type;
   decl->stack_var = svar;
   decl->global_var = gvar;
+  decl->num_val = num_val;
   map_put(scope->decl_map, name, decl);
   return true;
 }
@@ -481,7 +487,8 @@ static bool is_sametype(Type *ty1, Type *ty2) {
 
 static bool is_integer_type(Type *ty) {
   return ty->ty == TY_INT || ty->ty == TY_SHORT || ty->ty == TY_LONG ||
-         ty->ty == TY_LLONG || ty->ty == TY_CHAR || ty->ty == TY_SCHAR;
+         ty->ty == TY_LLONG || ty->ty == TY_CHAR || ty->ty == TY_SCHAR ||
+         ty->ty == TY_ENUM;
 }
 static bool is_arith_type(Type *ty) { return is_integer_type(ty); }
 static bool is_ptr_type(Type *ty) { return ty->ty == TY_PTR; }
@@ -491,9 +498,9 @@ static Type *integer_promoted(Scope *scope, Expr **e) {
   if (!is_integer_type((*e)->val_type)) {
     return NULL;
   }
-  // CHAR, SHORT は INT へ昇格する
+  // (S)CHAR, SHORT, ENUM は INT へ昇格する
   if ((*e)->val_type->ty == TY_CHAR || (*e)->val_type->ty == TY_SCHAR ||
-      (*e)->val_type->ty == TY_SHORT) {
+      (*e)->val_type->ty == TY_SHORT || (*e)->val_type->ty == TY_ENUM) {
     *e = new_expr_cast(scope, new_type(TY_INT), *e, (*e)->range);
   }
   return (*e)->val_type;
@@ -526,6 +533,7 @@ static bool token_is_typename(Scope *scope, Token *token) {
   case TK_SIGNED:
   case TK_STRUCT:
   case TK_UNION:
+  case TK_ENUM:
     return true;
   case TK_IDENT:
     return get_typedef(scope, token->name);
@@ -576,6 +584,8 @@ int get_val_size(Type *ty, Range range) {
       range_error(range, "不完全型の値のサイズを取得しようとしました");
     }
     return align(ty->member_size, ty->member_align);
+  case TY_ENUM:
+    return sizeof(int);
   }
   range_error(range, "不明な型のサイズを取得しようとしました");
 }
@@ -605,6 +615,8 @@ int get_val_align(Type *ty, Range range) {
   case TY_STRUCT:
   case TY_UNION:
     return ty->member_align;
+  case TY_ENUM:
+    return alignof(int);
   }
   range_error(range, "不明な型の値アラインメントを取得しようとしました");
 }
@@ -678,6 +690,13 @@ static Type *new_type_anon_struct(int tk) {
   return type;
 }
 
+static Type *new_type_enum(char *tag) {
+  Type *type = NEW(Type);
+  type->ty = TY_ENUM;
+  type->tag = tag;
+  return type;
+}
+
 static Expr *coerce_array2ptr(Scope *scope, Expr *expr) {
   if (is_array_type(expr->val_type)) {
     return new_expr_unary(scope, '&', expr, expr->range);
@@ -715,18 +734,21 @@ static Expr *new_expr_ident(Scope *scope, char *name, Range range) {
     return new_expr_str(scope, scope->func_ctxt->name, range);
   }
   Decl *decl = get_decl(scope, name);
-  StackVar *svar;
-  GlobalVar *gvar;
+  StackVar *svar = NULL;
+  GlobalVar *gvar = NULL;
+  Number *num_val = NULL;
   if (decl != NULL) {
     if (decl->stack_var != NULL) {
       ty = EX_STACK_VAR;
       type = decl->type;
       svar = decl->stack_var;
-      gvar = NULL;
+    } else if (decl->num_val != NULL) {
+      ty = EX_NUM;
+      type = decl->type;
+      num_val = decl->num_val;
     } else {
       ty = EX_GLOBAL_VAR;
       type = decl->type;
-      svar = NULL;
       gvar = decl->global_var;
     }
   } else {
@@ -740,6 +762,9 @@ static Expr *new_expr_ident(Scope *scope, char *name, Range range) {
   expr->name = name;
   expr->stack_var = svar;
   expr->global_var = gvar;
+  if (num_val != NULL) {
+    expr->num_val = *num_val;
+  }
   return expr;
 }
 
@@ -853,6 +878,11 @@ static Expr *new_expr_cast(Scope *scope, Type *val_type, Expr *operand,
       return operand;
     case TY_PTR:
       SET_NUMBER_VAL(operand->num_val.ptr_val, &operand->num_val);
+      operand->val_type = val_type;
+      operand->num_val.type = val_type->ty;
+      return operand;
+    case TY_ENUM:
+      SET_NUMBER_VAL(operand->num_val.enum_val, &operand->num_val);
       operand->val_type = val_type;
       operand->num_val.type = val_type->ty;
       return operand;
@@ -972,6 +1002,7 @@ static Number eval_binop(int op, type_t type, Number na, Number nb,
   case TY_CHAR:
   case TY_SCHAR:
   case TY_PTR:
+  case TY_ENUM:
   case TY_ARRAY:
   case TY_FUNC:
   case TY_STRUCT:
@@ -1591,7 +1622,7 @@ static Vector *declaration(Tokenizer *tokenizer, Scope *scope) {
   if (is_typedef) {
     register_typedef(scope, name->name, type);
   } else if (is_extern) {
-    register_decl(scope, name->name, type, NULL, NULL);
+    register_decl(scope, name->name, type, NULL, NULL, NULL);
   } else {
     if (is_func_type(type)) {
       VarDef *def = register_func(scope, name, type);
@@ -1615,7 +1646,7 @@ static Vector *declaration(Tokenizer *tokenizer, Scope *scope) {
     if (is_typedef) {
       register_typedef(scope, name->name, type);
     } else if (is_extern) {
-      register_decl(scope, name->name, type, NULL, NULL);
+      register_decl(scope, name->name, type, NULL, NULL, NULL);
     } else {
       if (is_func_type(type)) {
         (void)register_func(scope, name, type);
@@ -1678,6 +1709,8 @@ static Type *type_specifier(Scope *scope, Tokenizer *tokenizer) {
   case TK_STRUCT:
   case TK_UNION:
     return struct_or_union_specifier(scope, tokenizer, token);
+  case TK_ENUM:
+    return enum_specifier(scope, tokenizer, token);
   case TK_IDENT: {
     Type *type = get_typedef(scope, token->name);
     if (type != NULL) {
@@ -1739,6 +1772,60 @@ static Type *struct_or_union_specifier(Scope *scope, Tokenizer *tokenizer,
   }
 
   return new_type_anon_struct(token->ty);
+}
+
+static void enumerator(Scope *scope, Tokenizer *tokenizer, Type *type,
+                       int *val) {
+  Token *ident = token_expect(tokenizer, TK_IDENT);
+  if (token_consume(tokenizer, '=')) {
+    Expr *expr = constant_expression(tokenizer, scope);
+    expr = new_expr_cast(scope, type, expr, expr->range);
+    if (expr->ty != EX_NUM) {
+      range_error(expr->range, "列挙型の値が定数式の数値ではありません");
+    }
+    SET_NUMBER_VAL(*val, &expr->num_val);
+  }
+  token_consume(tokenizer, ',');
+
+  Number *number = NEW(Number);
+  number->type = TY_ENUM;
+  number->enum_val = *val;
+  if (!register_decl(scope, ident->name, type, NULL, NULL, number)) {
+    range_error(ident->range, "定義済みの識別子です: %s", ident->name);
+  }
+  (*val)++;
+}
+
+static Type *enum_specifier(Scope *scope, Tokenizer *tokenizer, Token *token) {
+  Token *tag_ident = token_consume(tokenizer, TK_IDENT);
+  if (tag_ident == NULL && token_peek(tokenizer)->ty != '{') {
+    range_error(token->range, "列挙型のタグまたは `{` がありません");
+  }
+
+  char *tag = tag_ident != NULL ? tag_ident->name : NULL;
+
+  if (token_consume(tokenizer, '{')) {
+    Type *type = new_type_enum(tag != NULL ? tag : NULL);
+    if (tag != NULL) {
+      if (!register_tag(scope, tag, type)) {
+        range_error(tag_ident->range, "同じタグ名の列挙型の多重定義です: %s",
+                    tag);
+      }
+    }
+    int val = 0;
+    while (token_peek(tokenizer)->ty != '}') {
+      enumerator(scope, tokenizer, type, &val);
+    }
+    token_expect(tokenizer, '}');
+    return type;
+  }
+  if (tag != NULL) {
+    Type *type = get_tag(scope, tag);
+    if (type != NULL) {
+      return type;
+    }
+  }
+  return new_type_enum(tag);
 }
 
 static Type *type_name(Scope *scope, Tokenizer *tokenizer) {
@@ -2031,6 +2118,7 @@ static void initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
     case TY_CHAR:
     case TY_SCHAR:
     case TY_PTR:
+    case TY_ENUM:
       initializer(tokenizer, scope, type, init);
       break;
     case TY_STRUCT:
