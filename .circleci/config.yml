@@ -5,9 +5,9 @@ jobs:
       - image: archlinux/base
     steps:
       - checkout
-      - run: 
+      - run:
           command: |
-            pacman -Sy
+            pacman -Syu --noconfirm
             pacman -S base-devel --noconfirm
       - run:
           command: |
