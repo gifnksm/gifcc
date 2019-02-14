@@ -116,23 +116,23 @@ static void gen_lval(Expr *expr) {
 static char *num2str(Number num, Range range) {
   char buf[1024];
   switch (num.type) {
-  case TY_INT:
-    sprintf(buf, "%d", num.int_val);
+  case TY_S_INT:
+    sprintf(buf, "%d", num.s_int_val);
     break;
   case TY_CHAR:
     sprintf(buf, "%hhd", num.char_val);
     break;
-  case TY_SCHAR:
-    sprintf(buf, "%hhd", num.schar_val);
+  case TY_S_CHAR:
+    sprintf(buf, "%hhd", num.s_char_val);
     break;
-  case TY_SHORT:
-    sprintf(buf, "%hd", num.short_val);
+  case TY_S_SHORT:
+    sprintf(buf, "%hd", num.s_short_val);
     break;
-  case TY_LONG:
-    sprintf(buf, "%ld", num.long_val);
+  case TY_S_LONG:
+    sprintf(buf, "%ld", num.s_long_val);
     break;
-  case TY_LLONG:
-    sprintf(buf, "%lld", num.llong_val);
+  case TY_S_LLONG:
+    sprintf(buf, "%lld", num.s_llong_val);
     break;
   case TY_PTR:
     sprintf(buf, "%" PRIdPTR, num.ptr_val);
@@ -732,23 +732,23 @@ static void gen_gvar_init(Initializer *init, Range range) {
     Expr *expr = init->expr;
     if (expr->ty == EX_NUM) {
       switch (expr->val_type->ty) {
-      case TY_INT:
-        printf("  .long %d\n", expr->num_val.int_val);
+      case TY_S_INT:
+        printf("  .long %d\n", expr->num_val.s_int_val);
         break;
       case TY_CHAR:
         printf("  .byte %hhd\n", expr->num_val.char_val);
         break;
-      case TY_SCHAR:
-        printf("  .byte %hhd\n", expr->num_val.schar_val);
+      case TY_S_CHAR:
+        printf("  .byte %hhd\n", expr->num_val.s_char_val);
         break;
-      case TY_SHORT:
-        printf("  .word %hd\n", expr->num_val.short_val);
+      case TY_S_SHORT:
+        printf("  .word %hd\n", expr->num_val.s_short_val);
         break;
-      case TY_LONG:
-        printf("  .quad %ld\n", expr->num_val.long_val);
+      case TY_S_LONG:
+        printf("  .quad %ld\n", expr->num_val.s_long_val);
         break;
-      case TY_LLONG:
-        printf("  .quad %lld\n", expr->num_val.llong_val);
+      case TY_S_LLONG:
+        printf("  .quad %lld\n", expr->num_val.s_llong_val);
         break;
       case TY_PTR:
         printf("  .quad %" PRIdPTR "\n", expr->num_val.ptr_val);

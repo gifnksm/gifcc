@@ -383,7 +383,7 @@ static Token *hexadecimal_constant(Reader *reader) {
     reader_succ(reader);
   }
 
-  return new_token_num((Number){.type = TY_INT, .int_val = val});
+  return new_token_num((Number){.type = TY_S_INT, .s_int_val = val});
 }
 
 static Token *octal_constant(Reader *reader) {
@@ -402,7 +402,7 @@ static Token *octal_constant(Reader *reader) {
     reader_succ(reader);
   }
 
-  return new_token_num((Number){.type = TY_INT, .int_val = val});
+  return new_token_num((Number){.type = TY_S_INT, .s_int_val = val});
 }
 
 static Token *decimal_constant(Reader *reader) {
@@ -420,7 +420,7 @@ static Token *decimal_constant(Reader *reader) {
     reader_succ(reader);
   }
 
-  return new_token_num((Number){.type = TY_INT, .int_val = val});
+  return new_token_num((Number){.type = TY_S_INT, .s_int_val = val});
 }
 
 static Token *character_constant(Reader *reader) {
@@ -435,7 +435,7 @@ static Token *character_constant(Reader *reader) {
   }
   ch = c_char(reader);
   reader_expect(reader, '\'');
-  return new_token_num((Number){.type = TY_INT, .int_val = ch});
+  return new_token_num((Number){.type = TY_S_INT, .s_int_val = ch});
 }
 
 static Token *string_literal(Reader *reader) {

@@ -95,33 +95,49 @@ typedef struct {
 } Range;
 
 #define SET_NUMBER_VAL(dest, num)                                              \
-  (((num)->type == TY_CHAR)                                                    \
-       ? (dest) = (num)->char_val                                              \
-       : ((num)->type == TY_SCHAR                                              \
-              ? (dest) = (num)->schar_val                                      \
-              : (((num)->type == TY_SHORT)                                     \
-                     ? (dest) = (num)->short_val                               \
-                     : (((num)->type == TY_INT)                                \
-                            ? (dest) = (num)->int_val                          \
-                            : (((num)->type == TY_LONG)                        \
-                                   ? (dest) = (num)->long_val                  \
-                                   : (((num)->type == TY_LLONG)                \
-                                          ? (dest) = (num)->llong_val          \
-                                          : (((num)->type == TY_PTR)           \
-                                                 ? (dest) = (num)->ptr_val     \
-                                                 : ((num)->type == TY_ENUM)    \
-                                                       ? (dest) =              \
-                                                             (num)->enum_val   \
-                                                       : abort())))))))
+  do {                                                                         \
+    switch ((num)->type) {                                                     \
+    case TY_CHAR:                                                              \
+      (dest) = (num)->char_val;                                                \
+      break;                                                                   \
+    case TY_S_CHAR:                                                            \
+      (dest) = (num)->s_char_val;                                              \
+      break;                                                                   \
+    case TY_S_SHORT:                                                           \
+      (dest) = (num)->s_short_val;                                             \
+      break;                                                                   \
+    case TY_S_INT:                                                             \
+      (dest) = (num)->s_int_val;                                               \
+      break;                                                                   \
+    case TY_S_LONG:                                                            \
+      (dest) = (num)->s_long_val;                                              \
+      break;                                                                   \
+    case TY_S_LLONG:                                                           \
+      (dest) = (num)->s_llong_val;                                             \
+      break;                                                                   \
+    case TY_PTR:                                                               \
+      (dest) = (num)->ptr_val;                                                 \
+      break;                                                                   \
+    case TY_ENUM:                                                              \
+      (dest) = (num)->enum_val;                                                \
+      break;                                                                   \
+    case TY_VOID:                                                              \
+    case TY_ARRAY:                                                             \
+    case TY_FUNC:                                                              \
+    case TY_STRUCT:                                                            \
+    case TY_UNION:                                                             \
+      abort();                                                                 \
+    }                                                                          \
+  } while (false);
 
 typedef enum {
   TY_VOID,
-  TY_INT,
-  TY_SHORT,
-  TY_LONG,
-  TY_LLONG,
+  TY_S_INT,
+  TY_S_SHORT,
+  TY_S_LONG,
+  TY_S_LLONG,
   TY_CHAR,
-  TY_SCHAR,
+  TY_S_CHAR,
   TY_PTR,
   TY_ARRAY,
   TY_FUNC,
@@ -134,11 +150,11 @@ typedef struct Number {
   type_t type;
   union {
     char char_val;
-    signed char schar_val;
-    short short_val;
-    int int_val;
-    long long_val;
-    long long llong_val;
+    signed char s_char_val;
+    signed short s_short_val;
+    signed int s_int_val;
+    signed long s_long_val;
+    signed long long s_llong_val;
     intptr_t ptr_val;
     int enum_val;
   };

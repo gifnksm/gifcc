@@ -196,10 +196,10 @@ TranslationUnit *parse(Reader *reader) {
 }
 
 static Number new_number_int(int val) {
-  return (Number){.type = TY_INT, .int_val = val};
+  return (Number){.type = TY_S_INT, .s_int_val = val};
 }
 static Number new_number_size(int val) {
-  return (Number){.type = TY_LONG, .ptr_val = val};
+  return (Number){.type = TY_S_LONG, .ptr_val = val};
 }
 
 static Initializer *new_initializer(Type *type) {
@@ -486,8 +486,8 @@ static bool is_sametype(Type *ty1, Type *ty2) {
 }
 
 static bool is_integer_type(Type *ty) {
-  return ty->ty == TY_INT || ty->ty == TY_SHORT || ty->ty == TY_LONG ||
-         ty->ty == TY_LLONG || ty->ty == TY_CHAR || ty->ty == TY_SCHAR ||
+  return ty->ty == TY_S_INT || ty->ty == TY_S_SHORT || ty->ty == TY_S_LONG ||
+         ty->ty == TY_S_LLONG || ty->ty == TY_CHAR || ty->ty == TY_S_CHAR ||
          ty->ty == TY_ENUM;
 }
 static bool is_arith_type(Type *ty) { return is_integer_type(ty); }
@@ -499,11 +499,35 @@ static Type *integer_promoted(Scope *scope, Expr **e) {
     return NULL;
   }
   // (S)CHAR, SHORT, ENUM は INT へ昇格する
-  if ((*e)->val_type->ty == TY_CHAR || (*e)->val_type->ty == TY_SCHAR ||
-      (*e)->val_type->ty == TY_SHORT || (*e)->val_type->ty == TY_ENUM) {
-    *e = new_expr_cast(scope, new_type(TY_INT), *e, (*e)->range);
+  if ((*e)->val_type->ty == TY_CHAR || (*e)->val_type->ty == TY_S_CHAR ||
+      (*e)->val_type->ty == TY_S_SHORT || (*e)->val_type->ty == TY_ENUM) {
+    *e = new_expr_cast(scope, new_type(TY_S_INT), *e, (*e)->range);
   }
   return (*e)->val_type;
+}
+static int get_int_type_rank(Type *ty, Range range) {
+  switch (ty->ty) {
+  case TY_CHAR:
+  case TY_S_CHAR:
+    return 1;
+  case TY_S_SHORT:
+    return 2;
+  case TY_S_INT:
+  case TY_ENUM:
+    return 3;
+  case TY_S_LONG:
+    return 4;
+  case TY_S_LLONG:
+    return 5;
+  case TY_VOID:
+  case TY_PTR:
+  case TY_ARRAY:
+  case TY_FUNC:
+  case TY_STRUCT:
+  case TY_UNION:
+    break;
+  }
+  range_error(range, "整数型ではない型です: %d", ty->ty);
 }
 static Type *arith_converted(Scope *scope, Expr **e1, Expr **e2) {
   if (!is_arith_type((*e1)->val_type) || !is_arith_type((*e2)->val_type)) {
@@ -511,11 +535,13 @@ static Type *arith_converted(Scope *scope, Expr **e1, Expr **e2) {
   }
   Type *ty1 = integer_promoted(scope, e1);
   Type *ty2 = integer_promoted(scope, e2);
-  if (get_val_size(ty1, (*e1)->range) < get_val_size(ty2, (*e2)->range)) {
+  if (get_int_type_rank(ty1, (*e1)->range) <
+      get_int_type_rank(ty2, (*e2)->range)) {
     *e1 = new_expr_cast(scope, ty2, *e1, (*e1)->range);
     return ty2;
   }
-  if (get_val_size(ty1, (*e1)->range) > get_val_size(ty2, (*e2)->range)) {
+  if (get_int_type_rank(ty1, (*e1)->range) >
+      get_int_type_rank(ty2, (*e2)->range)) {
     *e2 = new_expr_cast(scope, ty1, *e2, (*e2)->range);
     return ty1;
   }
@@ -559,15 +585,15 @@ int get_val_size(Type *ty, Range range) {
     return sizeof(void);
   case TY_CHAR:
     return sizeof(char);
-  case TY_SCHAR:
+  case TY_S_CHAR:
     return sizeof(signed char);
-  case TY_INT:
+  case TY_S_INT:
     return sizeof(int);
-  case TY_SHORT:
+  case TY_S_SHORT:
     return sizeof(short);
-  case TY_LONG:
+  case TY_S_LONG:
     return sizeof(long);
-  case TY_LLONG:
+  case TY_S_LLONG:
     return sizeof(long long);
   case TY_PTR:
     return sizeof(void *);
@@ -596,15 +622,15 @@ int get_val_align(Type *ty, Range range) {
     return alignof(void);
   case TY_CHAR:
     return alignof(char);
-  case TY_SCHAR:
+  case TY_S_CHAR:
     return alignof(signed char);
-  case TY_SHORT:
+  case TY_S_SHORT:
     return alignof(short);
-  case TY_INT:
+  case TY_S_INT:
     return alignof(int);
-  case TY_LONG:
+  case TY_S_LONG:
     return alignof(long);
-  case TY_LLONG:
+  case TY_S_LLONG:
     return alignof(long long);
   case TY_PTR:
     return alignof(void *);
@@ -754,7 +780,7 @@ static Expr *new_expr_ident(Scope *scope, char *name, Range range) {
   } else {
     range_warn(range, "未定義の識別子です: %s", name);
     ty = EX_GLOBAL_VAR;
-    type = new_type(TY_INT);
+    type = new_type(TY_S_INT);
     svar = NULL;
     gvar = new_global_variable(type, name, range, false);
   }
@@ -797,7 +823,7 @@ static Expr *new_expr_call(Scope *scope, Expr *callee, Vector *argument,
     ret_type = callee->val_type->ptrof->func_ret;
   } else {
     range_warn(range, "未知の関数です");
-    ret_type = new_type(TY_INT);
+    ret_type = new_type(TY_S_INT);
   }
   if (callee->val_type->func_param != NULL) {
     Vector *params = callee->val_type->func_param;
@@ -846,23 +872,23 @@ static Expr *new_expr_cast(Scope *scope, Type *val_type, Expr *operand,
     case TY_VOID:
       operand->val_type = val_type;
       return operand;
-    case TY_INT:
-      SET_NUMBER_VAL(operand->num_val.int_val, &operand->num_val);
+    case TY_S_INT:
+      SET_NUMBER_VAL(operand->num_val.s_int_val, &operand->num_val);
       operand->val_type = val_type;
       operand->num_val.type = val_type->ty;
       return operand;
-    case TY_SHORT:
-      SET_NUMBER_VAL(operand->num_val.short_val, &operand->num_val);
+    case TY_S_SHORT:
+      SET_NUMBER_VAL(operand->num_val.s_short_val, &operand->num_val);
       operand->val_type = val_type;
       operand->num_val.type = val_type->ty;
       return operand;
-    case TY_LONG:
-      SET_NUMBER_VAL(operand->num_val.long_val, &operand->num_val);
+    case TY_S_LONG:
+      SET_NUMBER_VAL(operand->num_val.s_long_val, &operand->num_val);
       operand->val_type = val_type;
       operand->num_val.type = val_type->ty;
       return operand;
-    case TY_LLONG:
-      SET_NUMBER_VAL(operand->num_val.llong_val, &operand->num_val);
+    case TY_S_LLONG:
+      SET_NUMBER_VAL(operand->num_val.s_llong_val, &operand->num_val);
       operand->val_type = val_type;
       operand->num_val.type = val_type->ty;
       return operand;
@@ -871,8 +897,8 @@ static Expr *new_expr_cast(Scope *scope, Type *val_type, Expr *operand,
       operand->val_type = val_type;
       operand->num_val.type = val_type->ty;
       return operand;
-    case TY_SCHAR:
-      SET_NUMBER_VAL(operand->num_val.schar_val, &operand->num_val);
+    case TY_S_CHAR:
+      SET_NUMBER_VAL(operand->num_val.s_char_val, &operand->num_val);
       operand->val_type = val_type;
       operand->num_val.type = val_type->ty;
       return operand;
@@ -973,24 +999,24 @@ static Number eval_binop(int op, type_t type, Number na, Number nb,
   assert(na.type == nb.type);
   Number num = {.type = type};
   switch (type) {
-  case TY_INT: {
-    int a, b, *r = &num.int_val;
+  case TY_S_INT: {
+    int a, b, *r = &num.s_int_val;
     SET_NUMBER_VAL(a, &na);
     SET_NUMBER_VAL(b, &nb);
     BINOP(op, num, r, a, b);
     break;
   }
 
-  case TY_LONG: {
-    long a, b, *r = &num.long_val;
+  case TY_S_LONG: {
+    long a, b, *r = &num.s_long_val;
     SET_NUMBER_VAL(a, &na);
     SET_NUMBER_VAL(b, &nb);
     BINOP(op, num, r, a, b);
     break;
   }
 
-  case TY_LLONG: {
-    long long a, b, *r = &num.llong_val;
+  case TY_S_LLONG: {
+    long long a, b, *r = &num.s_llong_val;
     SET_NUMBER_VAL(a, &na);
     SET_NUMBER_VAL(b, &nb);
     BINOP(op, num, r, a, b);
@@ -998,9 +1024,9 @@ static Number eval_binop(int op, type_t type, Number na, Number nb,
   }
 
   case TY_VOID:
-  case TY_SHORT:
+  case TY_S_SHORT:
   case TY_CHAR:
-  case TY_SCHAR:
+  case TY_S_CHAR:
   case TY_PTR:
   case TY_ENUM:
   case TY_ARRAY:
@@ -1087,7 +1113,7 @@ static Expr *new_expr_binop(Scope *scope, int op, Expr *lhs, Expr *rhs,
         }
 
         // ptr - ptr
-        Expr *sub = new_expr('-', new_type(TY_LONG), range);
+        Expr *sub = new_expr('-', new_type(TY_S_LONG), range);
         sub->lhs = lhs;
         sub->rhs = rhs;
         Expr *size = new_expr_num(
@@ -1148,7 +1174,7 @@ static Expr *new_expr_binop(Scope *scope, int op, Expr *lhs, Expr *rhs,
   case EX_EQEQ:
   case EX_NOTEQ:
     val_type = arith_converted(scope, &lhs, &rhs);
-    val_type = new_type(TY_INT);
+    val_type = new_type(TY_S_INT);
     break;
   // and
   case '&':
@@ -1161,7 +1187,7 @@ static Expr *new_expr_binop(Scope *scope, int op, Expr *lhs, Expr *rhs,
     if (val_type == NULL) {
       binop_type_error(op, lhs, rhs);
     }
-    assert(val_type->ty == TY_INT || val_type->ty == TY_LONG);
+    assert(val_type->ty == TY_S_INT || val_type->ty == TY_S_LONG);
     if (lhs->ty == EX_NUM && rhs->ty == EX_NUM) {
       lhs->num_val =
           eval_binop(op, val_type->ty, lhs->num_val, rhs->num_val, range);
@@ -1171,7 +1197,7 @@ static Expr *new_expr_binop(Scope *scope, int op, Expr *lhs, Expr *rhs,
     break;
   case EX_LOGAND:
   case EX_LOGOR:
-    val_type = new_type(TY_INT);
+    val_type = new_type(TY_S_INT);
     break;
   case '=':
     rhs = new_expr_cast(scope, lhs->val_type, rhs, rhs->range);
@@ -1673,38 +1699,38 @@ static Type *type_specifier(Scope *scope, Tokenizer *tokenizer) {
   case TK_CHAR:
     return new_type(TY_CHAR);
   case TK_INT:
-    return new_type(TY_INT);
+    return new_type(TY_S_INT);
   case TK_SHORT:
     (void)token_consume(tokenizer, TK_INT);
-    return new_type(TY_SHORT);
+    return new_type(TY_S_SHORT);
   case TK_LONG:
     if (token_consume(tokenizer, TK_LONG)) {
       (void)token_consume(tokenizer, TK_INT);
-      return new_type(TY_LLONG);
+      return new_type(TY_S_LLONG);
     }
     (void)token_consume(tokenizer, TK_INT);
-    return new_type(TY_LONG);
+    return new_type(TY_S_LONG);
 
   case TK_SIGNED:
     if (token_consume(tokenizer, TK_CHAR)) {
-      return new_type(TY_SCHAR);
+      return new_type(TY_S_CHAR);
     }
     if (token_consume(tokenizer, TK_INT)) {
-      return new_type(TY_INT);
+      return new_type(TY_S_INT);
     }
     if (token_consume(tokenizer, TK_SHORT)) {
       (void)token_consume(tokenizer, TK_INT);
-      return new_type(TY_SHORT);
+      return new_type(TY_S_SHORT);
     }
     if (token_consume(tokenizer, TK_LONG)) {
       if (token_consume(tokenizer, TK_LONG)) {
         (void)token_consume(tokenizer, TK_INT);
-        return new_type(TY_LLONG);
+        return new_type(TY_S_LLONG);
       }
       (void)token_consume(tokenizer, TK_INT);
-      return new_type(TY_LONG);
+      return new_type(TY_S_LONG);
     }
-    return new_type(TY_INT);
+    return new_type(TY_S_INT);
 
   case TK_STRUCT:
   case TK_UNION:
@@ -2111,12 +2137,12 @@ static void initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
   Token *token;
   if ((token = token_consume(tokenizer, '{')) != NULL) {
     switch (type->ty) {
-    case TY_INT:
-    case TY_SHORT:
-    case TY_LONG:
-    case TY_LLONG:
+    case TY_S_INT:
+    case TY_S_SHORT:
+    case TY_S_LONG:
+    case TY_S_LLONG:
     case TY_CHAR:
-    case TY_SCHAR:
+    case TY_S_CHAR:
     case TY_PTR:
     case TY_ENUM:
       initializer(tokenizer, scope, type, init);
