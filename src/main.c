@@ -43,6 +43,21 @@ static void dump_number(Number num) {
   case TY_S_LLONG:
     printf("%lld", num.s_llong_val);
     break;
+  case TY_U_CHAR:
+    printf("%hhu", num.u_char_val);
+    break;
+  case TY_U_SHORT:
+    printf("%hu", num.u_short_val);
+    break;
+  case TY_U_INT:
+    printf("%u", num.u_int_val);
+    break;
+  case TY_U_LONG:
+    printf("%lu", num.u_long_val);
+    break;
+  case TY_U_LLONG:
+    printf("%llu", num.u_llong_val);
+    break;
   case TY_PTR:
     printf("%" PRIdPTR, num.ptr_val);
     break;
@@ -106,11 +121,17 @@ static void dump_type_inner(Type *ty) {
   case TY_VOID:
     printf("void");
     return;
-  case TY_S_INT:
-    printf("signed int");
+  case TY_CHAR:
+    printf("char");
+    return;
+  case TY_S_CHAR:
+    printf("signed char");
     return;
   case TY_S_SHORT:
     printf("signed short");
+    return;
+  case TY_S_INT:
+    printf("signed int");
     return;
   case TY_S_LONG:
     printf("signed long");
@@ -118,11 +139,20 @@ static void dump_type_inner(Type *ty) {
   case TY_S_LLONG:
     printf("signed long long");
     return;
-  case TY_CHAR:
-    printf("char");
+  case TY_U_CHAR:
+    printf("unsigned char");
     return;
-  case TY_S_CHAR:
-    printf("signed char");
+  case TY_U_SHORT:
+    printf("unsigned short");
+    return;
+  case TY_U_INT:
+    printf("unsigned int");
+    return;
+  case TY_U_LONG:
+    printf("unsigned long");
+    return;
+  case TY_U_LLONG:
+    printf("unsigned long long");
     return;
   case TY_PTR:
     printf("PTR(");

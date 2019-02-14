@@ -63,6 +63,7 @@ enum {
   TK_LONG,          // `long`
   TK_CHAR,          // `char`
   TK_SIGNED,        // `signed`
+  TK_UNSIGNED,      // `unsigned`
   TK_IF,            // `if`
   TK_ELSE,          // `else`
   TK_SWITCH,        // `switch`
@@ -115,6 +116,21 @@ typedef struct {
     case TY_S_LLONG:                                                           \
       (dest) = (num)->s_llong_val;                                             \
       break;                                                                   \
+    case TY_U_CHAR:                                                            \
+      (dest) = (num)->u_char_val;                                              \
+      break;                                                                   \
+    case TY_U_SHORT:                                                           \
+      (dest) = (num)->u_short_val;                                             \
+      break;                                                                   \
+    case TY_U_INT:                                                             \
+      (dest) = (num)->u_int_val;                                               \
+      break;                                                                   \
+    case TY_U_LONG:                                                            \
+      (dest) = (num)->u_long_val;                                              \
+      break;                                                                   \
+    case TY_U_LLONG:                                                           \
+      (dest) = (num)->u_llong_val;                                             \
+      break;                                                                   \
     case TY_PTR:                                                               \
       (dest) = (num)->ptr_val;                                                 \
       break;                                                                   \
@@ -132,12 +148,17 @@ typedef struct {
 
 typedef enum {
   TY_VOID,
-  TY_S_INT,
-  TY_S_SHORT,
-  TY_S_LONG,
-  TY_S_LLONG,
   TY_CHAR,
   TY_S_CHAR,
+  TY_S_SHORT,
+  TY_S_INT,
+  TY_S_LONG,
+  TY_S_LLONG,
+  TY_U_CHAR,
+  TY_U_SHORT,
+  TY_U_INT,
+  TY_U_LONG,
+  TY_U_LLONG,
   TY_PTR,
   TY_ARRAY,
   TY_FUNC,
@@ -155,6 +176,11 @@ typedef struct Number {
     signed int s_int_val;
     signed long s_long_val;
     signed long long s_llong_val;
+    unsigned char u_char_val;
+    unsigned short u_short_val;
+    unsigned int u_int_val;
+    unsigned long u_long_val;
+    unsigned long long u_llong_val;
     intptr_t ptr_val;
     int enum_val;
   };
@@ -413,6 +439,7 @@ Token *token_expect(Tokenizer *tokenizer, int ty);
 const char *token_kind_to_str(int kind);
 const Reader *token_get_reader(const Tokenizer *tokenizer);
 
+bool is_signed_int_type(Type *ty, Range range);
 int get_val_size(Type *ty, Range range);
 int get_val_align(Type *ty, Range range);
 TranslationUnit *parse(Reader *reader);

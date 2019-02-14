@@ -116,9 +116,6 @@ static void gen_lval(Expr *expr) {
 static char *num2str(Number num, Range range) {
   char buf[1024];
   switch (num.type) {
-  case TY_S_INT:
-    sprintf(buf, "%d", num.s_int_val);
-    break;
   case TY_CHAR:
     sprintf(buf, "%hhd", num.char_val);
     break;
@@ -128,11 +125,29 @@ static char *num2str(Number num, Range range) {
   case TY_S_SHORT:
     sprintf(buf, "%hd", num.s_short_val);
     break;
+  case TY_S_INT:
+    sprintf(buf, "%d", num.s_int_val);
+    break;
   case TY_S_LONG:
     sprintf(buf, "%ld", num.s_long_val);
     break;
   case TY_S_LLONG:
     sprintf(buf, "%lld", num.s_llong_val);
+    break;
+  case TY_U_CHAR:
+    sprintf(buf, "%hhu", num.u_char_val);
+    break;
+  case TY_U_SHORT:
+    sprintf(buf, "%hu", num.u_short_val);
+    break;
+  case TY_U_INT:
+    sprintf(buf, "%u", num.u_int_val);
+    break;
+  case TY_U_LONG:
+    sprintf(buf, "%lu", num.u_long_val);
+    break;
+  case TY_U_LLONG:
+    sprintf(buf, "%llu", num.u_llong_val);
     break;
   case TY_PTR:
     sprintf(buf, "%" PRIdPTR, num.ptr_val);
@@ -255,10 +270,19 @@ static void gen_expr(Expr *expr) {
     Expr *operand = expr->expr;
     gen_expr(operand);
     const Reg *from = get_int_reg(operand->val_type, operand->range);
-    if (get_val_size(expr->val_type, expr->range) >
-        get_val_size(operand->val_type, operand->range)) {
+    int from_size = get_val_size(operand->val_type, operand->range);
+    int to_size = get_val_size(expr->val_type, expr->range);
+    if (to_size > from_size) {
       printf("  pop rax\n");
-      printf("  movsx %s, %s\n", r->rax, from->rax);
+      if (is_signed_int_type(operand->val_type, operand->range)) {
+        printf("  movsx %s, %s\n", r->rax, from->rax);
+      } else {
+        if (from_size < 4) {
+          printf("  movzx %s, %s\n", r->rax, from->rax);
+        } else {
+          printf("  mov %s, %s\n", from->rax, from->rax);
+        }
+      }
       printf("  push rax\n");
     }
     return;
@@ -273,6 +297,7 @@ static void gen_expr(Expr *expr) {
     printf("  push rdi\n");
     return;
   }
+
   if (expr->ty == EX_LOGAND) {
     char *false_label = make_label("logand.false");
     char *end_label = make_label("logand.end");
@@ -430,11 +455,16 @@ static void gen_expr(Expr *expr) {
     printf("  sub %s, %s\n", r->rax, r->rdi);
     break;
   case '*':
-    printf("  mul %s\n", r->rdi);
+    printf("  imul %s, %s\n", r->rax, r->rdi);
     break;
   case '/':
-    printf("  mov %s, 0\n", r->rdx);
-    printf("  div %s\n", r->rdi);
+    if (is_signed_int_type(expr->lhs->val_type, expr->lhs->range)) {
+      printf("  mov %s, 0\n", r->rdx);
+      printf("  idiv %s\n", r->rdi);
+    } else {
+      printf("  mov %s, 0\n", r->rdx);
+      printf("  div %s\n", r->rdi);
+    }
     break;
   case '%':
     printf("  mov %s, 0\n", r->rdx);
@@ -453,22 +483,38 @@ static void gen_expr(Expr *expr) {
     break;
   case '<':
     printf("  cmp %s, %s\n", r->rax, r->rdi);
-    printf("  setl al\n");
+    if (is_signed_int_type(expr->lhs->val_type, expr->lhs->range)) {
+      printf("  setl al\n");
+    } else {
+      printf("  setb al\n");
+    }
     printf("  movzb %s, al\n", r->rax);
     break;
   case '>':
     printf("  cmp %s, %s\n", r->rax, r->rdi);
-    printf("  setg al\n");
+    if (is_signed_int_type(expr->lhs->val_type, expr->lhs->range)) {
+      printf("  setg al\n");
+    } else {
+      printf("  seta al\n");
+    }
     printf("  movzb %s, al\n", r->rax);
     break;
   case EX_LTEQ:
     printf("  cmp %s, %s\n", r->rax, r->rdi);
-    printf("  setle al\n");
+    if (is_signed_int_type(expr->lhs->val_type, expr->lhs->range)) {
+      printf("  setle al\n");
+    } else {
+      printf("  setbe al\n");
+    }
     printf("  movzb %s, al\n", r->rax);
     break;
   case EX_GTEQ:
     printf("  cmp %s, %s\n", r->rax, r->rdi);
-    printf("  setge al\n");
+    if (is_signed_int_type(expr->lhs->val_type, expr->lhs->range)) {
+      printf("  setge al\n");
+    } else {
+      printf("  setae al\n");
+    }
     printf("  movzb %s, al\n", r->rax);
     break;
   case EX_LSHIFT:
@@ -477,7 +523,11 @@ static void gen_expr(Expr *expr) {
     break;
   case EX_RSHIFT:
     printf("  mov %s, %s\n", r->rcx, r->rdi);
-    printf("  sar %s, cl\n", r->rax);
+    if (is_signed_int_type(expr->lhs->val_type, expr->lhs->range)) {
+      printf("  sar %s, cl\n", r->rax);
+    } else {
+      printf("  shr %s, cl\n", r->rax);
+    }
     break;
   case '&':
     printf("  and %s, %s\n", r->rax, r->rdi);
@@ -732,9 +782,6 @@ static void gen_gvar_init(Initializer *init, Range range) {
     Expr *expr = init->expr;
     if (expr->ty == EX_NUM) {
       switch (expr->val_type->ty) {
-      case TY_S_INT:
-        printf("  .long %d\n", expr->num_val.s_int_val);
-        break;
       case TY_CHAR:
         printf("  .byte %hhd\n", expr->num_val.char_val);
         break;
@@ -744,11 +791,29 @@ static void gen_gvar_init(Initializer *init, Range range) {
       case TY_S_SHORT:
         printf("  .word %hd\n", expr->num_val.s_short_val);
         break;
+      case TY_S_INT:
+        printf("  .long %d\n", expr->num_val.s_int_val);
+        break;
       case TY_S_LONG:
         printf("  .quad %ld\n", expr->num_val.s_long_val);
         break;
       case TY_S_LLONG:
         printf("  .quad %lld\n", expr->num_val.s_llong_val);
+        break;
+      case TY_U_CHAR:
+        printf("  .byte %hhu\n", expr->num_val.u_char_val);
+        break;
+      case TY_U_SHORT:
+        printf("  .word %hu\n", expr->num_val.u_short_val);
+        break;
+      case TY_U_INT:
+        printf("  .long %u\n", expr->num_val.u_int_val);
+        break;
+      case TY_U_LONG:
+        printf("  .quad %lu\n", expr->num_val.u_long_val);
+        break;
+      case TY_U_LLONG:
+        printf("  .quad %llu\n", expr->num_val.u_llong_val);
         break;
       case TY_PTR:
         printf("  .quad %" PRIdPTR "\n", expr->num_val.ptr_val);

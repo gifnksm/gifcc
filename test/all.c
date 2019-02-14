@@ -2028,6 +2028,101 @@ static void test51(void) {
   test_ok(__func__);
 }
 
+static void test52(void) {
+  unsigned char sc1 = 0;
+  unsigned short int ss1 = 1;
+  unsigned short ss2 = 2;
+  unsigned int si1 = 3;
+  unsigned long int sl1 = 4;
+  unsigned long sl2 = 5;
+  unsigned long long int sll1 = 6;
+  unsigned long long sll2 = 7;
+  unsigned s1 = 8;
+
+  check_int(0, sc1);
+  check_int(1, ss1);
+  check_int(2, ss2);
+  check_int(3, si1);
+  check_int(4, sl1);
+  check_int(5, sl2);
+  check_int(6, sll1);
+  check_int(7, sll2);
+  check_int(8, s1);
+
+  test_ok(__func__);
+}
+
+static void test53(void) {
+  unsigned x = 5;
+  unsigned y = 3;
+
+  check_int(8, x + y);
+  check_int(2, x - y);
+  check_int(-2, y - x);
+  check_int(15, x * y);
+  check_int(1, x / y);
+
+  test_ok(__func__);
+}
+
+static void test54(void) {
+  unsigned char uc = 1;
+  unsigned short us = 2;
+  unsigned int ui = 3;
+  unsigned long ul = 4;
+  unsigned long ull = 5;
+
+  signed char ic = 6;
+  signed short is = 7;
+  signed int ii = 8;
+  signed long il = 9;
+  signed long ill = 10;
+
+  ull = uc;
+  check_int(1, ull == uc);
+  ull = us;
+  check_int(1, ull == us);
+  ull = ui;
+  check_int(1, ull == ui);
+  ull = ul;
+  check_int(1, ull == ul);
+  ull = ull;
+  check_int(1, ull == ull);
+  ull = ic;
+  check_int(1, ull == ic);
+  ull = is;
+  check_int(1, ull == is);
+  ull = ii;
+  check_int(1, ull == ii);
+  ull = il;
+  check_int(1, ull == il);
+  ull = ill;
+  check_int(1, ull == ill);
+
+  ill = uc;
+  check_int(1, ill == uc);
+  ill = us;
+  check_int(1, ill == us);
+  ill = ui;
+  check_int(1, ill == ui);
+  ill = ul;
+  check_int(1, ill == ul);
+  ill = ull;
+  check_int(1, ill == ull);
+  ill = ic;
+  check_int(1, ill == ic);
+  ill = is;
+  check_int(1, ill == is);
+  ill = ii;
+  check_int(1, ill == ii);
+  ill = il;
+  check_int(1, ill == il);
+  ill = ill;
+  check_int(1, ill == ill);
+
+  test_ok(__func__);
+}
+
 int main(void) {
   test01();
   test02();
@@ -2079,6 +2174,9 @@ int main(void) {
   test49();
   test50();
   test51();
+  test52();
+  test53();
+  test54();
 
   return 0;
 }
