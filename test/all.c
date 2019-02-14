@@ -76,125 +76,125 @@ static void test03_03(void) {
             26);
 }
 static void test03_04(void) {
-  1;
-  2;
-  3;
-  4;
-  5;
-  6;
-  7;
-  8;
-  9;
-  10;
-  11;
-  12;
-  13;
-  14;
-  15;
-  16;
-  17;
-  18;
-  19;
-  20;
-  21;
-  22;
-  23;
-  24;
-  25;
-  26;
-  27;
-  28;
-  29;
-  30;
-  31;
-  32;
-  33;
-  34;
-  35;
-  36;
-  37;
-  38;
-  39;
-  40;
-  41;
-  42;
-  43;
-  44;
-  45;
-  46;
-  47;
-  48;
-  49;
-  50;
-  51;
-  52;
-  53;
-  54;
-  55;
-  56;
-  57;
-  58;
-  59;
-  60;
-  61;
-  62;
-  63;
-  64;
-  65;
-  66;
-  67;
-  68;
-  69;
-  70;
-  71;
-  72;
-  73;
-  74;
-  75;
-  76;
-  77;
-  78;
-  79;
-  80;
-  81;
-  82;
-  83;
-  84;
-  85;
-  86;
-  87;
-  88;
-  89;
-  90;
-  91;
-  92;
-  93;
-  94;
-  95;
-  96;
-  97;
-  98;
-  99;
-  100;
-  101;
-  102;
-  103;
-  104;
-  105;
-  106;
-  107;
-  108;
-  109;
-  110;
-  111;
-  112;
-  113;
-  114;
-  115;
-  116;
-  117;
-  118;
-  119;
+  (void)1;
+  (void)2;
+  (void)3;
+  (void)4;
+  (void)5;
+  (void)6;
+  (void)7;
+  (void)8;
+  (void)9;
+  (void)10;
+  (void)11;
+  (void)12;
+  (void)13;
+  (void)14;
+  (void)15;
+  (void)16;
+  (void)17;
+  (void)18;
+  (void)19;
+  (void)20;
+  (void)21;
+  (void)22;
+  (void)23;
+  (void)24;
+  (void)25;
+  (void)26;
+  (void)27;
+  (void)28;
+  (void)29;
+  (void)30;
+  (void)31;
+  (void)32;
+  (void)33;
+  (void)34;
+  (void)35;
+  (void)36;
+  (void)37;
+  (void)38;
+  (void)39;
+  (void)40;
+  (void)41;
+  (void)42;
+  (void)43;
+  (void)44;
+  (void)45;
+  (void)46;
+  (void)47;
+  (void)48;
+  (void)49;
+  (void)50;
+  (void)51;
+  (void)52;
+  (void)53;
+  (void)54;
+  (void)55;
+  (void)56;
+  (void)57;
+  (void)58;
+  (void)59;
+  (void)60;
+  (void)61;
+  (void)62;
+  (void)63;
+  (void)64;
+  (void)65;
+  (void)66;
+  (void)67;
+  (void)68;
+  (void)69;
+  (void)70;
+  (void)71;
+  (void)72;
+  (void)73;
+  (void)74;
+  (void)75;
+  (void)76;
+  (void)77;
+  (void)78;
+  (void)79;
+  (void)80;
+  (void)81;
+  (void)82;
+  (void)83;
+  (void)84;
+  (void)85;
+  (void)86;
+  (void)87;
+  (void)88;
+  (void)89;
+  (void)90;
+  (void)91;
+  (void)92;
+  (void)93;
+  (void)94;
+  (void)95;
+  (void)96;
+  (void)97;
+  (void)98;
+  (void)99;
+  (void)100;
+  (void)101;
+  (void)102;
+  (void)103;
+  (void)104;
+  (void)105;
+  (void)106;
+  (void)107;
+  (void)108;
+  (void)109;
+  (void)110;
+  (void)111;
+  (void)112;
+  (void)113;
+  (void)114;
+  (void)115;
+  (void)116;
+  (void)117;
+  (void)118;
+  (void)119;
   check_int(120, 120);
 }
 static void test03_05(void) {
@@ -301,9 +301,9 @@ static void test05(void) {
 }
 
 static void test06(void) {
-  1;
+  (void)1;
   ;
-  2;
+  (void)2;
   ;
   ;
   ;
@@ -592,7 +592,7 @@ static void test09_03(void) {
 }
 static void test09_04(void) {
   int x = 5;
-  switch (1)
+  switch (11)
   case 0:
     abort();
   check_int(5, x);
@@ -704,6 +704,10 @@ static void test13(void) {
 
 static void test14(void) {
   int a, *b, **c, ***d;
+  (void)a;
+  (void)b;
+  (void)c;
+  (void)d;
 
   test_ok(__func__);
 }
@@ -799,6 +803,8 @@ static void test17(void) {
   a[3] = 8;
   check_int(8, test17_01(a)[2]);
 
+  test17_02();
+
   void *p, *q;
   p = 3;
   q = test17_03(p);
@@ -821,13 +827,15 @@ static int test18_add(int n) {
   test18_h[0] *= test18_h[0];
   test18_h[1] *= test18_h[1];
   test18_h[2] *= test18_h[2];
+
+  return test18_g;
 }
 static void test18(void) {
   test18_g = 100;
   check_int(test18_g, 100);
 
   test18_init();
-  test18_add(7);
+  (void)test18_add(7);
   check_int(10, test18_g);
   check_int(1, test18_h[0]);
   check_int(4, test18_h[1]);
@@ -1113,14 +1121,19 @@ static void test32(void) {
 
   check_int(8, sizeof &test32_fun_char);
   check_int(1, sizeof test32_fun_char());
-  check_int(8, sizeof &test32_fun_char);
+  check_int(0, test32_fun_char());
+  check_int(8, sizeof &test32_fun_short);
   check_int(2, sizeof test32_fun_short());
+  check_int(0, test32_fun_short());
   check_int(8, sizeof &test32_fun_int);
   check_int(4, sizeof test32_fun_int());
+  check_int(0, test32_fun_int());
   check_int(8, sizeof &test32_fun_long);
   check_int(8, sizeof test32_fun_long());
+  check_int(0, test32_fun_long());
   check_int(8, sizeof &test32_fun_ptr);
   check_int(8, sizeof test32_fun_ptr());
+  check_int(0, (int)test32_fun_ptr());
 
   test_ok(__func__);
 }
@@ -1254,7 +1267,7 @@ static struct {
   int d;
   short e;
   void *f;
-} test37_s = {1, 2, 3, 4, 5, 6};
+} test37_s = {1, 2, 3, 4, 5, (void *)6};
 static struct {
   int a;
   int b;
@@ -2135,6 +2148,7 @@ int main(void) {
   test09();
   test10();
   test11();
+  test12();
   test13();
   test14();
   test15();
