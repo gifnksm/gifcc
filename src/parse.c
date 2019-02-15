@@ -1112,6 +1112,9 @@ static Expr *new_expr_unary(Scope *scope, int ty, Expr *operand, Range range) {
     if (operand->val_type->ty != TY_PTR) {
       range_error(range, "ポインタ型でない値に対するデリファレンスです");
     }
+    if (operand->val_type->ptrof->ty == TY_FUNC) {
+      return operand;
+    }
     val_type = operand->val_type->ptrof;
   } else {
     val_type = operand->val_type;
