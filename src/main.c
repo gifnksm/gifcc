@@ -176,13 +176,18 @@ static void dump_type_inner(Type *ty) {
   case TY_FUNC:
     printf("FUNC ");
     printf("(");
-    for (int i = 0; i < ty->func_param->len; i++) {
-      if (i > 0) {
-        printf(", ");
+    if (ty->func_param != NULL) {
+      for (int i = 0; i < ty->func_param->len; i++) {
+        if (i > 0) {
+          printf(", ");
+        }
+        Param *param = ty->func_param->data[i];
+        dump_type_inner(param->type);
+        printf(" %s", param->name != NULL ? param->name->name : NULL);
       }
-      Param *param = ty->func_param->data[i];
-      dump_type_inner(param->type);
-      printf(" %s", param->name != NULL ? param->name->name : NULL);
+      if (ty->func_has_varargs) {
+        printf(", ...");
+      }
     }
     printf(")->");
     dump_type_inner(ty->func_ret);

@@ -42,7 +42,7 @@ static const LongToken LONG_PUNCT_TOKENS[] = {
     {"^=", TK_XOR_ASSIGN}, {"++", TK_INC},        {"+=", TK_ADD_ASSIGN},
     {"--", TK_DEC},        {"-=", TK_SUB_ASSIGN}, {"*=", TK_MUL_ASSIGN},
     {"/=", TK_DIV_ASSIGN}, {"%=", TK_MOD_ASSIGN}, {"->", TK_ARROW},
-    {NULL, '\0'},
+    {"...", TK_ELIPSIS},   {NULL, '\0'},
 };
 static const char *SHORT_PUNCT_TOKENS = "=!<>&|^+-*/%();?:~{}[],.";
 

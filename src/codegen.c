@@ -733,37 +733,39 @@ static void gen_func(Function *func) {
   printf("  sub rsp, %d\n", align(func->stack_size, 16));
 
   // 引数をスタックへコピー
-  for (int i = 0; i < func->type->func_param->len; i++) {
-    Param *param = func->type->func_param->data[i];
-    StackVar *var = param->stack_var;
-    assert(var != NULL);
-    const Reg *r = get_int_reg(var->type, var->range);
-    printf("  lea rax, [rbp - %d]\n",
-           align(func_ctxt->stack_size, 16) - var->offset);
-    switch (i) {
-    case 0:
-      printf("  mov [rax], %s\n", r->rdi);
-      break;
-    case 1:
-      printf("  mov [rax], %s\n", r->rsi);
-      break;
-    case 2:
-      printf("  mov [rax], %s\n", r->rdx);
-      break;
-    case 3:
-      printf("  mov [rax], %s\n", r->rcx);
-      break;
-    case 4:
-      printf("  mov [rax], %s\n", r->r8);
-      break;
-    case 5:
-      printf("  mov [rax], %s\n", r->r9);
-      break;
-      // 6番目以降の引数はスタック経由で渡すため、スタックからコピーする
-    default:
-      printf("  mov %s, [rbp + %d]\n", r->r11, (i - 6) * 8 + 16);
-      printf("  mov [rax], %s\n", r->r11);
-      break;
+  if (func->type->func_param != NULL) {
+    for (int i = 0; i < func->type->func_param->len; i++) {
+      Param *param = func->type->func_param->data[i];
+      StackVar *var = param->stack_var;
+      assert(var != NULL);
+      const Reg *r = get_int_reg(var->type, var->range);
+      printf("  lea rax, [rbp - %d]\n",
+             align(func_ctxt->stack_size, 16) - var->offset);
+      switch (i) {
+      case 0:
+        printf("  mov [rax], %s\n", r->rdi);
+        break;
+      case 1:
+        printf("  mov [rax], %s\n", r->rsi);
+        break;
+      case 2:
+        printf("  mov [rax], %s\n", r->rdx);
+        break;
+      case 3:
+        printf("  mov [rax], %s\n", r->rcx);
+        break;
+      case 4:
+        printf("  mov [rax], %s\n", r->r8);
+        break;
+      case 5:
+        printf("  mov [rax], %s\n", r->r9);
+        break;
+        // 6番目以降の引数はスタック経由で渡すため、スタックからコピーする
+      default:
+        printf("  mov %s, [rbp + %d]\n", r->r11, (i - 6) * 8 + 16);
+        printf("  mov [rax], %s\n", r->r11);
+        break;
+      }
     }
   }
 

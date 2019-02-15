@@ -1,6 +1,7 @@
 void abort(void);
 int puts(const char *s);
 int putchar(int c);
+int printf(const char *fmt, ...);
 
 static int num_check = 0;
 static void check_int(int a, int b) {
@@ -2153,6 +2154,17 @@ static void test55(void) {
   test_ok(__func__);
 }
 
+static int test56_varargs(int a, int b, ...) { return a + b; }
+static int test56_noargs() { return 8; }
+static void test56(void) {
+  check_int(3, test56_varargs(1, 2, 3));
+  check_int(8, test56_noargs());
+  check_int(8, test56_noargs(1));
+  check_int(8, test56_noargs(1, 2));
+
+  test_ok(__func__);
+}
+
 int main(void) {
   test01();
   test02();
@@ -2209,6 +2221,7 @@ int main(void) {
   test53();
   test54();
   test55();
+  test56();
 
   return 0;
 }

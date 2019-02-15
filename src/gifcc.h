@@ -57,6 +57,7 @@ enum {
   TK_OR_ASSIGN,     // `|=`
   TK_XOR_ASSIGN,    // `^=`
   TK_ARROW,         // `->`
+  TK_ELIPSIS,       // `...`
   TK_VOID,          // `void`
   TK_INT,           // `int`
   TK_SHORT,         // `short`
@@ -241,6 +242,7 @@ typedef struct Type {
   int array_len;
   struct Type *func_ret;
   Vector *func_param;
+  bool func_has_varargs;
   char *tag;
   Map *member_name_map;
   Vector *member_list;

@@ -93,7 +93,8 @@ static Type *new_type(int ty, bool is_const);
 static Type *new_type_ptr(Type *base_type, bool is_const);
 static Type *new_type_array(Type *base_type, Number len, bool is_const);
 static Type *new_type_unsized_array(Type *base_type, bool is_const);
-static Type *new_type_func(Type *ret_type, Vector *func_param, bool is_const);
+static Type *new_type_func(Type *ret_type, Vector *func_param, bool has_varargs,
+                           bool is_const);
 static Type *new_type_struct(int tk, char *tag, bool is_const);
 static Type *new_type_anon_struct(int tk, bool is_const);
 static Type *new_type_enum(char *tag, bool is_const);
@@ -835,10 +836,12 @@ static Type *new_type_unsized_array(Type *base_type, bool is_const) {
   return ptrtype;
 }
 
-static Type *new_type_func(Type *ret_type, Vector *func_param, bool is_const) {
+static Type *new_type_func(Type *ret_type, Vector *func_param, bool has_varargs,
+                           bool is_const) {
   Type *funtype = new_type(TY_FUNC, is_const);
   funtype->func_ret = ret_type;
   funtype->func_param = func_param;
+  funtype->func_has_varargs = has_varargs;
   return funtype;
 }
 
@@ -953,30 +956,45 @@ static Expr *new_expr_str(Scope *scope, char *val, Range range) {
 static Expr *new_expr_call(Scope *scope, Expr *callee, Vector *argument,
                            Range range) {
   callee = coerce_array2ptr(scope, callee);
+
+  Type *func_type;
+  Type *ret_type;
+  if (is_func_type(callee->val_type)) {
+    func_type = callee->val_type;
+  } else if (is_ptr_type(callee->val_type) &&
+             is_func_type(callee->val_type->ptrof)) {
+    func_type = callee->val_type->ptrof;
+  } else {
+    range_warn(range, "未知の関数です");
+    func_type = new_type_func(new_type(TY_S_INT, false), NULL, false, false);
+  }
+  ret_type = func_type->func_ret;
+
+  int narg = 0;
   if (argument != NULL) {
     for (int i = 0; i < argument->len; i++) {
       argument->data[i] = coerce_array2ptr(scope, argument->data[i]);
+      argument->data[i] = coerce_func2ptr(scope, argument->data[i]);
+    }
+    narg = argument->len;
+  }
+
+  Vector *params = func_type->func_param;
+  int nparam = params != NULL ? params->len : 0;
+  if (params != NULL) {
+    if ((narg < nparam) || (narg > nparam && !func_type->func_has_varargs)) {
+      range_error(range,
+                  "関数の引数の個数が一致しません: argument=%d, parameter=%d",
+                  narg, nparam);
     }
   }
 
-  Type *ret_type;
-  if (is_func_type(callee->val_type)) {
-    ret_type = callee->val_type->func_ret;
-  } else if (is_ptr_type(callee->val_type) &&
-             is_func_type(callee->val_type->ptrof)) {
-    ret_type = callee->val_type->ptrof->func_ret;
-  } else {
-    range_warn(range, "未知の関数です");
-    ret_type = new_type(TY_S_INT, false);
+  for (int i = 0; i < nparam; i++) {
+    Param *param = params->data[i];
+    Expr *arg = argument->data[i];
+    argument->data[i] = new_expr_cast(scope, param->type, arg, arg->range);
   }
-  if (callee->val_type->func_param != NULL) {
-    Vector *params = callee->val_type->func_param;
-    for (int i = 0; i < params->len && i < argument->len; i++) {
-      Param *param = params->data[i];
-      Expr *arg = argument->data[i];
-      argument->data[i] = new_expr_cast(scope, param->type, arg, arg->range);
-    }
-  }
+
   Expr *expr = new_expr(EX_CALL, ret_type, range);
   expr->callee = callee;
   expr->argument = argument;
@@ -2150,12 +2168,15 @@ static void direct_declarator(Scope *scope, Tokenizer *tokenizer,
     }
 
     if (token_consume(tokenizer, '(')) {
-      Vector *params = new_vector();
+      Vector *params;
+      bool has_varargs = false;
       Token *end;
-      if ((end = token_consume(tokenizer, ')')) ||
-          (end = token_consume2(tokenizer, TK_VOID, ')'))) {
-        // do nothing
+      if ((end = token_consume(tokenizer, ')'))) {
+        params = NULL;
+      } else if ((end = token_consume2(tokenizer, TK_VOID, ')'))) {
+        params = new_vector();
       } else {
+        params = new_vector();
         while (true) {
           Type *base_type = type_specifier(scope, tokenizer);
           Param *param = NEW(Param);
@@ -2166,6 +2187,10 @@ static void direct_declarator(Scope *scope, Tokenizer *tokenizer,
             break;
           }
           token_expect(tokenizer, ',');
+          if (token_consume(tokenizer, TK_ELIPSIS)) {
+            has_varargs = true;
+            break;
+          }
         }
         end = token_expect(tokenizer, ')');
       }
@@ -2173,7 +2198,7 @@ static void direct_declarator(Scope *scope, Tokenizer *tokenizer,
       *range = range_join(*range, end->range);
 
       Type *inner = NEW(Type);
-      *placeholder = *new_type_func(inner, params, false);
+      *placeholder = *new_type_func(inner, params, has_varargs, false);
       placeholder = inner;
       continue;
     }
@@ -2660,10 +2685,12 @@ static Function *function_definition(Tokenizer *tokenizer, Scope *global_scope,
                                      Range start) {
   FuncCtxt *fcx = new_func_ctxt(name, type);
   Scope *scope = new_func_scope(global_scope, fcx);
-  for (int i = 0; i < type->func_param->len; i++) {
-    Param *param = type->func_param->data[i];
-    param->stack_var =
-        register_stack_var(scope, param->name, param->type, param->range);
+  if (type->func_param != NULL) {
+    for (int i = 0; i < type->func_param->len; i++) {
+      Param *param = type->func_param->data[i];
+      param->stack_var =
+          register_stack_var(scope, param->name, param->type, param->range);
+    }
   }
 
   Stmt *body = compound_statement(tokenizer, scope);
