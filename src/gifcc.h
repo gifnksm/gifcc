@@ -403,8 +403,6 @@ void reader_expect(Reader *reader, char ch);
 int reader_get_offset(const Reader *reader);
 void reader_get_position(const Reader *reader, int offset,
                          const char **filename, int *line, int *column);
-char *reader_get_source(const Reader *reader, Range range);
-char *reader_get_line(const Reader *reader, int line);
 #define reader_error_here(reader, fmt, ...)                                    \
   reader_error_offset_raw(reader, reader_get_offset(reader), __FILE__,         \
                           __LINE__, (fmt), ##__VA_ARGS__)

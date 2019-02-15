@@ -28,6 +28,7 @@ Reader *new_reader(FILE *file, const char *filename) {
   int_vec_push(reader->line_offset, reader->offset);
 
   read_whole_file(reader, file);
+  fclose(file);
 
   return reader;
 }
@@ -99,20 +100,6 @@ void reader_get_position(const Reader *reader, int offset,
     }
   }
   assert(false);
-}
-
-char *reader_get_source(const Reader *reader, Range range) {
-  assert(range.start < reader->size);
-  assert(range.start + range.len <= reader->size);
-  return strndup(&reader->source[range.start], range.len);
-}
-
-char *reader_get_line(const Reader *reader, int line) {
-  assert(1 <= line && line < reader->line_offset->len);
-  int start = reader->line_offset->data[line - 1];
-  int end = reader->line_offset->data[line];
-  return reader_get_source(
-      reader, (Range){.reader = reader, .start = start, .len = end - start});
 }
 
 noreturn __attribute__((format(printf, 5, 6))) void
@@ -188,18 +175,21 @@ static void print_source(Range range) {
                       &end_line, &end_column);
 
   for (int line = start_line; line <= end_line; line++) {
-    char *line_str = reader_get_line(range.reader, line);
-    int line_len = strlen(line_str);
+    int sl = range.reader->line_offset->data[line - 1];
+    int el = range.reader->line_offset->data[line];
+    const char *line_str = &range.reader->source[sl];
+    int line_len = el - sl;
     int sc = (line == start_line) ? start_column - 1 : 0;
     int ec = (line == end_line) ? end_column - 1 : line_len;
 
     for (int i = 0; i < line_len; i++) {
       if (line_str[i] == '\t') {
-        line_str[i] = ' ';
+        fputc(' ', stderr);
+      } else {
+        fputc(line_str[i], stderr);
       }
     }
 
-    fprintf(stderr, "%s", line_str);
     for (int i = 0; i < sc; i++) {
       fprintf(stderr, " ");
     }

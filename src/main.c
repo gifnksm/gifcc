@@ -88,16 +88,15 @@ static void output_token(Reader *reader) {
       dump_number(token->num_val);
       break;
     case TK_IDENT:
-      printf("%-8s", token->name);
+      printf("%s", token->name);
       break;
     case TK_STR:
       print_string_literal(token->str);
       break;
     default:
-      printf("%8s", "");
       break;
     }
-    printf("\t// %s\n", reader_get_source(reader, token->range));
+    printf("\n");
   } while (token->ty != TK_EOF);
 }
 
