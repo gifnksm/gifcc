@@ -83,6 +83,7 @@ enum {
   TK_TYPEDEF,       // `typedef`
   TK_EXTERN,        // `extern`
   TK_STATIC,        // `static`
+  TK_CONST,         // `const`
   TK_EOF,           // 入力の終わりを表すトークン
 };
 
@@ -235,6 +236,7 @@ typedef enum {
 
 typedef struct Type {
   type_t ty;
+  bool is_const;
   struct Type *ptrof;
   int array_len;
   struct Type *func_ret;

@@ -1,4 +1,6 @@
 void abort(void);
+int puts(const char *s);
+int putchar(int c);
 
 static int num_check = 0;
 static void check_int(int a, int b) {
@@ -9,7 +11,7 @@ static void check_int(int a, int b) {
   num_check++;
 }
 
-static void test_ok(char *name) {
+static void test_ok(const char *name) {
   printf("%s OK (%d assertions)\n", name, num_check);
   num_check = 0;
 }
@@ -2136,6 +2138,21 @@ static void test54(void) {
   test_ok(__func__);
 }
 
+static void test55(void) {
+  const char *s = "hogehoge";
+  check_int(1, s != 0);
+
+  const int a[4] = {1, 2, 3, 4};
+  const int *const p = a;
+  const int *const *const pp = &p;
+  check_int(1, (*pp)[0]);
+  check_int(2, (*pp)[1]);
+  check_int(3, (*pp)[2]);
+  check_int(4, (*pp)[3]);
+
+  test_ok(__func__);
+}
+
 int main(void) {
   test01();
   test02();
@@ -2191,6 +2208,7 @@ int main(void) {
   test52();
   test53();
   test54();
+  test55();
 
   return 0;
 }
