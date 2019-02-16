@@ -689,7 +689,8 @@ int main(int argc, char **argv) {
     }
   }
 
-  Reader *reader = new_reader(file, filename);
+  Reader *reader = new_reader();
+  reader_add_file(reader, file, filename);
 
   if (output_mode == OUTPUT_TOKEN) {
     output_token(reader);

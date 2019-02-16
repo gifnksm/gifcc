@@ -22,9 +22,11 @@ void vec_push(Vector *vec, void *elem) {
 
 void *vec_pop(Vector *vec) { return vec->data[vec->len--]; }
 
-void *vec_peek(Vector *vec) {
-  assert(vec->len > 0);
-  return vec->data[vec->len - 1];
+void *vec_peek(Vector *vec) { return vec_peek_n(vec, 0); }
+
+void *vec_peek_n(Vector *vec, int n) {
+  assert(vec->len > n);
+  return vec->data[vec->len - 1 - n];
 }
 
 void vec_extend(Vector *vec, int len) {
