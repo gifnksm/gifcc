@@ -369,7 +369,10 @@ void vec_set(Vector *vec, int n, void *val);
 void *vec_rget(Vector *vec, int n);
 void vec_push(Vector *vec, void *elem);
 void *vec_pop(Vector *vec);
+void vec_insert(Vector *vec, int n, void *elem);
+void *vec_remove(Vector *vec, int n);
 void vec_extend(Vector *vec, int len);
+void vec_reserve(Vector *vec, int len);
 // Map
 Map *new_map(void);
 int map_size(const Map *map);

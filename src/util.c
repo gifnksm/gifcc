@@ -61,15 +61,42 @@ void *vec_rget(Vector *vec, int n) {
 }
 
 void vec_push(Vector *vec, void *elem) {
-  if (vec->capacity == vec->len) {
-    vec->capacity = (vec->capacity == 0) ? 16 : vec->capacity * 2;
-    vec->data = realloc(vec->data, sizeof(void *) * vec->capacity);
-  }
+  vec_reserve(vec, vec->len + 1);
   vec->data[vec->len++] = elem;
 }
 
-void *vec_pop(Vector *vec) { return vec->data[vec->len--]; }
-
+void *vec_pop(Vector *vec) {
+  assert(vec->len > 0);
+  return vec->data[vec->len--];
+}
+void vec_insert(Vector *vec, int n, void *elem) {
+  assert(n <= vec->len);
+  vec_reserve(vec, vec->len + 1);
+  memmove(&vec->data[n + 1], &vec->data[n], (vec->len - n) * sizeof(void *));
+  vec->data[n] = elem;
+  vec->len++;
+}
+void *vec_remove(Vector *vec, int n) {
+  assert(n < vec->len);
+  void *ret = vec->data[n];
+  memmove(&vec->data[n], &vec->data[n + 1],
+          (vec->len - n - 1) * sizeof(void *));
+  vec->len--;
+  return ret;
+}
+void vec_reserve(Vector *vec, int len) {
+  int cap = vec->capacity;
+  if (cap == 0) {
+    cap = 16;
+  }
+  while (cap < len) {
+    cap *= 2;
+  }
+  if (cap > vec->capacity) {
+    vec->data = realloc(vec->data, sizeof(void *) * cap);
+    vec->capacity = cap;
+  }
+}
 void vec_extend(Vector *vec, int len) {
   while (vec->len < len) {
     vec_push(vec, NULL);
