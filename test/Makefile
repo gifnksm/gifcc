@@ -51,7 +51,7 @@ $(OUTDIR)/%: $(OUTDIR)/%.s
 	gcc -o $@ $<
 
 $(OUTDIR)/%.gcc: %.c | $(OUTDIR)/
-	gcc -w -o $@ $<
+	gcc -g3 -w -o $@ $<
 
 %/:
 	mkdir -p $@

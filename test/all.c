@@ -1,19 +1,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-static int num_check = 0;
-static void check_int(int a, int b) {
-  if (a != b) {
-    printf("FAILED %d != %d\n", a, b);
-    abort();
-  }
-  num_check++;
-}
-
-static void test_ok(const char *name) {
-  printf("%s OK (%d assertions)\n", name, num_check);
-  num_check = 0;
-}
+static int num_check;
+static void check_int(int a, int b);
 
 static void test01(void) {
   check_int(0, 0);
@@ -23,8 +12,6 @@ static void test01(void) {
   check_int(47, 5 + 6 * 7);
   check_int(15, 5 * (9 - 6));
   check_int(4, (3 + 5) / 2);
-
-  test_ok(__func__);
 }
 
 static void test02_01(void) {
@@ -51,8 +38,6 @@ static void test02(void) {
   check_int(1, 10 + 2 == 3 * 4);
   check_int(10, 10 + (2 != 1 * 2));
   check_int(12, 10 + ((2 != 1) * 2));
-
-  test_ok(__func__);
 }
 
 static void test03_01(void) {
@@ -218,8 +203,6 @@ static void test03(void) {
   test03_05();
   test03_06();
   test03_07();
-
-  test_ok(__func__);
 }
 
 static void test04(void) {
@@ -255,8 +238,6 @@ static void test04(void) {
   check_int(0, !1);
   check_int(0, !3);
   check_int(1, !0);
-
-  test_ok(__func__);
 }
 
 static void test05(void) {
@@ -297,8 +278,6 @@ static void test05(void) {
   a = 2;
   b = a--;
   check_int(12, 10 * a + b);
-
-  test_ok(__func__);
 }
 
 static void test06(void) {
@@ -309,8 +288,6 @@ static void test06(void) {
   ;
   ;
   check_int(3, 3);
-
-  test_ok(__func__);
 }
 
 static void test07(void) {
@@ -490,8 +467,6 @@ static void test07(void) {
     s = s + a;
   }
   check_int(30, s);
-
-  test_ok(__func__);
 }
 
 static void test08(void) {
@@ -541,8 +516,6 @@ static void test08(void) {
   p = &a;
   *p += 3;
   check_int(8, a);
-
-  test_ok(__func__);
 }
 
 static int test09_01(int n) {
@@ -605,8 +578,6 @@ static void test09(void) {
   test09_02();
   test09_03();
   test09_04();
-
-  test_ok(__func__);
 }
 
 static void test10(void) {
@@ -624,8 +595,6 @@ static void test10(void) {
   check_int(1, '\1');
   check_int(8, '\10');
   check_int(8, '\010');
-
-  test_ok(__func__);
 }
 
 static int test11_01(void) {
@@ -633,10 +602,7 @@ static int test11_01(void) {
     return 3;
   abort();
 }
-static void test11(void) {
-  check_int(3, test11_01());
-  test_ok(__func__);
-}
+static void test11(void) { check_int(3, test11_01()); }
 
 static int ret3() { return 3; }
 static int ret8() { return 8; }
@@ -668,8 +634,6 @@ static void test12(void) {
   check_int(55, fib(10));
   check_int(89, fib(11));
   check_int(144, fib(12));
-
-  test_ok(__func__);
 }
 
 static int add6(int a, int b, int c, int d, int e, int f) {
@@ -699,8 +663,6 @@ static void test13(void) {
   check_int(21, add6(1, 2, 3, 4, 5, 6));
   check_int(1234567890, digits10(1, 2, 3, 4, 5, 6, 7, 8, 9, 0));
   check_int(45, add10(1, 2, 3, 4, 5, 6, 7, 8, 9, 0));
-
-  test_ok(__func__);
 }
 
 static void test14(void) {
@@ -709,8 +671,6 @@ static void test14(void) {
   (void)b;
   (void)c;
   (void)d;
-
-  test_ok(__func__);
 }
 
 static void test15(void) {
@@ -768,8 +728,6 @@ static void test15(void) {
   i = 5;
   i += (int **)p;
   check_int(50, i);
-
-  test_ok(__func__);
 }
 
 static void test16(void) {
@@ -788,8 +746,6 @@ static void test16(void) {
   check_int(12, 0 [a] + 1 [a] + 2 [a]);
 
   check_int(2, &a[2] - &a[0]);
-
-  test_ok(__func__);
 }
 
 static int *test17_01(int *x) { return x + 1; }
@@ -810,8 +766,6 @@ static void test17(void) {
   p = 3;
   q = test17_03(p);
   check_int(1, p == q);
-
-  test_ok(__func__);
 }
 
 static int test18_g;
@@ -841,8 +795,6 @@ static void test18(void) {
   check_int(1, test18_h[0]);
   check_int(4, test18_h[1]);
   check_int(9, test18_h[2]);
-
-  test_ok(__func__);
 }
 
 static void test19(void) {
@@ -860,8 +812,6 @@ static void test19(void) {
   check_int(3, x[0] + y);
 
   check_int(1, &x[1] - &x[0]);
-
-  test_ok(__func__);
 }
 
 static void test20(void) {
@@ -870,8 +820,6 @@ static void test20(void) {
   puts("ほげほげ");
 
   printf("%s %d\n", "abc", 456);
-
-  test_ok(__func__);
 }
 
 static void test21(void) {
@@ -898,8 +846,6 @@ static void test21(void) {
       check_int(10000 * i + 1000 * j + i * j, 10000 * i + 1000 * j + a[i][j]);
     }
   }
-
-  test_ok(__func__);
 }
 
 static int test22_g;
@@ -922,8 +868,6 @@ static void test22(void) {
   f = &test22_func;
   f(3);
   check_int(3, test22_g);
-
-  test_ok(__func__);
 }
 
 static void test23_fun(int a, int b) {
@@ -956,11 +900,7 @@ static void test23_fun(int a, int b) {
   check_int(4, d);
   check_int(7, e);
 }
-static void test23(void) {
-  test23_fun(1, 2);
-
-  test_ok(__func__);
-}
+static void test23(void) { test23_fun(1, 2); }
 
 static void test24(void) {
   char a = 64, b = a, c = a, d = a;
@@ -969,14 +909,11 @@ static void test24(void) {
   check_int(256, (char)64 + (char)64 + (char)64 + (char)64);
   check_int(64, (char)320);
   check_int(256, (char)320 + (char)320 + (char)320 + (char)320);
-
-  test_ok(__func__);
 }
 
 static void test25(void) {
   // comment
   /* comment */
-  test_ok(__func__);
 }
 
 struct Test26 {
@@ -1034,7 +971,6 @@ static void test26(void) {
   test26_y.y = 100;
   test26_z.y = 200;
   check_int(305, test26_x.z + test26_y.y + test26_z.y);
-  test_ok(__func__);
 }
 
 typedef int test27_type;
@@ -1050,17 +986,11 @@ static void test27(void) {
   a = 3;
   b = 0;
   c[0][0] = 1;
-
-  test_ok(__func__);
 }
 
 static int test28_foo(int, int, int);
 static int test28_foo(int a, int b, int c) { return a + b + c; }
-static void test28(void) {
-  check_int(12, test28_foo(3, 4, 5));
-
-  test_ok(__func__);
-}
+static void test28(void) { check_int(12, test28_foo(3, 4, 5)); }
 
 static void test29(void) {
   int a[7];
@@ -1073,8 +1003,6 @@ static void test29(void) {
   check_int(4, sizeof(3 + 5));
   check_int(28, sizeof a);
   check_int(36, sizeof(struct Foo));
-
-  test_ok(__func__);
 }
 
 static void test30(void) {
@@ -1090,15 +1018,10 @@ static void test30(void) {
 
   check_int(2, u.a);
   check_int(2, u.b);
-
-  test_ok(__func__);
 }
 
 static int test31_x = 3;
-static void test31(void) {
-  check_int(3, test31_x);
-  test_ok(__func__);
-}
+static void test31(void) { check_int(3, test31_x); }
 
 static long test32_x = 8;
 static long *test32_p = &test32_x;
@@ -1135,8 +1058,6 @@ static void test32(void) {
   check_int(8, sizeof &test32_fun_ptr);
   check_int(8, sizeof test32_fun_ptr());
   check_int(0, (int)test32_fun_ptr());
-
-  test_ok(__func__);
 }
 
 static void test33(void) {
@@ -1160,8 +1081,6 @@ static void test33(void) {
 
   p.x = 3;
   check_int(3, p.x);
-
-  test_ok(__func__);
 }
 
 static void test34(void) {
@@ -1236,8 +1155,6 @@ static void test34(void) {
   check_int(1, la & lb);
   check_int(7, la | lb);
   check_int(5, (la, lb));
-
-  test_ok(__func__);
 }
 
 static void test35(void) {
@@ -1248,15 +1165,12 @@ static void test35(void) {
   short sx = 0;
   sx = sx + 1;
   check_int(1, sx);
-
-  test_ok(__func__);
 }
 
 static int test36_f(int test36_a), test36_g(int test36_a), test36_a = 100;
 static void test36(void) {
   check_int(0, test36_f(1) - test36_g(1));
   check_int(100, test36_a);
-  test_ok(__func__);
 }
 static int test36_f(int test36_a) { return test36_a; }
 static int test36_g(int test36_a) { return test36_a; }
@@ -1321,8 +1235,6 @@ static void test37(void) {
   check_int(14, t.d);
   check_int(15, t.e);
   check_int(16, t.f);
-
-  test_ok(__func__);
 }
 
 static union {
@@ -1351,8 +1263,6 @@ static void test38(void) {
   check_int(11, u.c);
   check_int(11, u.d);
   check_int(11, u.e);
-
-  test_ok(__func__);
 }
 
 static struct {
@@ -1432,8 +1342,6 @@ static void test39(void) {
   check_int(33, t.d);
   check_int(34, t.e.x);
   check_int(35, t.e.y);
-
-  test_ok(__func__);
 }
 
 static void test40(void) {
@@ -1449,8 +1357,6 @@ static void test40(void) {
   check_int(2, s.b);
   check_int(1, s.c);
   check_int(1, s.d);
-
-  test_ok(__func__);
 }
 
 static long test41_f(void) { return 111; }
@@ -1461,8 +1367,6 @@ static void test41(void) {
   long (*ptr)(void) = test41_f;
   check_int(111, ptr());
   check_int(8, sizeof(ptr()));
-
-  test_ok(__func__);
 }
 
 extern int test42_n;
@@ -1479,8 +1383,6 @@ static void test42(void) {
   check_int(64, test42_g());
   check_int(12, test42_l);
   check_int(128, test42_h());
-
-  test_ok(__func__);
 }
 int test42_n;
 int test42_n = 8;
@@ -1513,8 +1415,6 @@ static void test43(void) {
   check_int(5, l2);
   check_int(6, ll1);
   check_int(7, ll2);
-
-  test_ok(__func__);
 }
 
 static void test44(void) {
@@ -1537,8 +1437,6 @@ static void test44(void) {
   check_int(6, sll1);
   check_int(7, sll2);
   check_int(8, s1);
-
-  test_ok(__func__);
 }
 
 static int test45_n = 8;
@@ -1571,8 +1469,6 @@ static void test45(void) {
   check_int(10, test45_g());
   check_int(21, test45_g());
   check_int(32, test45_g());
-
-  test_ok(__func__);
 }
 
 static struct {
@@ -1718,8 +1614,6 @@ static void test46(void) {
   check_int(5, s_u.f);
   check_int(0, s_u.g);
   check_int(0, s_u.h);
-
-  test_ok(__func__);
 }
 
 static union {
@@ -1793,8 +1687,6 @@ static void test47(void) {
   check_int(100, s_t.y.a);
   check_int(200, s_t.y.b);
   check_int(0, s_t.y.c);
-
-  test_ok(__func__);
 }
 
 static int test48_array[4] = {1, 2, 3};
@@ -1923,8 +1815,6 @@ static void test48(void) {
   check_int(4, s_u.b[2]);
   check_int(5, s_u.b[3]);
   check_int(6, s_u.c);
-
-  test_ok(__func__);
 }
 
 static int test49_a0[] = {};
@@ -1997,8 +1887,6 @@ static void test49(void) {
   check_int(0, s_ax[2]);
   check_int(8, s_ax[3]);
   check_int(9, s_ax[4]);
-
-  test_ok(__func__);
 }
 
 static void test50(void) {
@@ -2017,8 +1905,6 @@ static void test50(void) {
   check_int(1, s[3] == 'd');
   check_int(1, s[4] == 'e');
   check_int(1, s[5] == 'f');
-
-  test_ok(__func__);
 }
 
 enum test51_enum {
@@ -2038,8 +1924,6 @@ static void test51(void) {
 
   enum { X1 = 8, Y1, Z1 } z = Y1;
   check_int(9, z);
-
-  test_ok(__func__);
 }
 
 static void test52(void) {
@@ -2062,8 +1946,6 @@ static void test52(void) {
   check_int(6, sll1);
   check_int(7, sll2);
   check_int(8, s1);
-
-  test_ok(__func__);
 }
 
 static void test53(void) {
@@ -2075,8 +1957,6 @@ static void test53(void) {
   check_int(-2, y - x);
   check_int(15, x * y);
   check_int(1, x / y);
-
-  test_ok(__func__);
 }
 
 static void test54(void) {
@@ -2133,8 +2013,6 @@ static void test54(void) {
   check_int(1, ill == il);
   ill = ill;
   check_int(1, ill == ill);
-
-  test_ok(__func__);
 }
 
 static void test55(void) {
@@ -2148,8 +2026,6 @@ static void test55(void) {
   check_int(2, (*pp)[1]);
   check_int(3, (*pp)[2]);
   check_int(4, (*pp)[3]);
-
-  test_ok(__func__);
 }
 
 static int test56_varargs(int a, int b, ...) { return a + b; }
@@ -2159,8 +2035,6 @@ static void test56(void) {
   check_int(8, test56_noargs());
   check_int(8, test56_noargs(1));
   check_int(8, test56_noargs(1, 2));
-
-  test_ok(__func__);
 }
 
 #define TEST57_DEF 123
@@ -2172,68 +2046,47 @@ static void test57(void) {
   check_int(123, TEST57_DEF);
   check_int(8, test57_x);
   check_int(3, test57_y);
+}
 
-  test_ok(__func__);
+static int num_check = 0;
+static void check_int(int a, int b) {
+  if (a != b) {
+    printf("FAILED %d != %d\n", a, b);
+    abort();
+  }
+  num_check++;
 }
 
 int main(void) {
-  test01();
-  test02();
-  test03();
-  test04();
-  test05();
-  test06();
-  test07();
-  test08();
-  test09();
-  test10();
-  test11();
-  test12();
-  test13();
-  test14();
-  test15();
-  test16();
-  test17();
-  test18();
-  test19();
-  test20();
-  test21();
-  test22();
-  test23();
-  test24();
-  test25();
-  test26();
-  test27();
-  test28();
-  test29();
-  test30();
-  test31();
-  test32();
-  test33();
-  test34();
-  test35();
-  test36();
-  test37();
-  test38();
-  test39();
-  test40();
-  test41();
-  test42();
-  test43();
-  test44();
-  test45();
-  test46();
-  test47();
-  test48();
-  test49();
-  test50();
-  test51();
-  test52();
-  test53();
-  test54();
-  test55();
-  test56();
-  test57();
+  typedef struct Test {
+    const char *name;
+    void (*func)(void);
+  } Test;
+  Test test_list[] = {
+      {"test01", test01}, {"test02", test02}, {"test03", test03},
+      {"test04", test04}, {"test05", test05}, {"test06", test06},
+      {"test07", test07}, {"test08", test08}, {"test09", test09},
+      {"test10", test10}, {"test11", test11}, {"test12", test12},
+      {"test13", test13}, {"test14", test14}, {"test15", test15},
+      {"test16", test16}, {"test17", test17}, {"test18", test18},
+      {"test19", test19}, {"test20", test20}, {"test31", test31},
+      {"test32", test32}, {"test33", test33}, {"test34", test34},
+      {"test35", test35}, {"test36", test36}, {"test37", test37},
+      {"test38", test38}, {"test39", test39}, {"test40", test40},
+      {"test41", test41}, {"test42", test42}, {"test43", test43},
+      {"test44", test44}, {"test45", test45}, {"test46", test46},
+      {"test47", test47}, {"test48", test48}, {"test49", test49},
+      {"test51", test51}, {"test52", test52}, {"test53", test53},
+      {"test54", test54}, {"test55", test55}, {"test56", test56},
+      {"test57", test57}, {NULL, NULL},
+  };
+  int i = 0;
+  for (i = 0; test_list[i].name != NULL; i++) {
+    Test *test = &test_list[i];
+    test->func();
+    printf("%s OK (%d assertions)\n", test->name, num_check);
+    num_check = 0;
+  }
 
   return 0;
 }
