@@ -26,12 +26,25 @@ struct Reader {
   Vector *file_offset;
 };
 
+typedef enum {
+  MESSAGE_ERROR,
+  MESSAGE_WARN,
+  MESSAGE_NOTE,
+} message_t;
+
 static void switch_file(Reader *reader, File *file);
 static char reader_peek_ahead(const Reader *reader, int n);
 static File *peek_file(const Reader *reader);
 static File *peek_file_n(const Reader *reader, int n);
 static FileOffset *get_file_offset(const Reader *reader, int offset);
+static __attribute__((format(printf, 5, 6))) void
+print_message(message_t msg, Range range, const char *dbg_file, int dbg_line,
+              const char *fmt, ...);
+static void print_message_raw(message_t msg, Range range, const char *dbg_file,
+                              int dbg_line, const char *fmt, va_list ap);
 static void print_source(Range range);
+static void print_expanded_message(Range range, const char *dbg_file,
+                                   int dbg_line);
 static File *new_file(FILE *fp, const char *filename);
 static char *read_whole_file(File *file, FILE *fp);
 
@@ -202,20 +215,9 @@ range_error_raw(Range range, const char *dbg_file, int dbg_line,
 
 noreturn void range_error_raw_v(Range range, const char *dbg_file, int dbg_line,
                                 const char *fmt, va_list ap) {
-  const char *start_filename;
-  int start_line, start_column;
-  reader_get_position(range.reader, range.start, &start_filename, &start_line,
-                      &start_column);
-  const char *end_filename;
-  int end_line, end_column;
-  reader_get_position(range.reader, range.start + range.len - 1, &end_filename,
-                      &end_line, &end_column);
-  fprintf(stderr, "%s:%d:%d: error: ", start_filename, start_line,
-          start_column);
-  vfprintf(stderr, fmt, ap);
-  fprintf(stderr, " (DEBUG:%s:%d)\n", dbg_file, dbg_line);
-
+  print_message_raw(MESSAGE_ERROR, range, dbg_file, dbg_line, fmt, ap);
   print_source(range);
+  print_expanded_message(range, dbg_file, dbg_line);
 
   exit(1);
 }
@@ -229,20 +231,43 @@ range_warn_raw(Range range, const char *dbg_file, int dbg_line, const char *fmt,
 }
 void range_warn_raw_v(Range range, const char *dbg_file, int dbg_line,
                       const char *fmt, va_list ap) {
-  const char *start_filename;
-  int start_line, start_column;
-  reader_get_position(range.reader, range.start, &start_filename, &start_line,
-                      &start_column);
-  const char *end_filename;
-  int end_line, end_column;
-  reader_get_position(range.reader, range.start + range.len - 1, &end_filename,
-                      &end_line, &end_column);
-  fprintf(stderr, "%s:%d:%d: warning: ", start_filename, start_line,
-          start_column);
-  vfprintf(stderr, fmt, ap);
-  fprintf(stderr, " (DEBUG:%s:%d)\n", dbg_file, dbg_line);
-
+  print_message_raw(MESSAGE_WARN, range, dbg_file, dbg_line, fmt, ap);
   print_source(range);
+  print_expanded_message(range, dbg_file, dbg_line);
+}
+
+static __attribute__((format(printf, 5, 6))) void
+print_message(message_t msg, Range range, const char *dbg_file, int dbg_line,
+              const char *fmt, ...) {
+  va_list ap;
+  va_start(ap, fmt);
+  print_message_raw(msg, range, dbg_file, dbg_line, fmt, ap);
+  va_end(ap);
+}
+
+static void print_message_raw(message_t msg, Range range, const char *dbg_file,
+                              int dbg_line, const char *fmt, va_list ap) {
+  const char *filename;
+  int line, column;
+  reader_get_position(range.reader, range.start, &filename, &line, &column);
+
+  fprintf(stderr, "%s:%d:%d: ", filename, line, column);
+
+  switch (msg) {
+  case MESSAGE_ERROR:
+    fprintf(stderr, "warning: ");
+    break;
+  case MESSAGE_WARN:
+    fprintf(stderr, "error: ");
+    break;
+  case MESSAGE_NOTE:
+    fprintf(stderr, "note: ");
+    break;
+  }
+
+  vfprintf(stderr, fmt, ap);
+
+  fprintf(stderr, " (DEBUG:%s:%d)\n", dbg_file, dbg_line);
 }
 
 static void print_source(Range range) {
@@ -298,6 +323,15 @@ static void print_source(Range range) {
 
     start += file_len;
     len -= file_len;
+  }
+}
+
+static void print_expanded_message(Range range, const char *dbg_file,
+                                   int dbg_line) {
+  while (range.expanded_from != NULL) {
+    range = *range.expanded_from;
+    print_message(MESSAGE_NOTE, range, dbg_file, dbg_line, "マクロ展開元");
+    print_source(range);
   }
 }
 

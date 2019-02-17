@@ -73,10 +73,12 @@ enum {
 typedef struct Reader Reader;
 typedef struct Tokenizer Tokenizer;
 
-typedef struct {
+typedef struct Range Range;
+typedef struct Range {
   const Reader *reader;
   int start;
   int len;
+  Range *expanded_from;
 } Range;
 
 #define SET_NUMBER_VAL(dest, num)                                              \

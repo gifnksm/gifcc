@@ -48,6 +48,7 @@ static const char *SHORT_PUNCT_TOKENS = "=!<>&|^+-*/%();?:~{}[],.#";
 
 static bool read_token(Tokenizer *tokenizer);
 static Token *new_token(int ty, Range range);
+static Token *token_clone(Token *token);
 static Token *new_token_num(Number val, Range range);
 static Token *new_token_ident(char *name, Range range);
 static Token *new_token_str(char *str, Range range);
@@ -326,6 +327,12 @@ static Token *new_token(int ty, Range range) {
   return token;
 }
 
+static Token *token_clone(Token *token) {
+  Token *cloned = NEW(Token);
+  *cloned = *token;
+  return cloned;
+}
+
 static Token *new_token_num(Number val, Range range) {
   Token *token = new_token(TK_NUM, range);
   token->num_val = val;
@@ -491,7 +498,10 @@ static bool identifier_or_keyword(Reader *reader, Map *define_map,
   if (defined != NULL) {
     for (int i = 0; i < vec_len(defined); i++) {
       Token *pptoken = vec_get(defined, i);
-      vec_push(tokens, pptoken);
+      Token *token = token_clone(pptoken);
+      token->range.expanded_from = NEW(Range);
+      *token->range.expanded_from = range;
+      vec_push(tokens, token);
     }
   } else {
     vec_push(tokens, new_token_ident(str_get_raw(str), range));
