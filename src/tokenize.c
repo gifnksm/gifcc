@@ -375,6 +375,7 @@ static bool pp_directive(Reader *reader, Map *define_map) {
         char ch = reader_pop(reader);
         str_push(str, ch);
       }
+      str_push(str, '\0');
       reader_expect(reader, '>');
       int end = reader_get_offset(reader);
 
@@ -429,6 +430,21 @@ static bool pp_directive(Reader *reader, Map *define_map) {
                  "未定義のマクロに対する#undefです");
     }
     return true;
+  }
+
+  if (reader_consume_str(reader, "error")) {
+    skip_space_or_comment(reader);
+
+    String *str = new_string();
+    while ((reader_peek(reader) != '\n') && (reader_peek(reader) != '\0')) {
+      str_push(str, reader_peek(reader));
+      reader_succ(reader);
+    }
+    str_push(str, '\0');
+    int end = reader_get_offset(reader);
+    reader_expect(reader, '\n');
+    range_error(range_from_reader(reader, start, end), "#error %s",
+                str_get_raw(str));
   }
 
   while ((reader_peek(reader) != '\n') && (reader_peek(reader) != '\0')) {
