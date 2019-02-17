@@ -396,6 +396,9 @@ static bool pp_directive(Reader *reader, Map *define_map) {
     if (ident == NULL) {
       reader_error_here(reader, "識別子がありません");
     }
+    if (reader_peek(reader) == '(') {
+      reader_error_here(reader, "関数マクロは未サポートです");
+    }
     skip_space_or_comment(reader);
     Vector *tokens = new_vector();
     while (reader_peek(reader) != '\n' && reader_peek(reader) != '\0') {
