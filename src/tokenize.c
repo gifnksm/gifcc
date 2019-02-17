@@ -45,7 +45,7 @@ static const LongToken LONG_PUNCT_TOKENS[] = {
     {"/=", TK_DIV_ASSIGN}, {"%=", TK_MOD_ASSIGN}, {"->", TK_ARROW},
     {"...", TK_ELIPSIS},   {NULL, '\0'},
 };
-static const char *SHORT_PUNCT_TOKENS = "=!<>&|^+-*/%();?:~{}[],.";
+static const char *SHORT_PUNCT_TOKENS = "=!<>&|^+-*/%();?:~{}[],.#";
 
 static Token *read_token(Reader *reader, Map *define_map, bool *read_eof);
 static Token *new_token(int ty);
@@ -390,6 +390,10 @@ static bool pp_directive(Reader *reader, Map *define_map) {
     Vector *tokens = new_vector();
     while (reader_peek(reader) != '\n' && reader_peek(reader) != '\0') {
       Token *token = read_normal_token(reader);
+      if (token == NULL) {
+        reader_error_here(reader, "トークナイズできません: `%c`",
+                          reader_peek(reader));
+      }
       skip_space_or_comment(reader);
       vec_push(tokens, token);
     }
