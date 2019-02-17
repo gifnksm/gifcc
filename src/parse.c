@@ -79,7 +79,7 @@ static Type *get_typedef(Scope *scope, char *name);
 static bool is_sametype(Type *ty1, Type *ty2);
 static bool is_integer_type(Type *ty);
 static int get_int_type_rank(Type *ty, Range range);
-bool is_signed_int_type(Type *ty, Range range);
+
 static bool is_arith_type(Type *ty);
 static bool is_ptr_type(Type *ty);
 static bool is_array_type(Type *ty);
