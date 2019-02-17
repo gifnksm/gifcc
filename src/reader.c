@@ -314,7 +314,11 @@ static void print_source(Range range) {
       for (int i = 0; i < sc; i++) {
         fprintf(stderr, " ");
       }
-      fprintf(stderr, "^");
+      if (line == start_line) {
+        fprintf(stderr, "^");
+      } else {
+        fprintf(stderr, "~");
+      }
       for (int i = sc + 1; i < ec; i++) {
         fprintf(stderr, "~");
       }
