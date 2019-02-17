@@ -327,7 +327,20 @@ static bool pp_directive(Reader *reader) {
 
       do_include(reader, str->data, range);
     }
+    return true;
   }
+
+  while ((reader_peek(reader) != '\n') && (reader_peek(reader) != '\0')) {
+    reader_succ(reader);
+  }
+  int end = reader_get_offset(reader);
+  reader_expect(reader, '\n');
+  Range range = {
+      .reader = reader,
+      .start = start,
+      .len = end - start,
+  };
+  range_warn(range, "不明なディレクティブです");
 
   return true;
 }
