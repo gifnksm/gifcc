@@ -5,12 +5,54 @@
 #include <stdlib.h>
 #include <string.h>
 
+typedef struct Vector {
+  void **data;
+  int capacity;
+  int len;
+} Vector;
+
+typedef struct IntVector {
+  int *data;
+  int capacity;
+  int len;
+} IntVector;
+
+typedef struct String {
+  char *data;
+  int capacity;
+  int len;
+} String;
+
 Vector *new_vector(void) {
   Vector *vec = NEW(Vector);
   vec->data = NULL;
   vec->capacity = 0;
   vec->len = 0;
   return vec;
+}
+
+int vec_len(const Vector *vec) { return vec->len; }
+
+void *vec_first(Vector *vec) {
+  assert(vec->len > 0);
+  return vec_get(vec, 0);
+}
+
+void *vec_last(Vector *vec) { return vec_rget(vec, 0); }
+
+void *vec_get(Vector *vec, int n) {
+  assert(vec->len > n);
+  return vec->data[n];
+}
+
+void vec_set(Vector *vec, int n, void *val) {
+  assert(vec->len > n);
+  vec->data[n] = val;
+}
+
+void *vec_rget(Vector *vec, int n) {
+  assert(vec->len > n);
+  return vec->data[vec->len - 1 - n];
 }
 
 void vec_push(Vector *vec, void *elem) {
@@ -22,13 +64,6 @@ void vec_push(Vector *vec, void *elem) {
 }
 
 void *vec_pop(Vector *vec) { return vec->data[vec->len--]; }
-
-void *vec_peek(Vector *vec) { return vec_peek_n(vec, 0); }
-
-void *vec_peek_n(Vector *vec, int n) {
-  assert(vec->len > n);
-  return vec->data[vec->len - 1 - n];
-}
 
 void vec_extend(Vector *vec, int len) {
   while (vec->len < len) {
@@ -71,6 +106,7 @@ void str_push(String *str, char elem) {
   }
   str->data[str->len++] = elem;
 }
+char *str_get_raw(String *str) { return str->data; }
 
 IntVector *new_int_vector(void) {
   IntVector *vec = NEW(IntVector);
@@ -78,6 +114,11 @@ IntVector *new_int_vector(void) {
   vec->capacity = 0;
   vec->len = 0;
   return vec;
+}
+int int_vec_len(const IntVector *vec) { return vec->len; }
+int int_vec_get(const IntVector *vec, int n) {
+  assert(n < vec->len);
+  return vec->data[n];
 }
 void int_vec_push(IntVector *vec, int elem) {
   if (vec->capacity == vec->len) {

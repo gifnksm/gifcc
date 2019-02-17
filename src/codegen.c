@@ -213,19 +213,19 @@ static void gen_expr(Expr *expr) {
                   "関数または関数ポインタ以外を呼び出そうとしました: %d",
                   expr->callee->val_type->ty);
     }
-    if (arg && arg->len > 0) {
+    if (arg && vec_len(arg) > 0) {
       // 引数をスタックに積む
-      for (int i = arg->len - 1; i >= 0; i--) {
-        gen_expr(arg->data[i]);
+      for (int i = vec_len(arg) - 1; i >= 0; i--) {
+        gen_expr(vec_get(arg, i));
       }
     }
     if (!call_direct) {
       gen_expr(expr->callee);
       printf("  pop r10\n");
     }
-    if (arg && arg->len > 0) {
+    if (arg && vec_len(arg) > 0) {
       // レジスタ渡しする引数をpopする
-      for (int i = 0; i < arg->len; i++) {
+      for (int i = 0; i < vec_len(arg); i++) {
         switch (i) {
         // 0~5番目の引数はレジスタ経由で渡す
         case 0:
@@ -562,8 +562,8 @@ static void gen_stmt(Stmt *stmt) {
     return;
   }
   case ST_COMPOUND: {
-    for (int i = 0; i < stmt->stmts->len; i++) {
-      gen_stmt(stmt->stmts->data[i]);
+    for (int i = 0; i < vec_len(stmt->stmts); i++) {
+      gen_stmt(vec_get(stmt->stmts, i));
     }
     return;
   }
@@ -584,8 +584,8 @@ static void gen_stmt(Stmt *stmt) {
   case ST_SWITCH: {
     char *end_label = make_label("switch.end");
     gen_expr(stmt->cond);
-    for (int i = 0; i < stmt->cases->len; i++) {
-      Stmt *case_expr = stmt->cases->data[i];
+    for (int i = 0; i < vec_len(stmt->cases); i++) {
+      Stmt *case_expr = vec_get(stmt->cases, i);
       gen_expr(case_expr->expr);
       printf("  pop rax\n");
       printf("  pop rdi\n");
@@ -689,18 +689,18 @@ static void gen_stmt(Stmt *stmt) {
     return;
   }
   case ST_BREAK: {
-    if (break_labels->len <= 0) {
+    if (vec_len(break_labels) <= 0) {
       range_error(stmt->range,
                   "ループでもswitch文中でもない箇所にbreakがあります");
     }
-    printf("  jmp %s\n", (char *)vec_peek(break_labels));
+    printf("  jmp %s\n", (char *)vec_last(break_labels));
     return;
   }
   case ST_CONTINUE: {
-    if (continue_labels->len <= 0) {
+    if (vec_len(continue_labels) <= 0) {
       range_error(stmt->range, "ループ中でない箇所にcontinueがあります");
     }
-    printf("  jmp %s\n", (char *)vec_peek(continue_labels));
+    printf("  jmp %s\n", (char *)vec_last(continue_labels));
     return;
   }
   case ST_RETURN: {
@@ -734,8 +734,8 @@ static void gen_func(Function *func) {
 
   // 引数をスタックへコピー
   if (func->type->func_param != NULL) {
-    for (int i = 0; i < func->type->func_param->len; i++) {
-      Param *param = func->type->func_param->data[i];
+    for (int i = 0; i < vec_len(func->type->func_param); i++) {
+      Param *param = vec_get(func->type->func_param, i);
       StackVar *var = param->stack_var;
       assert(var != NULL);
       const Reg *r = get_int_reg(var->type, var->range);
@@ -845,15 +845,15 @@ static void gen_gvar_init(Initializer *init, Range range) {
 
   if (init->members != NULL) {
     assert(init->type->ty == TY_STRUCT || init->type->ty == TY_UNION);
-    assert(init->members->keys->len <= 1 || init->type->ty == TY_STRUCT);
+    assert(vec_len(init->members->keys) <= 1 || init->type->ty == TY_STRUCT);
     int offset = 0;
-    for (int i = 0; i < init->members->keys->len; i++) {
-      Initializer *meminit = init->members->vals->data[i];
+    for (int i = 0; i < vec_len(init->members->keys); i++) {
+      Initializer *meminit = vec_get(init->members->vals, i);
       if (meminit == NULL) {
         continue;
       }
       if (i > 0) {
-        Member *member = init->type->member_list->data[i];
+        Member *member = vec_get(init->type->member_list, i);
         if (offset < member->offset) {
           printf("  .zero %d\n", member->offset - offset);
           offset = member->offset;
@@ -874,8 +874,8 @@ static void gen_gvar_init(Initializer *init, Range range) {
 
   if (init->elements != NULL) {
     assert(init->type->ty == TY_ARRAY);
-    for (int i = 0; i < init->elements->len; i++) {
-      Initializer *meminit = init->elements->data[i];
+    for (int i = 0; i < vec_len(init->elements); i++) {
+      Initializer *meminit = vec_get(init->elements, i);
       if (meminit == NULL) {
         printf("  .zero %d\n", get_val_size(init->type->ptrof, range));
         continue;
@@ -918,14 +918,14 @@ void gen(TranslationUnit *tunit) {
   printf(".intel_syntax noprefix\n");
 
   printf("  .text\n");
-  for (int i = 0; i < tunit->func_list->len; i++) {
-    gen_func(tunit->func_list->data[i]);
+  for (int i = 0; i < vec_len(tunit->func_list); i++) {
+    gen_func(vec_get(tunit->func_list, i));
   }
-  for (int i = 0; i < tunit->gvar_list->len; i++) {
-    gen_gvar(tunit->gvar_list->data[i]);
+  for (int i = 0; i < vec_len(tunit->gvar_list); i++) {
+    gen_gvar(vec_get(tunit->gvar_list, i));
   }
   printf("  .section .rodata\n");
-  for (int i = 0; i < tunit->str_list->len; i++) {
-    gen_str(tunit->str_list->data[i]);
+  for (int i = 0; i < vec_len(tunit->str_list); i++) {
+    gen_str(vec_get(tunit->str_list, i));
   }
 }

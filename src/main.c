@@ -176,11 +176,11 @@ static void dump_type_inner(Type *ty) {
     printf("FUNC ");
     printf("(");
     if (ty->func_param != NULL) {
-      for (int i = 0; i < ty->func_param->len; i++) {
+      for (int i = 0; i < vec_len(ty->func_param); i++) {
         if (i > 0) {
           printf(", ");
         }
-        Param *param = ty->func_param->data[i];
+        Param *param = vec_get(ty->func_param, i);
         dump_type_inner(param->type);
         printf(" %s", param->name != NULL ? param->name->name : NULL);
       }
@@ -194,11 +194,11 @@ static void dump_type_inner(Type *ty) {
   case TY_STRUCT:
     printf("STRUCT %s", ty->tag);
     printf("(");
-    for (int i = 0; i < ty->member_list->len; i++) {
+    for (int i = 0; i < vec_len(ty->member_list); i++) {
       if (i > 0) {
         printf(", ");
       }
-      Member *member = ty->member_list->data[i];
+      Member *member = vec_get(ty->member_list, i);
       dump_type_inner(member->type);
       printf(" %s", member->name);
     }
@@ -207,11 +207,11 @@ static void dump_type_inner(Type *ty) {
   case TY_UNION:
     printf("UNION %s", ty->tag);
     printf("(");
-    for (int i = 0; i < ty->member_list->len; i++) {
+    for (int i = 0; i < vec_len(ty->member_list); i++) {
       if (i > 0) {
         printf(", ");
       }
-      Member *member = ty->member_list->data[i];
+      Member *member = vec_get(ty->member_list, i);
       dump_type_inner(member->type);
       printf(" %s", member->name);
     }
@@ -362,8 +362,8 @@ static void dump_expr(Expr *expr, int level) {
     printf("(CALL\n");
     dump_expr(expr->callee, level + 1);
     if (expr->argument != NULL) {
-      for (int i = 0; i < expr->argument->len; i++) {
-        dump_expr(expr->argument->data[i], level + 1);
+      for (int i = 0; i < vec_len(expr->argument); i++) {
+        dump_expr(vec_get(expr->argument, i), level + 1);
       }
     }
     dump_range_end(expr->range);
@@ -399,8 +399,8 @@ static void dump_stmt(Stmt *stmt, int level) {
     dump_range_start(stmt->range);
     dump_indent(level);
     printf("{COMPOUND\n");
-    for (int i = 0; i < stmt->stmts->len; i++) {
-      dump_stmt(stmt->stmts->data[i], level + 1);
+    for (int i = 0; i < vec_len(stmt->stmts); i++) {
+      dump_stmt(vec_get(stmt->stmts, i), level + 1);
     }
     dump_range_end(stmt->range);
     dump_indent(level);
@@ -559,9 +559,9 @@ static void dump_init(Initializer *init, Range range, int level) {
     dump_indent(level);
     dump_type(init->type);
     printf("{\n");
-    for (int i = 0; i < init->members->keys->len; i++) {
-      char *name = init->members->keys->data[i];
-      Initializer *val = init->members->vals->data[i];
+    for (int i = 0; i < vec_len(init->members->keys); i++) {
+      char *name = vec_get(init->members->keys, i);
+      Initializer *val = vec_get(init->members->vals, i);
       dump_range_start(range);
       dump_indent(level + 1);
       printf(".%s = \n", name);
@@ -577,8 +577,8 @@ static void dump_init(Initializer *init, Range range, int level) {
     dump_indent(level);
     dump_type(init->type);
     printf("{\n");
-    for (int i = 0; i < init->elements->len; i++) {
-      Initializer *val = init->elements->data[i];
+    for (int i = 0; i < vec_len(init->elements); i++) {
+      Initializer *val = vec_get(init->elements, i);
       dump_range_start(range);
       dump_indent(level + 1);
       printf(".[%d] = \n", i);
@@ -594,8 +594,8 @@ static void dump_init(Initializer *init, Range range, int level) {
 
 static void output_ast(TranslationUnit *tunit) {
   int level = 0;
-  for (int i = 0; i < tunit->func_list->len; i++) {
-    Function *func = tunit->func_list->data[i];
+  for (int i = 0; i < vec_len(tunit->func_list); i++) {
+    Function *func = vec_get(tunit->func_list, i);
 
     dump_range_start(func->range);
     dump_indent(level);
@@ -607,8 +607,8 @@ static void output_ast(TranslationUnit *tunit) {
     dump_indent(level);
     printf("}\n");
   }
-  for (int i = 0; i < tunit->gvar_list->len; i++) {
-    GlobalVar *gvar = tunit->gvar_list->data[i];
+  for (int i = 0; i < vec_len(tunit->gvar_list); i++) {
+    GlobalVar *gvar = vec_get(tunit->gvar_list, i);
 
     dump_range_start(gvar->range);
     dump_indent(level);

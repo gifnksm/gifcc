@@ -214,14 +214,14 @@ static Initializer *new_initializer(Type *type) {
   switch (type->ty) {
   case TY_STRUCT:
     init->members = new_map();
-    for (int i = 0; i < type->member_list->len; i++) {
-      Member *member = type->member_list->data[i];
+    for (int i = 0; i < vec_len(type->member_list); i++) {
+      Member *member = vec_get(type->member_list, i);
       map_put(init->members, member->name, NULL);
     }
     break;
   case TY_UNION:
     init->members = new_map();
-    if (type->member_list->len > 0) {
+    if (vec_len(type->member_list) > 0) {
       map_put(init->members, NULL, NULL);
     }
     break;
@@ -397,8 +397,8 @@ static void register_member(Type *type, char *member_name, Type *member_type,
   if (member_name == NULL) {
     assert(member_type->ty == TY_STRUCT || member_type->ty == TY_UNION);
     Map *inner_members = member_type->member_name_map;
-    for (int i = 0; i < inner_members->keys->len; i++) {
-      Member *inner = inner_members->vals->data[i];
+    for (int i = 0; i < vec_len(inner_members->keys); i++) {
+      Member *inner = vec_get(inner_members->vals, i);
       Member *inner_member =
           new_member(inner->name, inner->type, offset + inner->offset, range);
       if (map_get(type->member_name_map, inner_member->name)) {
@@ -972,15 +972,15 @@ static Expr *new_expr_call(Scope *scope, Expr *callee, Vector *argument,
 
   int narg = 0;
   if (argument != NULL) {
-    for (int i = 0; i < argument->len; i++) {
-      argument->data[i] = coerce_array2ptr(scope, argument->data[i]);
-      argument->data[i] = coerce_func2ptr(scope, argument->data[i]);
+    for (int i = 0; i < vec_len(argument); i++) {
+      vec_set(argument, i, coerce_array2ptr(scope, vec_get(argument, i)));
+      vec_set(argument, i, coerce_func2ptr(scope, vec_get(argument, i)));
     }
-    narg = argument->len;
+    narg = vec_len(argument);
   }
 
   Vector *params = func_type->func_param;
-  int nparam = params != NULL ? params->len : 0;
+  int nparam = params != NULL ? vec_len(params) : 0;
   if (params != NULL) {
     if ((narg < nparam) || (narg > nparam && !func_type->func_has_varargs)) {
       range_error(range,
@@ -990,9 +990,9 @@ static Expr *new_expr_call(Scope *scope, Expr *callee, Vector *argument,
   }
 
   for (int i = 0; i < nparam; i++) {
-    Param *param = params->data[i];
-    Expr *arg = argument->data[i];
-    argument->data[i] = new_expr_cast(scope, param->type, arg, arg->range);
+    Param *param = vec_get(params, i);
+    Expr *arg = vec_get(argument, i);
+    vec_set(argument, i, new_expr_cast(scope, param->type, arg, arg->range));
   }
 
   Expr *expr = new_expr(EX_CALL, ret_type, range);
@@ -2223,8 +2223,8 @@ static void struct_initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
     if (token_peek(tokenizer)->ty == '.' &&
         token_peek_ahead(tokenizer, 1)->ty == TK_IDENT) {
       Token *ident = token_peek_ahead(tokenizer, 1);
-      for (int i = 0; i < type->member_list->len; i++) {
-        Member *member = type->member_list->data[i];
+      for (int i = 0; i < vec_len(type->member_list); i++) {
+        Member *member = vec_get(type->member_list, i);
         if (member->name == NULL || strcmp(member->name, ident->name) == 0) {
           if (member->name != NULL) {
             token_expect(tokenizer, '.');
@@ -2232,7 +2232,7 @@ static void struct_initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
             token_consume(tokenizer, '=');
           }
           Token *current = token_peek(tokenizer);
-          Initializer *meminit = (*init)->members->vals->data[i];
+          Initializer *meminit = vec_get((*init)->members->vals, i);
           // if name is null, try parsing designator as inner struct/union's
           // designator
           initializer(tokenizer, scope, member->type, &meminit);
@@ -2242,8 +2242,8 @@ static void struct_initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
             continue;
           }
           idx = i + 1;
-          (*init)->members->keys->data[i] = member->name;
-          (*init)->members->vals->data[i] = meminit;
+          vec_set((*init)->members->keys, i, member->name);
+          vec_set((*init)->members->vals, i, meminit);
           token_consume(tokenizer, ',');
           break;
         }
@@ -2252,13 +2252,13 @@ static void struct_initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
 
     // initializers without designator.
     if (token_peek(tokenizer)->ty != '.' && token_peek(tokenizer)->ty != '}') {
-      for (int i = idx; i < type->member_list->len; i++) {
-        Initializer *meminit = (*init)->members->vals->data[i];
-        Member *member = type->member_list->data[i];
+      for (int i = idx; i < vec_len(type->member_list); i++) {
+        Initializer *meminit = vec_get((*init)->members->vals, i);
+        Member *member = vec_get(type->member_list, i);
         initializer(tokenizer, scope, member->type, &meminit);
-        (*init)->members->keys->data[i] = member->name;
-        (*init)->members->vals->data[i] = meminit;
-        if ((i < type->member_list->len - 1 &&
+        vec_set((*init)->members->keys, i, member->name);
+        vec_set((*init)->members->vals, i, meminit);
+        if ((i < vec_len(type->member_list) - 1 &&
              token_consume(tokenizer, ',') == NULL) ||
             (token_peek(tokenizer)->ty == '.')) {
           break;
@@ -2283,8 +2283,8 @@ static void union_initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
     if (token_peek(tokenizer)->ty == '.' &&
         token_peek_ahead(tokenizer, 1)->ty == TK_IDENT) {
       Token *ident = token_peek_ahead(tokenizer, 1);
-      for (int i = 0; i < type->member_list->len; i++) {
-        Member *member = type->member_list->data[i];
+      for (int i = 0; i < vec_len(type->member_list); i++) {
+        Member *member = vec_get(type->member_list, i);
         if (member->name == NULL || strcmp(member->name, ident->name) == 0) {
           if (member->name != NULL) {
             token_expect(tokenizer, '.');
@@ -2292,7 +2292,7 @@ static void union_initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
             token_consume(tokenizer, '=');
           }
           Token *current = token_peek(tokenizer);
-          Initializer *meminit = (*init)->members->vals->data[0];
+          Initializer *meminit = vec_get((*init)->members->vals, 0);
           // if name is null, try parsing designator as inner struct/union's
           // designator
           initializer(tokenizer, scope, member->type, &meminit);
@@ -2301,18 +2301,18 @@ static void union_initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
             // next member
             continue;
           }
-          (*init)->members->keys->data[0] = member->name;
-          (*init)->members->vals->data[0] = meminit;
+          vec_set((*init)->members->keys, 0, member->name);
+          vec_set((*init)->members->vals, 0, meminit);
           token_consume(tokenizer, ',');
           break;
         }
       }
     } else {
-      Initializer *meminit = (*init)->members->vals->data[0];
-      Member *member = type->member_list->data[0];
+      Initializer *meminit = vec_get((*init)->members->vals, 0);
+      Member *member = vec_get(type->member_list, 0);
       initializer(tokenizer, scope, member->type, &meminit);
-      (*init)->members->keys->data[0] = member->name;
-      (*init)->members->vals->data[0] = meminit;
+      vec_set((*init)->members->keys, 0, member->name);
+      vec_set((*init)->members->vals, 0, meminit);
       break;
     }
 
@@ -2331,7 +2331,7 @@ static void array_initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
 
   if (token_peek(tokenizer)->ty == '}') {
     if (type->array_len < 0) {
-      type->array_len = (*init)->elements->len;
+      type->array_len = vec_len((*init)->elements);
     }
     return;
   }
@@ -2353,9 +2353,9 @@ static void array_initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
                       i);
         }
       }
-      Initializer *eleminit = (*init)->elements->data[i];
+      Initializer *eleminit = vec_get((*init)->elements, i);
       initializer(tokenizer, scope, type->ptrof, &eleminit);
-      (*init)->elements->data[i] = eleminit;
+      vec_set((*init)->elements, i, eleminit);
       token_consume(tokenizer, ',');
       idx = i + 1;
     }
@@ -2364,9 +2364,9 @@ static void array_initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
       int max_len = type->array_len < 0 ? INT_MAX : type->array_len;
       for (int i = idx; i < max_len; i++) {
         vec_extend((*init)->elements, i + 1);
-        Initializer *eleminit = (*init)->elements->data[i];
+        Initializer *eleminit = vec_get((*init)->elements, i);
         initializer(tokenizer, scope, type->ptrof, &eleminit);
-        (*init)->elements->data[i] = eleminit;
+        vec_set((*init)->elements, i, eleminit);
         if ((i < max_len - 1 && token_consume(tokenizer, ',') == NULL)) {
           break;
         }
@@ -2382,7 +2382,7 @@ static void array_initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
   }
 
   if (type->array_len < 0) {
-    type->array_len = (*init)->elements->len;
+    type->array_len = vec_len((*init)->elements);
   }
 }
 
@@ -2482,10 +2482,10 @@ static Stmt *statement(Tokenizer *tokenizer, Scope *scope) {
     Stmt *body = statement(tokenizer, scope);
     Stmt *stmt =
         new_stmt_case(expr, body, range_join(start->range, body->range));
-    if (scope->func_ctxt->switches->len <= 0) {
+    if (vec_len(scope->func_ctxt->switches) <= 0) {
       range_error(stmt->range, "switch文中でない箇所にcase文があります");
     }
-    Stmt *switch_stmt = vec_peek(scope->func_ctxt->switches);
+    Stmt *switch_stmt = vec_last(scope->func_ctxt->switches);
     vec_push(switch_stmt->cases, stmt);
     return stmt;
   }
@@ -2494,10 +2494,10 @@ static Stmt *statement(Tokenizer *tokenizer, Scope *scope) {
     token_expect(tokenizer, ':');
     Stmt *body = statement(tokenizer, scope);
     Stmt *stmt = new_stmt_default(body, range_join(start->range, body->range));
-    if (scope->func_ctxt->switches->len <= 0) {
+    if (vec_len(scope->func_ctxt->switches) <= 0) {
       range_error(stmt->range, "switch文中でない箇所にcase文があります");
     }
-    Stmt *switch_expr = vec_peek(scope->func_ctxt->switches);
+    Stmt *switch_expr = vec_last(scope->func_ctxt->switches);
     switch_expr->default_case = stmt;
     return stmt;
   }
@@ -2605,9 +2605,9 @@ static void gen_init(Scope *scope, Vector *stmts, Initializer *init,
   }
 
   if (init->members != NULL) {
-    for (int i = 0; i < init->members->keys->len; i++) {
-      char *name = init->members->keys->data[i];
-      Initializer *meminit = init->members->vals->data[i];
+    for (int i = 0; i < vec_len(init->members->keys); i++) {
+      char *name = vec_get(init->members->keys, i);
+      Initializer *meminit = vec_get(init->members->vals, i);
       Expr *mem =
           name != NULL ? new_expr_dot(scope, dest, name, dest->range) : dest;
       gen_init(scope, stmts, meminit, mem);
@@ -2616,9 +2616,9 @@ static void gen_init(Scope *scope, Vector *stmts, Initializer *init,
   }
 
   if (init->elements != NULL) {
-    for (int i = 0; i < init->elements->len; i++) {
+    for (int i = 0; i < vec_len(init->elements); i++) {
       Expr *index = new_expr_num(new_number_int(i), dest->range);
-      Initializer *meminit = init->elements->data[i];
+      Initializer *meminit = vec_get(init->elements, i);
       Expr *mem = new_expr_index(scope, dest, index, dest->range);
       gen_init(scope, stmts, meminit, mem);
     }
@@ -2648,8 +2648,8 @@ static Stmt *compound_statement(Tokenizer *tokenizer, Scope *scope) {
         token_is_type_qualifier(token)) {
 
       Vector *def_list = declaration(tokenizer, scope);
-      for (int i = 0; i < def_list->len; i++) {
-        VarDef *def = def_list->data[i];
+      for (int i = 0; i < vec_len(def_list); i++) {
+        VarDef *def = vec_get(def_list, i);
         switch (def->type) {
         case DEF_FUNC:
           range_error(def->name->range, "関数内で関数は定義できません");
@@ -2686,8 +2686,8 @@ static Function *function_definition(Tokenizer *tokenizer, Scope *global_scope,
   FuncCtxt *fcx = new_func_ctxt(name, type);
   Scope *scope = new_func_scope(global_scope, fcx);
   if (type->func_param != NULL) {
-    for (int i = 0; i < type->func_param->len; i++) {
-      Param *param = type->func_param->data[i];
+    for (int i = 0; i < vec_len(type->func_param); i++) {
+      Param *param = vec_get(type->func_param, i);
       param->stack_var =
           register_stack_var(scope, param->name, param->type, param->range);
     }
@@ -2696,8 +2696,8 @@ static Function *function_definition(Tokenizer *tokenizer, Scope *global_scope,
   Stmt *body = compound_statement(tokenizer, scope);
 
   int stack_size = 0;
-  for (int i = 0; i < fcx->var_list->len; i++) {
-    StackVar *svar = fcx->var_list->data[i];
+  for (int i = 0; i < vec_len(fcx->var_list); i++) {
+    StackVar *svar = vec_get(fcx->var_list, i);
     stack_size = align(stack_size, get_val_align(svar->type, svar->range));
     svar->offset = stack_size;
     stack_size += get_val_size(svar->type, svar->range);
@@ -2734,8 +2734,8 @@ static TranslationUnit *translation_unit(Tokenizer *tokenizer) {
 
   while (token_peek(tokenizer)->ty != TK_EOF) {
     Vector *def_list = declaration(tokenizer, scope);
-    for (int i = 0; i < def_list->len; i++) {
-      VarDef *def = def_list->data[i];
+    for (int i = 0; i < vec_len(def_list); i++) {
+      VarDef *def = vec_get(def_list, i);
       switch (def->type) {
       case DEF_FUNC:
         vec_push(gcx->func_list, def->func);

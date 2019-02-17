@@ -50,7 +50,7 @@ void reader_add_file(Reader *reader, FILE *fp, const char *filename) {
 
 static void switch_file(Reader *reader, File *file) {
   FileOffset *fo = NEW(FileOffset);
-  fo->index = reader->file_offset->len;
+  fo->index = vec_len(reader->file_offset);
   fo->global_offset = reader->offset;
   fo->file_offset = file != NULL ? file->offset : 0;
   fo->file = file;
@@ -60,10 +60,10 @@ static void switch_file(Reader *reader, File *file) {
 static File *peek_file(const Reader *reader) { return peek_file_n(reader, 0); }
 
 static File *peek_file_n(const Reader *reader, int n) {
-  if (n >= reader->file_stack->len) {
+  if (n >= vec_len(reader->file_stack)) {
     return NULL;
   }
-  return vec_peek_n(reader->file_stack, n);
+  return vec_rget(reader->file_stack, n);
 }
 
 char reader_peek(const Reader *reader) {
@@ -143,9 +143,9 @@ void reader_expect(Reader *reader, char ch) {
 int reader_get_offset(const Reader *reader) { return reader->offset; }
 
 static FileOffset *get_file_offset(const Reader *reader, int offset) {
-  assert(reader->file_offset->len > 0);
-  for (int i = reader->file_offset->len - 1; i >= 0; i--) {
-    FileOffset *fo = reader->file_offset->data[i];
+  assert(vec_len(reader->file_offset) > 0);
+  for (int i = vec_len(reader->file_offset) - 1; i >= 0; i--) {
+    FileOffset *fo = vec_get(reader->file_offset, i);
     if (fo->global_offset > offset) {
       continue;
     }
@@ -160,8 +160,8 @@ static FileOffset *get_file_offset(const Reader *reader, int offset) {
 void reader_get_position(const Reader *reader, int offset,
                          const char **filename, int *line, int *column) {
   FileOffset *fo = get_file_offset(reader, offset);
-  for (int j = fo->file->line_offset->len - 1; j >= 0; j--) {
-    int line_start = fo->file->line_offset->data[j];
+  for (int j = int_vec_len(fo->file->line_offset) - 1; j >= 0; j--) {
+    int line_start = int_vec_get(fo->file->line_offset, j);
     if (line_start > offset - fo->global_offset + fo->file_offset) {
       continue;
     }
@@ -242,8 +242,8 @@ static void print_source(Range range) {
   int len = range.len;
   while (len > 0) {
     FileOffset *fo = get_file_offset(reader, range.start);
-    FileOffset *next_fo = fo->index < reader->file_offset->len - 1
-                              ? reader->file_offset->data[fo->index + 1]
+    FileOffset *next_fo = fo->index < vec_len(reader->file_offset) - 1
+                              ? vec_get(reader->file_offset, fo->index + 1)
                               : NULL;
     int file_end = next_fo != NULL
                        ? next_fo->global_offset
@@ -262,8 +262,8 @@ static void print_source(Range range) {
                         &end_column);
 
     for (int line = start_line; line <= end_line; line++) {
-      int sl = fo->file->line_offset->data[line - 1];
-      int el = fo->file->line_offset->data[line];
+      int sl = int_vec_get(fo->file->line_offset, line - 1);
+      int el = int_vec_get(fo->file->line_offset, line);
       const char *line_str = &fo->file->source[sl];
       int line_len = el - sl;
       int sc = (line == start_line) ? start_column - 1 : 0;

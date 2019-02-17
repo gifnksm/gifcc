@@ -357,7 +357,7 @@ static bool pp_directive(Reader *reader) {
           .len = end - start,
       };
 
-      do_include(reader, str->data, range);
+      do_include(reader, str_get_raw(str), range);
     }
     return true;
   }
@@ -425,7 +425,7 @@ static Token *identifier_or_keyword(Reader *reader) {
   }
   str_push(str, '\0');
 
-  return new_token_ident(str->data);
+  return new_token_ident(str_get_raw(str));
 }
 
 static Token *constant(Reader *reader) {
@@ -547,7 +547,7 @@ static Token *string_literal(Reader *reader) {
   str_push(str, '\0');
 
   reader_expect(reader, '"');
-  return new_token_str(str->data);
+  return new_token_str(str_get_raw(str));
 }
 
 static char c_char(Reader *reader) {

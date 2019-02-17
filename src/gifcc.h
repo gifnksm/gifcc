@@ -8,28 +8,13 @@
 
 #define NEW(type) ((type *)calloc(1, sizeof(type)))
 
-typedef struct {
-  void **data;
-  int capacity;
-  int len;
-} Vector;
-
+typedef struct Vector Vector;
 typedef struct {
   Vector *keys;
   Vector *vals;
 } Map;
-
-typedef struct {
-  char *data;
-  int capacity;
-  int len;
-} String;
-
-typedef struct {
-  int *data;
-  int capacity;
-  int len;
-} IntVector;
+typedef struct String String;
+typedef struct IntVector IntVector;
 
 // トークンの型を表す値
 enum {
@@ -376,19 +361,32 @@ static inline int align(int n, int s) {
   return (s != 0) ? ((n + (s - 1)) / s) * s : 0;
 }
 
+// util.c
+// Vector
 Vector *new_vector(void);
+int vec_len(const Vector *vec);
+void *vec_first(Vector *vec);
+void *vec_last(Vector *vec);
+void *vec_get(Vector *vec, int n);
+void vec_set(Vector *vec, int n, void *val);
+void *vec_rget(Vector *vec, int n);
 void vec_push(Vector *vec, void *elem);
 void *vec_pop(Vector *vec);
-void *vec_peek(Vector *vec);
-void *vec_peek_n(Vector *vec, int n);
 void vec_extend(Vector *vec, int len);
+// Map
 Map *new_map(void);
 void map_put(Map *map, char *key, void *val);
 void *map_get(Map *map, char *key);
+// String
 String *new_string(void);
 void str_push(String *str, char elem);
+char *str_get_raw(String *str);
+// IntVector
 IntVector *new_int_vector(void);
+int int_vec_len(const IntVector *vec);
+int int_vec_get(const IntVector *vec, int n);
 void int_vec_push(IntVector *vec, int elem);
+// Misc
 void print_string_literal(char *str);
 int __attribute__((format(printf, 2, 3)))
 alloc_printf(char **strp, const char *fmt, ...);
