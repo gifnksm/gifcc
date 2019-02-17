@@ -167,14 +167,66 @@ static inline bool is_ident_tail(int c) {
   return is_ident_head(c) || ('0' <= c && c <= '9');
 }
 
-static void skip_space(Reader *reader) {
+static bool skip_space(Reader *reader) {
+  bool skipped = false;
   while (true) {
     char ch = reader_peek(reader);
     if (!isspace(ch) || ch == '\n') {
-      return;
+      return skipped;
     }
+    skipped = true;
     reader_succ(reader);
   }
+}
+
+static bool skip_comment(Reader *reader) {
+  bool skipped = false;
+
+  while (true) {
+    if (reader_consume_str(reader, "//")) {
+      while (true) {
+        char ch = reader_peek(reader);
+        if (ch == '\n' || ch == '\0') {
+          break;
+        }
+        reader_succ(reader);
+      }
+      skipped = true;
+      continue;
+    }
+    if (reader_consume_str(reader, "/*")) {
+      while (true) {
+        if (reader_consume_str(reader, "*/")) {
+          break;
+        }
+        if (reader_peek(reader) == '\0') {
+          reader_error_here(reader, "コメントの終端文字列 `*/` がありません");
+        }
+        reader_succ(reader);
+      }
+      skipped = true;
+      continue;
+    }
+    break;
+  }
+
+  return skipped;
+}
+
+static bool skip_space_or_comment(Reader *reader) {
+  bool skipped = false;
+  while (true) {
+    if (skip_space(reader)) {
+      skipped = true;
+      continue;
+    }
+    if (skip_comment(reader)) {
+      skipped = true;
+      continue;
+    }
+    break;
+  }
+  return skipped;
 }
 
 static inline bool is_hex_digit(int c) { return isxdigit(c) != 0; }
@@ -202,33 +254,11 @@ static inline int dec2num(int c) {
 static Token *read_token(Reader *reader, bool *read_eof) {
   char ch;
   while ((ch = reader_peek(reader)) != '\0') {
-    // 空白文字をスキップ
-    if (isspace(ch)) {
+    if (skip_space_or_comment(reader)) {
+      continue;
+    }
+    if (ch == '\n') {
       reader_succ(reader);
-      continue;
-    }
-
-    // コメントをスキップ
-    if (reader_consume_str(reader, "//")) {
-      while (true) {
-        char ch = reader_peek(reader);
-        if (ch == '\n' || ch == '\0') {
-          break;
-        }
-        reader_succ(reader);
-      }
-      continue;
-    }
-    if (reader_consume_str(reader, "/*")) {
-      while (true) {
-        if (reader_consume_str(reader, "*/")) {
-          break;
-        }
-        if (reader_peek(reader) == '\0') {
-          reader_error_here(reader, "コメントの終端文字列 `*/` がありません");
-        }
-        reader_succ(reader);
-      }
       continue;
     }
 
@@ -304,9 +334,11 @@ static bool pp_directive(Reader *reader) {
   if (!reader_consume(reader, '#')) {
     return false;
   }
+  skip_space_or_comment(reader);
 
   if (reader_consume_str(reader, "include")) {
-    skip_space(reader);
+    skip_space_or_comment(reader);
+
     if (reader_consume(reader, '<')) {
       String *str = new_string();
       while ((reader_peek(reader) != '>') && (reader_peek(reader) != '\0')) {
@@ -316,7 +348,7 @@ static bool pp_directive(Reader *reader) {
       reader_expect(reader, '>');
       int end = reader_get_offset(reader);
 
-      skip_space(reader);
+      skip_space_or_comment(reader);
       reader_expect(reader, '\n');
 
       Range range = {
