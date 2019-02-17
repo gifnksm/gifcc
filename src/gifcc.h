@@ -454,6 +454,16 @@ TranslationUnit *parse(Reader *reader);
 char *make_label(const char *s);
 void gen(TranslationUnit *tunit);
 
+static inline Range range_from_reader(const Reader *reader, int start,
+                                      int end) {
+  assert(start <= end);
+  return (Range){
+      .reader = reader,
+      .start = start,
+      .len = (end - start),
+  };
+}
+
 static inline Range range_join(Range a, Range b) {
   assert(a.start >= 0);
   assert(b.start >= 0);
@@ -462,7 +472,7 @@ static inline Range range_join(Range a, Range b) {
   int bend = b.start + b.len;
   int start = a.start < b.start ? a.start : b.start;
   int end = aend > bend ? aend : bend;
-  return (Range){.reader = a.reader, .start = start, .len = (end - start)};
+  return range_from_reader(a.reader, start, end);
 }
 
 static inline char *get_label(Function *func, char *name) {

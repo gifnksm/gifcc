@@ -2163,6 +2163,9 @@ static void test56(void) {
   test_ok(__func__);
 }
 
+#define TEST57_DEF 123
+static void test57(void) { test_ok(__func__); }
+
 int main(void) {
   test01();
   test02();
@@ -2220,6 +2223,7 @@ int main(void) {
   test54();
   test55();
   test56();
+  test57();
 
   return 0;
 }

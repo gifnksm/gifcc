@@ -11,6 +11,7 @@ struct Tokenizer {
   Token *current;
   Token *next;
   bool read_eof;
+  Map *define_map;
 };
 
 typedef struct {
@@ -46,13 +47,14 @@ static const LongToken LONG_PUNCT_TOKENS[] = {
 };
 static const char *SHORT_PUNCT_TOKENS = "=!<>&|^+-*/%();?:~{}[],.";
 
-static Token *read_token(Reader *reader, bool *read_eof);
+static Token *read_token(Reader *reader, Map *define_map, bool *read_eof);
 static Token *new_token(int ty);
 static Token *new_token_num(Number val);
 static Token *new_token_ident(char *name);
 static Token *new_token_str(char *str);
-static bool pp_directive(Reader *reader);
+static bool pp_directive(Reader *reader, Map *define_map);
 static void do_include(Reader *reader, const char *path, Range range);
+static Token *read_normal_token(Reader *reader);
 static Token *punctuator(Reader *reader);
 static Token *identifier_or_keyword(Reader *reader);
 static Token *constant(Reader *reader);
@@ -68,14 +70,18 @@ Tokenizer *new_tokenizer(Reader *reader) {
   Tokenizer *tokenizer = malloc(sizeof(Tokenizer));
   tokenizer->reader = reader;
   tokenizer->read_eof = false;
-  tokenizer->current = read_token(tokenizer->reader, &tokenizer->read_eof);
-  tokenizer->next = read_token(tokenizer->reader, &tokenizer->read_eof);
+  tokenizer->define_map = new_map();
+  tokenizer->current = read_token(tokenizer->reader, tokenizer->define_map,
+                                  &tokenizer->read_eof);
+  tokenizer->next = read_token(tokenizer->reader, tokenizer->define_map,
+                               &tokenizer->read_eof);
   return tokenizer;
 }
 
 void token_succ(Tokenizer *tokenizer) {
   tokenizer->current = tokenizer->next;
-  tokenizer->next = read_token(tokenizer->reader, &tokenizer->read_eof);
+  tokenizer->next = read_token(tokenizer->reader, tokenizer->define_map,
+                               &tokenizer->read_eof);
 }
 
 Token *token_peek(Tokenizer *tokenizer) { return tokenizer->current; }
@@ -229,6 +235,29 @@ static bool skip_space_or_comment(Reader *reader) {
   return skipped;
 }
 
+static String *read_identifier(Reader *reader) {
+  char ch = reader_peek(reader);
+  if (!is_ident_head(ch)) {
+    return NULL;
+  }
+
+  String *str = new_string();
+  str_push(str, ch);
+  reader_succ(reader);
+
+  while (true) {
+    ch = reader_peek(reader);
+    if (!is_ident_tail(ch)) {
+      break;
+    }
+    str_push(str, ch);
+    reader_succ(reader);
+  }
+  str_push(str, '\0');
+
+  return str;
+}
+
 static inline bool is_hex_digit(int c) { return isxdigit(c) != 0; }
 static inline int hex2num(int c) {
   assert(is_hex_digit(c));
@@ -251,7 +280,7 @@ static inline int dec2num(int c) {
   assert(is_dec_digit(c));
   return c - '0';
 }
-static Token *read_token(Reader *reader, bool *read_eof) {
+static Token *read_token(Reader *reader, Map *define_map, bool *read_eof) {
   char ch;
   while ((ch = reader_peek(reader)) != '\0') {
     if (skip_space_or_comment(reader)) {
@@ -262,24 +291,15 @@ static Token *read_token(Reader *reader, bool *read_eof) {
       continue;
     }
 
-    if (pp_directive(reader)) {
+    if (pp_directive(reader, define_map)) {
       continue;
     }
 
-    int start = reader_get_offset(reader);
-    Token *token = NULL;
-    if ((token = punctuator(reader)) == NULL &&
-        (token = identifier_or_keyword(reader)) == NULL &&
-        (token = constant(reader)) == NULL &&
-        (token = string_literal(reader)) == NULL) {
+    Token *token = read_normal_token(reader);
+    if (token == NULL) {
       reader_error_here(reader, "トークナイズできません: `%c`",
                         reader_peek(reader));
     }
-
-    int end = reader_get_offset(reader);
-    token->range.reader = reader;
-    token->range.start = start;
-    token->range.len = end - start;
     return token;
   }
 
@@ -329,7 +349,7 @@ static Token *new_token_str(char *str) {
   return token;
 }
 
-static bool pp_directive(Reader *reader) {
+static bool pp_directive(Reader *reader, Map *define_map) {
   int start = reader_get_offset(reader);
   if (!reader_consume(reader, '#')) {
     return false;
@@ -351,14 +371,32 @@ static bool pp_directive(Reader *reader) {
       skip_space_or_comment(reader);
       reader_expect(reader, '\n');
 
-      Range range = {
-          .reader = reader,
-          .start = start,
-          .len = end - start,
-      };
+      do_include(reader, str_get_raw(str),
+                 range_from_reader(reader, start, end));
 
-      do_include(reader, str_get_raw(str), range);
+      return true;
     }
+
+    reader_error_here(reader, "識別子がありません");
+  }
+
+  if (reader_consume_str(reader, "define")) {
+    skip_space_or_comment(reader);
+    String *ident = read_identifier(reader);
+    if (ident == NULL) {
+      reader_error_here(reader, "識別子がありません");
+    }
+    skip_space_or_comment(reader);
+    Vector *tokens = new_vector();
+    while (reader_peek(reader) != '\n' && reader_peek(reader) != '\0') {
+      Token *token = read_normal_token(reader);
+      skip_space_or_comment(reader);
+      vec_push(tokens, token);
+    }
+    reader_expect(reader, '\n');
+
+    map_put(define_map, str_get_raw(ident), tokens);
+
     return true;
   }
 
@@ -367,12 +405,7 @@ static bool pp_directive(Reader *reader) {
   }
   int end = reader_get_offset(reader);
   reader_expect(reader, '\n');
-  Range range = {
-      .reader = reader,
-      .start = start,
-      .len = end - start,
-  };
-  range_warn(range, "不明なディレクティブです");
+  range_warn(range_from_reader(reader, start, end), "不明なディレクティブです");
 
   return true;
 }
@@ -386,6 +419,23 @@ static void do_include(Reader *reader, const char *path, Range range) {
     range_error(range, "ファイルが開けませんでした: %s", abs_path);
   }
   reader_add_file(reader, fp, path);
+}
+
+static Token *read_normal_token(Reader *reader) {
+  int start = reader_get_offset(reader);
+  Token *token = NULL;
+  if ((token = punctuator(reader)) == NULL &&
+      (token = identifier_or_keyword(reader)) == NULL &&
+      (token = constant(reader)) == NULL &&
+      (token = string_literal(reader)) == NULL) {
+    return NULL;
+  }
+
+  int end = reader_get_offset(reader);
+  token->range.reader = reader;
+  token->range.start = start;
+  token->range.len = end - start;
+  return token;
 }
 
 static Token *punctuator(Reader *reader) {
@@ -406,25 +456,10 @@ static Token *punctuator(Reader *reader) {
 }
 
 static Token *identifier_or_keyword(Reader *reader) {
-  char ch = reader_peek(reader);
-  if (!is_ident_head(ch)) {
+  String *str = read_identifier(reader);
+  if (str == NULL) {
     return NULL;
   }
-
-  String *str = new_string();
-  str_push(str, ch);
-  reader_succ(reader);
-
-  while (true) {
-    ch = reader_peek(reader);
-    if (!is_ident_tail(ch)) {
-      break;
-    }
-    str_push(str, ch);
-    reader_succ(reader);
-  }
-  str_push(str, '\0');
-
   return new_token_ident(str_get_raw(str));
 }
 
