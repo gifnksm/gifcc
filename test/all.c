@@ -2164,7 +2164,11 @@ static void test56(void) {
 }
 
 #define TEST57_DEF 123
-static void test57(void) { test_ok(__func__); }
+static void test57(void) {
+  check_int(123, TEST57_DEF);
+
+  test_ok(__func__);
+}
 
 int main(void) {
   test01();

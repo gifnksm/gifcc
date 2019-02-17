@@ -53,9 +53,10 @@ static Token *new_token_ident(char *name, Range range);
 static Token *new_token_str(char *str, Range range);
 static bool pp_directive(Reader *reader, Map *define_map);
 static void do_include(Reader *reader, const char *path, Range range);
-static bool read_normal_token(Reader *reader, Vector *tokens);
+static bool read_normal_token(Reader *reader, Map *define_map, Vector *tokens);
 static bool punctuator(Reader *reader, Vector *tokens);
-static bool identifier_or_keyword(Reader *reader, Vector *tokens);
+static bool identifier_or_keyword(Reader *reader, Map *define_map,
+                                  Vector *tokens);
 static bool constant(Reader *reader, Vector *tokens);
 static bool integer_constant(Reader *reader, Vector *tokens);
 static bool hexadecimal_constant(Reader *reader, Vector *tokens);
@@ -296,7 +297,8 @@ static bool read_token(Tokenizer *tokenizer) {
       continue;
     }
 
-    if (!read_normal_token(tokenizer->reader, tokenizer->tokens)) {
+    if (!read_normal_token(tokenizer->reader, tokenizer->define_map,
+                           tokenizer->tokens)) {
       reader_error_here(tokenizer->reader, "トークナイズできません: `%c`",
                         reader_peek(tokenizer->reader));
     }
@@ -390,7 +392,7 @@ static bool pp_directive(Reader *reader, Map *define_map) {
     skip_space_or_comment(reader);
     Vector *tokens = new_vector();
     while (reader_peek(reader) != '\n' && reader_peek(reader) != '\0') {
-      if (!read_normal_token(reader, tokens)) {
+      if (!read_normal_token(reader, define_map, tokens)) {
         reader_error_here(reader, "トークナイズできません: `%c`",
                           reader_peek(reader));
       }
@@ -424,8 +426,9 @@ static void do_include(Reader *reader, const char *path, Range range) {
   reader_add_file(reader, fp, path);
 }
 
-static bool read_normal_token(Reader *reader, Vector *tokens) {
-  return punctuator(reader, tokens) || identifier_or_keyword(reader, tokens) ||
+static bool read_normal_token(Reader *reader, Map *define_map, Vector *tokens) {
+  return punctuator(reader, tokens) ||
+         identifier_or_keyword(reader, define_map, tokens) ||
          constant(reader, tokens) || string_literal(reader, tokens);
 }
 
@@ -457,15 +460,27 @@ Hit:;
   return true;
 }
 
-static bool identifier_or_keyword(Reader *reader, Vector *tokens) {
+static bool identifier_or_keyword(Reader *reader, Map *define_map,
+                                  Vector *tokens) {
   int start = reader_get_offset(reader);
   String *str = read_identifier(reader);
   if (str == NULL) {
     return false;
   }
   int end = reader_get_offset(reader);
-  vec_push(tokens, new_token_ident(str_get_raw(str),
-                                   range_from_reader(reader, start, end)));
+  Range range = range_from_reader(reader, start, end);
+  char *raw_str = str_get_raw(str);
+
+  Vector *defined = map_get(define_map, raw_str);
+  if (defined != NULL) {
+    for (int i = 0; i < vec_len(defined); i++) {
+      Token *pptoken = vec_get(defined, i);
+      vec_push(tokens, pptoken);
+    }
+  } else {
+    vec_push(tokens, new_token_ident(str_get_raw(str), range));
+  }
+
   return true;
 }
 
