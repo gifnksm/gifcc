@@ -387,9 +387,12 @@ void map_put(Map *map, char *key, void *val);
 void *map_get(Map *map, char *key);
 String *new_string(void);
 void str_push(String *str, char elem);
-void print_string_literal(char *str);
 IntVector *new_int_vector(void);
 void int_vec_push(IntVector *vec, int elem);
+void print_string_literal(char *str);
+int __attribute__((format(printf, 2, 3)))
+alloc_printf(char **strp, const char *fmt, ...);
+int alloc_printf_v(char **strp, const char *fmt, va_list ap);
 void runtest(void);
 
 Reader *new_reader(void);

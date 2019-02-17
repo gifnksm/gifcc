@@ -1,7 +1,5 @@
-void abort(void);
-int puts(const char *s);
-int putchar(int c);
-int printf(const char *fmt, ...);
+#include <stdio.h>
+#include <stdlib.h>
 
 static int num_check = 0;
 static void check_int(int a, int b) {

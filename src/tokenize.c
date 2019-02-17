@@ -51,6 +51,8 @@ static Token *new_token(int ty);
 static Token *new_token_num(Number val);
 static Token *new_token_ident(char *name);
 static Token *new_token_str(char *str);
+static bool pp_directive(Reader *reader);
+static void do_include(Reader *reader, const char *path, Range range);
 static Token *punctuator(Reader *reader);
 static Token *identifier_or_keyword(Reader *reader);
 static Token *constant(Reader *reader);
@@ -165,6 +167,16 @@ static inline bool is_ident_tail(int c) {
   return is_ident_head(c) || ('0' <= c && c <= '9');
 }
 
+static void skip_space(Reader *reader) {
+  while (true) {
+    char ch = reader_peek(reader);
+    if (!isspace(ch) || ch == '\n') {
+      return;
+    }
+    reader_succ(reader);
+  }
+}
+
 static inline bool is_hex_digit(int c) { return isxdigit(c) != 0; }
 static inline int hex2num(int c) {
   assert(is_hex_digit(c));
@@ -217,6 +229,10 @@ static Token *read_token(Reader *reader, bool *read_eof) {
         }
         reader_succ(reader);
       }
+      continue;
+    }
+
+    if (pp_directive(reader)) {
       continue;
     }
 
@@ -281,6 +297,50 @@ static Token *new_token_str(char *str) {
   token->ty = TK_STR;
   token->str = str;
   return token;
+}
+
+static bool pp_directive(Reader *reader) {
+  int start = reader_get_offset(reader);
+  if (!reader_consume(reader, '#')) {
+    return false;
+  }
+
+  if (reader_consume_str(reader, "include")) {
+    skip_space(reader);
+    if (reader_consume(reader, '<')) {
+      String *str = new_string();
+      while ((reader_peek(reader) != '>') && (reader_peek(reader) != '\0')) {
+        char ch = reader_pop(reader);
+        str_push(str, ch);
+      }
+      reader_expect(reader, '>');
+      int end = reader_get_offset(reader);
+
+      skip_space(reader);
+      reader_expect(reader, '\n');
+
+      Range range = {
+          .reader = reader,
+          .start = start,
+          .len = end - start,
+      };
+
+      do_include(reader, str->data, range);
+    }
+  }
+
+  return true;
+}
+
+static void do_include(Reader *reader, const char *path, Range range) {
+  char *abs_path = NULL;
+  alloc_printf(&abs_path, "%s/%s", GIFCC_INCLUDE, path);
+
+  FILE *fp = fopen(abs_path, "r");
+  if (fp == NULL) {
+    range_error(range, "ファイルが開けませんでした: %s", abs_path);
+  }
+  reader_add_file(reader, fp, path);
 }
 
 static Token *punctuator(Reader *reader) {

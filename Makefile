@@ -1,6 +1,6 @@
 OUTDIR=./target
 
-CFLAGS=-Wall -Wextra -std=c11 -g3 -D_POSIX_C_SOURCE=201809L -MMD -fdiagnostics-color
+CFLAGS=-Wall -Wextra -std=c11 -g3 -D_POSIX_C_SOURCE=201809L -MMD -fdiagnostics-color -DGIFCC_INCLUDE=\"$(abspath ./include)\"
 
 SRCS=$(wildcard src/*.c)
 OBJS=$(patsubst src/%.c,$(OUTDIR)/%.o,$(SRCS))
