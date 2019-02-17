@@ -559,9 +559,9 @@ static void dump_init(Initializer *init, Range range, int level) {
     dump_indent(level);
     dump_type(init->type);
     printf("{\n");
-    for (int i = 0; i < vec_len(init->members->keys); i++) {
-      char *name = vec_get(init->members->keys, i);
-      Initializer *val = vec_get(init->members->vals, i);
+    for (int i = 0; i < map_size(init->members); i++) {
+      char *name;
+      Initializer *val = map_get_by_index(init->members, i, &name);
       dump_range_start(range);
       dump_indent(level + 1);
       printf(".%s = \n", name);

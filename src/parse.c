@@ -397,8 +397,8 @@ static void register_member(Type *type, char *member_name, Type *member_type,
   if (member_name == NULL) {
     assert(member_type->ty == TY_STRUCT || member_type->ty == TY_UNION);
     Map *inner_members = member_type->member_name_map;
-    for (int i = 0; i < vec_len(inner_members->keys); i++) {
-      Member *inner = vec_get(inner_members->vals, i);
+    for (int i = 0; i < map_size(inner_members); i++) {
+      Member *inner = map_get_by_index(inner_members, i, NULL);
       Member *inner_member =
           new_member(inner->name, inner->type, offset + inner->offset, range);
       if (map_get(type->member_name_map, inner_member->name)) {
@@ -2232,7 +2232,7 @@ static void struct_initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
             token_consume(tokenizer, '=');
           }
           Token *current = token_peek(tokenizer);
-          Initializer *meminit = vec_get((*init)->members->vals, i);
+          Initializer *meminit = map_get_by_index((*init)->members, i, NULL);
           // if name is null, try parsing designator as inner struct/union's
           // designator
           initializer(tokenizer, scope, member->type, &meminit);
@@ -2242,8 +2242,7 @@ static void struct_initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
             continue;
           }
           idx = i + 1;
-          vec_set((*init)->members->keys, i, member->name);
-          vec_set((*init)->members->vals, i, meminit);
+          map_set_by_index((*init)->members, i, member->name, meminit);
           token_consume(tokenizer, ',');
           break;
         }
@@ -2253,11 +2252,10 @@ static void struct_initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
     // initializers without designator.
     if (token_peek(tokenizer)->ty != '.' && token_peek(tokenizer)->ty != '}') {
       for (int i = idx; i < vec_len(type->member_list); i++) {
-        Initializer *meminit = vec_get((*init)->members->vals, i);
+        Initializer *meminit = map_get_by_index((*init)->members, i, NULL);
         Member *member = vec_get(type->member_list, i);
         initializer(tokenizer, scope, member->type, &meminit);
-        vec_set((*init)->members->keys, i, member->name);
-        vec_set((*init)->members->vals, i, meminit);
+        map_set_by_index((*init)->members, i, member->name, meminit);
         if ((i < vec_len(type->member_list) - 1 &&
              token_consume(tokenizer, ',') == NULL) ||
             (token_peek(tokenizer)->ty == '.')) {
@@ -2292,7 +2290,7 @@ static void union_initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
             token_consume(tokenizer, '=');
           }
           Token *current = token_peek(tokenizer);
-          Initializer *meminit = vec_get((*init)->members->vals, 0);
+          Initializer *meminit = map_get_by_index((*init)->members, 0, NULL);
           // if name is null, try parsing designator as inner struct/union's
           // designator
           initializer(tokenizer, scope, member->type, &meminit);
@@ -2301,18 +2299,16 @@ static void union_initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
             // next member
             continue;
           }
-          vec_set((*init)->members->keys, 0, member->name);
-          vec_set((*init)->members->vals, 0, meminit);
+          map_set_by_index((*init)->members, 0, member->name, meminit);
           token_consume(tokenizer, ',');
           break;
         }
       }
     } else {
-      Initializer *meminit = vec_get((*init)->members->vals, 0);
+      Initializer *meminit = map_get_by_index((*init)->members, 0, NULL);
       Member *member = vec_get(type->member_list, 0);
       initializer(tokenizer, scope, member->type, &meminit);
-      vec_set((*init)->members->keys, 0, member->name);
-      vec_set((*init)->members->vals, 0, meminit);
+      map_set_by_index((*init)->members, 0, member->name, meminit);
       break;
     }
 
@@ -2605,9 +2601,9 @@ static void gen_init(Scope *scope, Vector *stmts, Initializer *init,
   }
 
   if (init->members != NULL) {
-    for (int i = 0; i < vec_len(init->members->keys); i++) {
-      char *name = vec_get(init->members->keys, i);
-      Initializer *meminit = vec_get(init->members->vals, i);
+    for (int i = 0; i < map_size(init->members); i++) {
+      char *name;
+      Initializer *meminit = map_get_by_index(init->members, i, &name);
       Expr *mem =
           name != NULL ? new_expr_dot(scope, dest, name, dest->range) : dest;
       gen_init(scope, stmts, meminit, mem);

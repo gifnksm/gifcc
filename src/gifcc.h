@@ -9,10 +9,7 @@
 #define NEW(type) ((type *)calloc(1, sizeof(type)))
 
 typedef struct Vector Vector;
-typedef struct {
-  Vector *keys;
-  Vector *vals;
-} Map;
+typedef struct Map Map;
 typedef struct String String;
 typedef struct IntVector IntVector;
 
@@ -375,6 +372,9 @@ void *vec_pop(Vector *vec);
 void vec_extend(Vector *vec, int len);
 // Map
 Map *new_map(void);
+int map_size(const Map *map);
+void *map_get_by_index(Map *map, int n, char **key);
+void map_set_by_index(Map *map, int n, char *key, void *val);
 void map_put(Map *map, char *key, void *val);
 void *map_get(Map *map, char *key);
 // String

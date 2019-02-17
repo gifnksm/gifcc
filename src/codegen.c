@@ -845,10 +845,10 @@ static void gen_gvar_init(Initializer *init, Range range) {
 
   if (init->members != NULL) {
     assert(init->type->ty == TY_STRUCT || init->type->ty == TY_UNION);
-    assert(vec_len(init->members->keys) <= 1 || init->type->ty == TY_STRUCT);
+    assert(map_size(init->members) <= 1 || init->type->ty == TY_STRUCT);
     int offset = 0;
-    for (int i = 0; i < vec_len(init->members->keys); i++) {
-      Initializer *meminit = vec_get(init->members->vals, i);
+    for (int i = 0; i < map_size(init->members); i++) {
+      Initializer *meminit = map_get_by_index(init->members, i, NULL);
       if (meminit == NULL) {
         continue;
       }

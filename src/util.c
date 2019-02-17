@@ -11,6 +11,11 @@ typedef struct Vector {
   int len;
 } Vector;
 
+typedef struct Map {
+  Vector *keys;
+  Vector *vals;
+} Map;
+
 typedef struct IntVector {
   int *data;
   int capacity;
@@ -76,6 +81,21 @@ Map *new_map(void) {
   map->keys = new_vector();
   map->vals = new_vector();
   return map;
+}
+
+int map_size(const Map *map) { return map->keys->len; }
+
+void *map_get_by_index(Map *map, int n, char **key) {
+  assert(n < map_size(map));
+  if (key != NULL) {
+    *key = map->keys->data[n];
+  }
+  return map->vals->data[n];
+}
+void map_set_by_index(Map *map, int n, char *key, void *val) {
+  assert(n < map_size(map));
+  map->keys->data[n] = key;
+  map->vals->data[n] = val;
 }
 
 void map_put(Map *map, char *key, void *val) {
