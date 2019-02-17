@@ -14,7 +14,9 @@ typedef struct File {
 } File;
 
 typedef struct FileOffset {
-  int offset;
+  int index;
+  int global_offset;
+  int file_offset;
   File *file;
 } FileOffset;
 
@@ -48,7 +50,9 @@ void reader_add_file(Reader *reader, FILE *fp, const char *filename) {
 
 static void switch_file(Reader *reader, File *file) {
   FileOffset *fo = NEW(FileOffset);
-  fo->offset = reader->offset;
+  fo->index = reader->file_offset->len;
+  fo->global_offset = reader->offset;
+  fo->file_offset = file != NULL ? file->offset : 0;
   fo->file = file;
   vec_push(reader->file_offset, fo);
 }
@@ -142,7 +146,7 @@ static FileOffset *get_file_offset(const Reader *reader, int offset) {
   assert(reader->file_offset->len > 0);
   for (int i = reader->file_offset->len - 1; i >= 0; i--) {
     FileOffset *fo = reader->file_offset->data[i];
-    if (fo->offset > offset) {
+    if (fo->global_offset > offset) {
       continue;
     }
     if (fo->file == NULL) {
@@ -158,13 +162,13 @@ void reader_get_position(const Reader *reader, int offset,
   FileOffset *fo = get_file_offset(reader, offset);
   for (int j = fo->file->line_offset->len - 1; j >= 0; j--) {
     int line_start = fo->file->line_offset->data[j];
-    if (line_start > offset - fo->offset) {
+    if (line_start > offset - fo->global_offset + fo->file_offset) {
       continue;
     }
 
     *filename = fo->file->name;
     *line = j + 1;
-    *column = offset - fo->offset - line_start + 1;
+    *column = offset - fo->global_offset + fo->file_offset - line_start + 1;
     return;
   }
   assert(false);
@@ -233,23 +237,28 @@ void range_warn_raw_v(Range range, const char *dbg_file, int dbg_line,
 }
 
 static void print_source(Range range) {
+  const Reader *reader = range.reader;
   int start = range.start;
   int len = range.len;
   while (len > 0) {
-    FileOffset *fo = get_file_offset(range.reader, range.start);
-    int sf = start - fo->offset;
-    int ef = sf + len > fo->file->size ? fo->file->size : sf + len;
+    FileOffset *fo = get_file_offset(reader, range.start);
+    FileOffset *next_fo = fo->index < reader->file_offset->len - 1
+                              ? reader->file_offset->data[fo->index + 1]
+                              : NULL;
+    int file_end = next_fo != NULL
+                       ? next_fo->global_offset
+                       : fo->global_offset + (fo->file->size - fo->file_offset);
+    int sf = start - fo->global_offset;
+    int ef = sf + len > file_end ? file_end : sf + len;
     int file_len = ef - sf;
-    len -= file_len;
-    start = ef + fo->offset;
 
     const char *start_filename;
     int start_line, start_column;
-    reader_get_position(range.reader, sf, &start_filename, &start_line,
+    reader_get_position(reader, start, &start_filename, &start_line,
                         &start_column);
     const char *end_filename;
     int end_line, end_column;
-    reader_get_position(range.reader, ef, &end_filename, &end_line,
+    reader_get_position(reader, start + len, &end_filename, &end_line,
                         &end_column);
 
     for (int line = start_line; line <= end_line; line++) {
@@ -277,6 +286,9 @@ static void print_source(Range range) {
       }
       fprintf(stderr, "\n");
     }
+
+    start += file_len;
+    len -= file_len;
   }
 }
 
