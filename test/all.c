@@ -2164,8 +2164,14 @@ static void test56(void) {
 }
 
 #define TEST57_DEF 123
+#define test57_x test57_y
+int test57_x = 3;
+#undef test57_x
+int test57_x = 8;
 static void test57(void) {
   check_int(123, TEST57_DEF);
+  check_int(8, test57_x);
+  check_int(3, test57_y);
 
   test_ok(__func__);
 }

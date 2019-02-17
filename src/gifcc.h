@@ -380,6 +380,7 @@ void *map_get_by_index(Map *map, int n, char **key);
 void map_set_by_index(Map *map, int n, char *key, void *val);
 void map_put(Map *map, char *key, void *val);
 void *map_get(Map *map, char *key);
+bool map_remove(Map *map, char *key);
 // String
 String *new_string(void);
 void str_push(String *str, char elem);
@@ -417,6 +418,15 @@ void reader_get_position(const Reader *reader, int offset,
 noreturn __attribute__((format(printf, 5, 6))) void
 reader_error_offset_raw(const Reader *reader, int offset, const char *dbg_file,
                         int dbg_line, const char *fmt, ...);
+#define reader_warn_here(reader, fmt, ...)                                     \
+  reader_warn_offset_raw(reader, reader_get_offset(reader), __FILE__,          \
+                         __LINE__, (fmt), ##__VA_ARGS__)
+#define reader_warn_offset(reader, offset, fmt, ...)                           \
+  reader_warn_offset_raw((reader), (offset), __FILE__, __LINE__, (fmt),        \
+                         ##__VA_ARGS__)
+__attribute__((format(printf, 5, 6))) void
+reader_warn_offset_raw(const Reader *reader, int offset, const char *dbg_file,
+                       int dbg_line, const char *fmt, ...);
 
 #define range_error(range, fmt, ...)                                           \
   range_error_raw((range), __FILE__, __LINE__, (fmt), ##__VA_ARGS__)

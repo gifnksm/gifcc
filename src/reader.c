@@ -183,6 +183,15 @@ reader_error_offset_raw(const Reader *reader, int offset, const char *dbg_file,
                     dbg_file, dbg_line, fmt, ap);
 }
 
+__attribute__((format(printf, 5, 6))) void
+reader_warn_offset_raw(const Reader *reader, int offset, const char *dbg_file,
+                       int dbg_line, const char *fmt, ...) {
+  va_list ap;
+  va_start(ap, fmt);
+  range_warn_raw_v((Range){.reader = reader, .start = offset, .len = 1},
+                   dbg_file, dbg_line, fmt, ap);
+}
+
 noreturn __attribute__((format(printf, 4, 5))) void
 range_error_raw(Range range, const char *dbg_file, int dbg_line,
                 const char *fmt, ...) {

@@ -132,11 +132,31 @@ void map_put(Map *map, char *key, void *val) {
 
 void *map_get(Map *map, char *key) {
   for (int i = map->keys->len - 1; i >= 0; i--) {
-    if (strcmp(map->keys->data[i], key) == 0) {
+    const char *map_key = map->keys->data[i];
+    if (map_key == NULL) {
+      continue;
+    }
+    if (strcmp(map_key, key) == 0) {
       return map->vals->data[i];
     }
   }
   return NULL;
+}
+
+bool map_remove(Map *map, char *key) {
+  bool removed = false;
+  for (int i = 0; i < map_size(map); i++) {
+    const char *map_key = map->keys->data[i];
+    if (map_key == NULL) {
+      continue;
+    }
+    if (strcmp(map_key, key) == 0) {
+      map->keys->data[i] = NULL;
+      map->vals->data[i] = NULL;
+      removed = true;
+    }
+  }
+  return removed;
 }
 
 String *new_string(void) {
