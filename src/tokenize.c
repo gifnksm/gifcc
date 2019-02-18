@@ -1,6 +1,7 @@
 #include "gifcc.h"
 #include <assert.h>
 #include <ctype.h>
+#include <libgen.h>
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stdlib.h>
@@ -53,7 +54,10 @@ static Token *new_token_num(Number val, Range range);
 static Token *new_token_ident(char *name, Range range);
 static Token *new_token_str(char *str, Range range);
 static bool pp_directive(Reader *reader, Map *define_map);
-static void do_include(Reader *reader, const char *path, Range range);
+static void do_include(Reader *reader, int offset, const char *path,
+                       Range range, bool include_sourcedir);
+static bool try_include(Reader *reader, const char *base_path,
+                        const char *rel_path);
 static bool read_normal_token(Reader *reader, Map *define_map, Vector *tokens);
 static bool punctuator(Reader *reader, Vector *tokens);
 static bool identifier_or_keyword(Reader *reader, Map *define_map,
@@ -382,13 +386,31 @@ static bool pp_directive(Reader *reader, Map *define_map) {
       skip_space_or_comment(reader);
       reader_expect(reader, '\n');
 
-      do_include(reader, str_get_raw(str),
-                 range_from_reader(reader, start, end));
+      do_include(reader, start, str_get_raw(str),
+                 range_from_reader(reader, start, end), false);
 
       return true;
     }
 
-    reader_error_here(reader, "識別子がありません");
+    if (reader_consume(reader, '"')) {
+      String *str = new_string();
+      while ((reader_peek(reader) != '"') && (reader_peek(reader) != '\0')) {
+        char ch = reader_pop(reader);
+        str_push(str, ch);
+      }
+      str_push(str, '\0');
+      reader_expect(reader, '"');
+      int end = reader_get_offset(reader);
+
+      skip_space_or_comment(reader);
+      reader_expect(reader, '\n');
+
+      do_include(reader, start, str_get_raw(str),
+                 range_from_reader(reader, start, end), true);
+      return true;
+    }
+
+    reader_error_here(reader, "\"FILENAME\" または <FILENAME> がありません");
   }
 
   if (reader_consume_str(reader, "define")) {
@@ -457,15 +479,45 @@ static bool pp_directive(Reader *reader, Map *define_map) {
   return true;
 }
 
-static void do_include(Reader *reader, const char *path, Range range) {
+static void do_include(Reader *reader, int offset, const char *path,
+                       Range range, bool include_sourcedir) {
+  if (include_sourcedir) {
+    const char *sourcepath;
+    reader_get_position(reader, offset, &sourcepath, NULL, NULL);
+    char *sourcedir = strdup(sourcepath);
+    sourcedir = dirname(sourcedir);
+    if (try_include(reader, sourcedir, path)) {
+      return;
+    }
+  }
+
+  const char *DIRECTRIES[] = {
+      GIFCC_INCLUDE,
+      "/usr/local/include",
+      "/usr/include",
+      NULL,
+  };
+
+  for (int i = 0; DIRECTRIES[i] != NULL; i++) {
+    if (try_include(reader, DIRECTRIES[i], path)) {
+      return;
+    }
+  }
+
+  range_error(range, "ファイルが見つかりませんでした: %s", path);
+}
+
+static bool try_include(Reader *reader, const char *base_path,
+                        const char *rel_path) {
   char *abs_path = NULL;
-  alloc_printf(&abs_path, "%s/%s", GIFCC_INCLUDE, path);
+  alloc_printf(&abs_path, "%s/%s", base_path, rel_path);
 
   FILE *fp = fopen(abs_path, "r");
-  if (fp == NULL) {
-    range_error(range, "ファイルが開けませんでした: %s", abs_path);
+  if (fp != NULL) {
+    reader_add_file(reader, fp, rel_path);
+    return true;
   }
-  reader_add_file(reader, fp, path);
+  return false;
 }
 
 static bool read_normal_token(Reader *reader, Map *define_map, Vector *tokens) {

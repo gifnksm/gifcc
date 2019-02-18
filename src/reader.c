@@ -179,9 +179,15 @@ void reader_get_position(const Reader *reader, int offset,
       continue;
     }
 
-    *filename = fo->file->name;
-    *line = j + 1;
-    *column = offset - fo->global_offset + fo->file_offset - line_start + 1;
+    if (filename != NULL) {
+      *filename = fo->file->name;
+    }
+    if (line != NULL) {
+      *line = j + 1;
+    }
+    if (column != NULL) {
+      *column = offset - fo->global_offset + fo->file_offset - line_start + 1;
+    }
     return;
   }
   assert(false);
