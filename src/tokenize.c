@@ -21,6 +21,7 @@ typedef struct {
 } LongToken;
 
 typedef struct Cond {
+  bool once_fullfilled;
   bool fullfilled;
 } Cond;
 
@@ -61,7 +62,9 @@ static Token *new_token_str(char *str, Range range);
 static bool pp_directive(Reader *reader, Map *define_map,
                          Vector *pp_cond_stack);
 static bool pp_cond_fullfilled(Vector *pp_cond_stack);
+static bool pp_read_if_cond(Reader *reader, Map *define_map);
 static void pp_if(Vector *pp_cond_stack, bool fullfilled);
+static void pp_elif(Vector *pp_cond_stack, bool fullfilled, Range range);
 static void pp_else(Vector *pp_cond_stack, Range range);
 static void pp_endif(Vector *pp_cond_stack, Range range);
 static void do_include(Reader *reader, int offset, const char *path,
@@ -82,12 +85,18 @@ static bool string_literal(Reader *reader, Vector *tokens);
 static char c_char(Reader *reader);
 
 Tokenizer *new_tokenizer(Reader *reader) {
-  Tokenizer *tokenizer = malloc(sizeof(Tokenizer));
+  Tokenizer *tokenizer = NEW(Tokenizer);
   tokenizer->reader = reader;
   tokenizer->read_eof = false;
   tokenizer->define_map = new_map();
   tokenizer->tokens = new_vector();
   tokenizer->pp_cond_stack = new_vector();
+  return tokenizer;
+}
+
+static Tokenizer *tokenizer_from_tokens(Vector *tokens) {
+  Tokenizer *tokenizer = NEW(Tokenizer);
+  tokenizer->tokens = tokens;
   return tokenizer;
 }
 
@@ -408,11 +417,18 @@ static bool pp_directive(Reader *reader, Map *define_map,
   const char *directive_raw = str_get_raw(directive);
 
   if (strcmp(directive_raw, "if") == 0) {
-    reader_error_here(reader, "#ifは未サポートです");
+    bool fullfilled = pp_read_if_cond(reader, define_map);
+    reader_expect(reader, '\n');
+    pp_if(pp_cond_stack, fullfilled);
+    return true;
   }
 
   if (strcmp(directive_raw, "elif") == 0) {
-    reader_error_here(reader, "#ifは未サポートです");
+    bool fullfilled = pp_read_if_cond(reader, define_map);
+    int end = reader_get_offset(reader);
+    reader_expect(reader, '\n');
+    pp_elif(pp_cond_stack, fullfilled, range_from_reader(reader, start, end));
+    return true;
   }
 
   if (strcmp(directive_raw, "ifdef") == 0) {
@@ -581,6 +597,41 @@ static bool pp_cond_fullfilled(Vector *pp_cond_stack) {
   return true;
 }
 
+static bool pp_read_if_cond(Reader *reader, Map *define_map) {
+  Vector *tokens = new_vector();
+
+  // read (normal) tokens until next line break
+  while (true) {
+    skip_space_or_comment(reader);
+    char ch = reader_peek(reader);
+    if (ch == '\n' || ch == '\0') {
+      break;
+    }
+    if (!read_normal_token(reader, define_map, tokens)) {
+      reader_error_here(reader, "トークナイズできません: `%c`",
+                        reader_peek(reader));
+    }
+  }
+
+  int here = reader_get_offset(reader);
+  Token *eof_token = new_token(TK_EOF, range_from_reader(reader, here, here));
+  vec_push(tokens, eof_token);
+
+  Scope *scope = new_pp_scope();
+  Tokenizer *tokenizer = tokenizer_from_tokens(tokens);
+  Expr *expr = constant_expression(tokenizer, scope);
+  if (token_peek(tokenizer)->ty != TK_EOF) {
+    range_error(token_peek(tokenizer)->range, "改行がありません");
+  }
+  if (expr->ty != EX_NUM) {
+    range_error(expr->range, "定数式ではありません");
+  }
+
+  int val;
+  SET_NUMBER_VAL(val, &expr->num_val);
+  return val != 0;
+}
+
 static void pp_if(Vector *pp_cond_stack, bool fullfilled) {
   bool current_cond_fullfilled = true;
   if (vec_len(pp_cond_stack) > 0) {
@@ -590,7 +641,26 @@ static void pp_if(Vector *pp_cond_stack, bool fullfilled) {
 
   Cond *cond = NEW(Cond);
   cond->fullfilled = current_cond_fullfilled && fullfilled;
+  cond->once_fullfilled = fullfilled;
   vec_push(pp_cond_stack, cond);
+}
+
+static void pp_elif(Vector *pp_cond_stack, bool fullfilled, Range range) {
+  bool outer_cond_fullfilled = true;
+  if (vec_len(pp_cond_stack) > 1) {
+    Cond *outer_cond = vec_rget(pp_cond_stack, 1);
+    outer_cond_fullfilled = outer_cond->fullfilled;
+  }
+
+  if (vec_len(pp_cond_stack) <= 0) {
+    range_error(range, "#if, #ifdef, #ifndefがありません");
+  }
+  Cond *cond = vec_last(pp_cond_stack);
+  if (cond->once_fullfilled) {
+    fullfilled = false;
+  }
+  cond->fullfilled = outer_cond_fullfilled && fullfilled;
+  cond->once_fullfilled |= fullfilled;
 }
 
 static void pp_else(Vector *pp_cond_stack, Range range) {
@@ -603,7 +673,9 @@ static void pp_else(Vector *pp_cond_stack, Range range) {
     range_error(range, "#if, #ifdef, #ifndefがありません");
   }
   Cond *cond = vec_last(pp_cond_stack);
-  cond->fullfilled = outer_cond_fullfilled && !cond->fullfilled;
+  bool fullfilled = !cond->once_fullfilled;
+  cond->fullfilled = outer_cond_fullfilled && fullfilled;
+  cond->once_fullfilled |= fullfilled;
 }
 
 static void pp_endif(Vector *pp_cond_stack, Range range) {

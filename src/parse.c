@@ -159,7 +159,6 @@ static Expr *logical_or_expression(Tokenizer *tokenizer, Scope *scope);
 static Expr *conditional_expression(Tokenizer *tokenizer, Scope *scope);
 static Expr *assignment_expression(Tokenizer *tokenizer, Scope *scope);
 static Expr *expression(Tokenizer *tokenizer, Scope *scope);
-static Expr *constant_expression(Tokenizer *tokenizer, Scope *scope);
 
 // declaration
 static Vector *declaration(Tokenizer *tokenizer, Scope *scope);
@@ -278,6 +277,11 @@ static Scope *new_func_scope(Scope *global, FuncCtxt *fcx) {
 
 static Scope *new_inner_scope(Scope *outer) {
   return new_scope(outer->global_ctxt, outer->func_ctxt, outer);
+}
+
+Scope *new_pp_scope(void) {
+  GlobalCtxt *gcx = new_global_ctxt();
+  return new_global_scope(gcx);
 }
 
 static Member *new_member(char *name, Type *type, int offset, Range range) {
@@ -1890,7 +1894,7 @@ static Expr *expression(Tokenizer *tokenizer, Scope *scope) {
   return binary_expression(tokenizer, scope, OPS, OPS, assignment_expression);
 }
 
-static Expr *constant_expression(Tokenizer *tokenizer, Scope *scope) {
+Expr *constant_expression(Tokenizer *tokenizer, Scope *scope) {
   return conditional_expression(tokenizer, scope);
 }
 

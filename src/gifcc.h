@@ -350,6 +350,8 @@ typedef struct TranslationUnit {
   Vector *str_list;
 } TranslationUnit;
 
+typedef struct Scope Scope;
+
 #define error(fmt, ...) error_raw(__FILE__, __LINE__, (fmt), ##__VA_ARGS__)
 noreturn __attribute__((format(printf, 3, 4))) void
 error_raw(const char *dbg_file, int dbg_line, const char *fmt, ...);
@@ -399,6 +401,7 @@ alloc_printf(char **strp, const char *fmt, ...);
 int alloc_printf_v(char **strp, const char *fmt, va_list ap);
 void runtest(void);
 
+// reader.c
 Reader *new_reader(void);
 void reader_add_file(Reader *reader, FILE *fp, const char *filename);
 char reader_peek(const Reader *reader);
@@ -447,6 +450,7 @@ __attribute__((format(printf, 4, 5))) void range_warn_raw(Range range,
 void range_warn_raw_v(Range range, const char *dbg_file, int dbg_line,
                       const char *fmt, va_list ap);
 
+// tokenize.c
 Tokenizer *new_tokenizer(Reader *reader);
 void token_succ(Tokenizer *tokenizer);
 Token *token_peek(Tokenizer *tokenizer);
@@ -458,13 +462,19 @@ Token *token_expect(Tokenizer *tokenizer, int ty);
 const char *token_kind_to_str(int kind);
 const Reader *token_get_reader(const Tokenizer *tokenizer);
 
+// parse.c
+Scope *new_pp_scope(void);
 bool is_signed_int_type(Type *ty, Range range);
 int get_val_size(Type *ty, Range range);
 int get_val_align(Type *ty, Range range);
+Expr *constant_expression(Tokenizer *tokenizer, Scope *scope);
 TranslationUnit *parse(Reader *reader);
 
+// codegen.c
 char *make_label(const char *s);
 void gen(TranslationUnit *tunit);
+
+// inline functions
 
 static inline Range range_from_reader(const Reader *reader, int start,
                                       int end) {
