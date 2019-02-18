@@ -21,7 +21,6 @@ typedef struct {
 } LongToken;
 
 typedef struct Cond {
-  Range start;
   bool fullfilled;
 } Cond;
 
@@ -61,6 +60,10 @@ static Token *new_token_ident(char *name, Range range);
 static Token *new_token_str(char *str, Range range);
 static bool pp_directive(Reader *reader, Map *define_map,
                          Vector *pp_cond_stack);
+static bool pp_cond_fullfilled(Vector *pp_cond_stack);
+static void pp_if(Vector *pp_cond_stack, bool fullfilled);
+static void pp_else(Vector *pp_cond_stack, Range range);
+static void pp_endif(Vector *pp_cond_stack, Range range);
 static void do_include(Reader *reader, int offset, const char *path,
                        Range range, bool include_sourcedir);
 static bool try_include(Reader *reader, const char *base_path,
@@ -322,13 +325,9 @@ static bool read_token(Tokenizer *tokenizer) {
       continue;
     }
 
-    Vector *tokens = tokenizer->tokens;
-    if (vec_len(tokenizer->pp_cond_stack) > 0) {
-      Cond *cond = vec_last(tokenizer->pp_cond_stack);
-      if (!cond->fullfilled) {
-        tokens = new_vector();
-      }
-    }
+    Vector *tokens = pp_cond_fullfilled(tokenizer->pp_cond_stack)
+                         ? tokenizer->tokens
+                         : new_vector();
 
     if (!read_normal_token(tokenizer->reader, tokenizer->define_map, tokens)) {
       reader_error_here(tokenizer->reader, "トークナイズできません: `%c`",
@@ -398,17 +397,6 @@ static bool pp_directive(Reader *reader, Map *define_map,
   }
   skip_space_or_comment(reader);
 
-  bool outer_cond_fullfilled = true;
-  if (vec_len(pp_cond_stack) > 1) {
-    Cond *outer_cond = vec_rget(pp_cond_stack, 1);
-    outer_cond_fullfilled = outer_cond->fullfilled;
-  }
-  bool current_cond_fullfilled = true;
-  if (vec_len(pp_cond_stack) > 0) {
-    Cond *current_cond = vec_last(pp_cond_stack);
-    current_cond_fullfilled = current_cond->fullfilled;
-  }
-
   String *directive = read_identifier(reader);
   if (directive == NULL) {
     skip_to_eol(reader);
@@ -433,14 +421,11 @@ static bool pp_directive(Reader *reader, Map *define_map,
     if (ident == NULL) {
       reader_error_here(reader, "識別子がありません");
     }
-    int end = reader_get_offset(reader);
     skip_space_or_comment(reader);
     reader_expect(reader, '\n');
+
     bool defined = map_get(define_map, str_get_raw(ident)) != NULL;
-    Cond *cond = NEW(Cond);
-    cond->start = range_from_reader(reader, start, end);
-    cond->fullfilled = current_cond_fullfilled && defined;
-    vec_push(pp_cond_stack, cond);
+    pp_if(pp_cond_stack, defined);
     return true;
   }
 
@@ -450,14 +435,11 @@ static bool pp_directive(Reader *reader, Map *define_map,
     if (ident == NULL) {
       reader_error_here(reader, "識別子がありません");
     }
-    int end = reader_get_offset(reader);
     skip_space_or_comment(reader);
     reader_expect(reader, '\n');
+
     bool defined = map_get(define_map, str_get_raw(ident)) != NULL;
-    Cond *cond = NEW(Cond);
-    cond->start = range_from_reader(reader, start, end);
-    cond->fullfilled = current_cond_fullfilled && !defined;
-    vec_push(pp_cond_stack, cond);
+    pp_if(pp_cond_stack, !defined);
     return true;
   }
 
@@ -465,12 +447,8 @@ static bool pp_directive(Reader *reader, Map *define_map,
     int end = reader_get_offset(reader);
     skip_space_or_comment(reader);
     reader_expect(reader, '\n');
-    if (vec_len(pp_cond_stack) <= 0) {
-      range_error(range_from_reader(reader, start, end),
-                  "#if, #ifdef, #ifndefがありません");
-    }
-    Cond *cond = vec_last(pp_cond_stack);
-    cond->fullfilled = outer_cond_fullfilled && !cond->fullfilled;
+
+    pp_else(pp_cond_stack, range_from_reader(reader, start, end));
     return true;
   }
 
@@ -478,20 +456,14 @@ static bool pp_directive(Reader *reader, Map *define_map,
     int end = reader_get_offset(reader);
     skip_space_or_comment(reader);
     reader_expect(reader, '\n');
-    if (vec_len(pp_cond_stack) <= 0) {
-      range_error(range_from_reader(reader, start, end),
-                  "#if, #ifdef, #ifndefがありません");
-    }
-    vec_pop(pp_cond_stack);
+
+    pp_endif(pp_cond_stack, range_from_reader(reader, start, end));
     return true;
   }
 
-  if (vec_len(pp_cond_stack) > 0) {
-    Cond *cond = vec_last(pp_cond_stack);
-    if (!cond->fullfilled) {
-      skip_to_eol(reader);
-      return true;
-    }
+  if (!pp_cond_fullfilled(pp_cond_stack)) {
+    skip_to_eol(reader);
+    return true;
   }
 
   if (strcmp(directive_raw, "include") == 0) {
@@ -599,6 +571,46 @@ static bool pp_directive(Reader *reader, Map *define_map,
   range_warn(range_from_reader(reader, start, end), "不明なディレクティブです");
 
   return true;
+}
+
+static bool pp_cond_fullfilled(Vector *pp_cond_stack) {
+  if (vec_len(pp_cond_stack) > 0) {
+    Cond *cond = vec_last(pp_cond_stack);
+    return cond->fullfilled;
+  }
+  return true;
+}
+
+static void pp_if(Vector *pp_cond_stack, bool fullfilled) {
+  bool current_cond_fullfilled = true;
+  if (vec_len(pp_cond_stack) > 0) {
+    Cond *current_cond = vec_last(pp_cond_stack);
+    current_cond_fullfilled = current_cond->fullfilled;
+  }
+
+  Cond *cond = NEW(Cond);
+  cond->fullfilled = current_cond_fullfilled && fullfilled;
+  vec_push(pp_cond_stack, cond);
+}
+
+static void pp_else(Vector *pp_cond_stack, Range range) {
+  bool outer_cond_fullfilled = true;
+  if (vec_len(pp_cond_stack) > 1) {
+    Cond *outer_cond = vec_rget(pp_cond_stack, 1);
+    outer_cond_fullfilled = outer_cond->fullfilled;
+  }
+  if (vec_len(pp_cond_stack) <= 0) {
+    range_error(range, "#if, #ifdef, #ifndefがありません");
+  }
+  Cond *cond = vec_last(pp_cond_stack);
+  cond->fullfilled = outer_cond_fullfilled && !cond->fullfilled;
+}
+
+static void pp_endif(Vector *pp_cond_stack, Range range) {
+  if (vec_len(pp_cond_stack) <= 0) {
+    range_error(range, "#if, #ifdef, #ifndefがありません");
+  }
+  vec_pop(pp_cond_stack);
 }
 
 static void do_include(Reader *reader, int offset, const char *path,
