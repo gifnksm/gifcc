@@ -261,10 +261,10 @@ static void print_message_raw(message_t msg, Range range, const char *dbg_file,
 
   switch (msg) {
   case MESSAGE_ERROR:
-    fprintf(stderr, "warning: ");
+    fprintf(stderr, "error: ");
     break;
   case MESSAGE_WARN:
-    fprintf(stderr, "error: ");
+    fprintf(stderr, "warning: ");
     break;
   case MESSAGE_NOTE:
     fprintf(stderr, "note: ");
