@@ -12,12 +12,18 @@ struct Tokenizer {
   Vector *tokens;
   bool read_eof;
   Map *define_map;
+  Vector *pp_cond_stack;
 };
 
 typedef struct {
   char *str;
   int kind;
 } LongToken;
+
+typedef struct Cond {
+  Range start;
+  bool fullfilled;
+} Cond;
 
 static const LongToken LONG_IDENT_TOKENS[] = {
     {"void", TK_VOID},         {"int", TK_INT},
@@ -53,7 +59,8 @@ static Token *token_clone(Token *token);
 static Token *new_token_num(Number val, Range range);
 static Token *new_token_ident(char *name, Range range);
 static Token *new_token_str(char *str, Range range);
-static bool pp_directive(Reader *reader, Map *define_map);
+static bool pp_directive(Reader *reader, Map *define_map,
+                         Vector *pp_cond_stack);
 static void do_include(Reader *reader, int offset, const char *path,
                        Range range, bool include_sourcedir);
 static bool try_include(Reader *reader, const char *base_path,
@@ -77,6 +84,7 @@ Tokenizer *new_tokenizer(Reader *reader) {
   tokenizer->read_eof = false;
   tokenizer->define_map = new_map();
   tokenizer->tokens = new_vector();
+  tokenizer->pp_cond_stack = new_vector();
   return tokenizer;
 }
 
@@ -242,6 +250,17 @@ static bool skip_space_or_comment(Reader *reader) {
   return skipped;
 }
 
+static void skip_to_eol(Reader *reader) {
+  while (true) {
+    char ch = reader_peek(reader);
+    if (ch == '\n' || ch == '\0') {
+      break;
+    }
+    reader_succ(reader);
+  }
+  return;
+}
+
 static String *read_identifier(Reader *reader) {
   char ch = reader_peek(reader);
   if (!is_ident_head(ch)) {
@@ -298,12 +317,20 @@ static bool read_token(Tokenizer *tokenizer) {
       continue;
     }
 
-    if (pp_directive(tokenizer->reader, tokenizer->define_map)) {
+    if (pp_directive(tokenizer->reader, tokenizer->define_map,
+                     tokenizer->pp_cond_stack)) {
       continue;
     }
 
-    if (!read_normal_token(tokenizer->reader, tokenizer->define_map,
-                           tokenizer->tokens)) {
+    Vector *tokens = tokenizer->tokens;
+    if (vec_len(tokenizer->pp_cond_stack) > 0) {
+      Cond *cond = vec_last(tokenizer->pp_cond_stack);
+      if (!cond->fullfilled) {
+        tokens = new_vector();
+      }
+    }
+
+    if (!read_normal_token(tokenizer->reader, tokenizer->define_map, tokens)) {
       reader_error_here(tokenizer->reader, "トークナイズできません: `%c`",
                         reader_peek(tokenizer->reader));
     }
@@ -363,14 +390,100 @@ static Token *new_token_str(char *str, Range range) {
   return token;
 }
 
-static bool pp_directive(Reader *reader, Map *define_map) {
+static bool pp_directive(Reader *reader, Map *define_map,
+                         Vector *pp_cond_stack) {
   int start = reader_get_offset(reader);
   if (!reader_consume(reader, '#')) {
     return false;
   }
   skip_space_or_comment(reader);
 
-  if (reader_consume_str(reader, "include")) {
+  String *directive = read_identifier(reader);
+  if (directive == NULL) {
+    skip_to_eol(reader);
+    int end = reader_get_offset(reader);
+    reader_expect(reader, '\n');
+    range_warn(range_from_reader(reader, start, end),
+               "不明なディレクティブです");
+  }
+  const char *directive_raw = str_get_raw(directive);
+
+  if (strcmp(directive_raw, "if") == 0) {
+    reader_error_here(reader, "#ifは未サポートです");
+  }
+
+  if (strcmp(directive_raw, "elif") == 0) {
+    reader_error_here(reader, "#ifは未サポートです");
+  }
+
+  if (strcmp(directive_raw, "ifdef") == 0) {
+    skip_space_or_comment(reader);
+    String *ident = read_identifier(reader);
+    if (ident == NULL) {
+      reader_error_here(reader, "識別子がありません");
+    }
+    int end = reader_get_offset(reader);
+    skip_space_or_comment(reader);
+    reader_expect(reader, '\n');
+    bool defined = map_get(define_map, str_get_raw(ident)) != NULL;
+    Cond *cond = NEW(Cond);
+    cond->start = range_from_reader(reader, start, end);
+    cond->fullfilled = defined;
+    vec_push(pp_cond_stack, cond);
+    return true;
+  }
+
+  if (strcmp(directive_raw, "ifndef") == 0) {
+    skip_space_or_comment(reader);
+    String *ident = read_identifier(reader);
+    if (ident == NULL) {
+      reader_error_here(reader, "識別子がありません");
+    }
+    int end = reader_get_offset(reader);
+    skip_space_or_comment(reader);
+    reader_expect(reader, '\n');
+    bool defined = map_get(define_map, str_get_raw(ident)) != NULL;
+    Cond *cond = NEW(Cond);
+    cond->start = range_from_reader(reader, start, end);
+    cond->fullfilled = !defined;
+    vec_push(pp_cond_stack, cond);
+    return true;
+  }
+
+  if (strcmp(directive_raw, "else") == 0) {
+    int end = reader_get_offset(reader);
+    skip_space_or_comment(reader);
+    reader_expect(reader, '\n');
+    if (vec_len(pp_cond_stack) <= 0) {
+      range_error(range_from_reader(reader, start, end),
+                  "#if, #ifdef, #ifndefがありません");
+    }
+    Cond *cond = vec_last(pp_cond_stack);
+    cond->fullfilled = !cond->fullfilled;
+    return true;
+  }
+
+  if (strcmp(directive_raw, "endif") == 0) {
+    int end = reader_get_offset(reader);
+    skip_space_or_comment(reader);
+    reader_expect(reader, '\n');
+    if (vec_len(pp_cond_stack) <= 0) {
+      range_error(range_from_reader(reader, start, end),
+                  "#if, #ifdef, #ifndefがありません");
+    }
+    vec_pop(pp_cond_stack);
+    return true;
+  }
+
+  if (vec_len(pp_cond_stack) > 0) {
+    Cond *cond = vec_last(pp_cond_stack);
+    if (!cond->fullfilled) {
+      skip_to_eol(reader);
+      return true;
+    }
+  }
+
+  if (strcmp(directive_raw, "include") == 0) {
     skip_space_or_comment(reader);
 
     if (reader_consume(reader, '<')) {
@@ -413,7 +526,7 @@ static bool pp_directive(Reader *reader, Map *define_map) {
     reader_error_here(reader, "\"FILENAME\" または <FILENAME> がありません");
   }
 
-  if (reader_consume_str(reader, "define")) {
+  if (strcmp(directive_raw, "define") == 0) {
     skip_space_or_comment(reader);
     String *ident = read_identifier(reader);
     if (ident == NULL) {
@@ -438,7 +551,7 @@ static bool pp_directive(Reader *reader, Map *define_map) {
     return true;
   }
 
-  if (reader_consume_str(reader, "undef")) {
+  if (strcmp(directive_raw, "undef") == 0) {
     skip_space_or_comment(reader);
     String *ident = read_identifier(reader);
     if (ident == NULL) {
@@ -454,7 +567,7 @@ static bool pp_directive(Reader *reader, Map *define_map) {
     return true;
   }
 
-  if (reader_consume_str(reader, "error")) {
+  if (strcmp(directive_raw, "error") == 0) {
     skip_space_or_comment(reader);
 
     String *str = new_string();
@@ -469,9 +582,7 @@ static bool pp_directive(Reader *reader, Map *define_map) {
                 str_get_raw(str));
   }
 
-  while ((reader_peek(reader) != '\n') && (reader_peek(reader) != '\0')) {
-    reader_succ(reader);
-  }
+  skip_to_eol(reader);
   int end = reader_get_offset(reader);
   reader_expect(reader, '\n');
   range_warn(range_from_reader(reader, start, end), "不明なディレクティブです");
