@@ -398,6 +398,17 @@ static bool pp_directive(Reader *reader, Map *define_map,
   }
   skip_space_or_comment(reader);
 
+  bool outer_cond_fullfilled = true;
+  if (vec_len(pp_cond_stack) > 1) {
+    Cond *outer_cond = vec_rget(pp_cond_stack, 1);
+    outer_cond_fullfilled = outer_cond->fullfilled;
+  }
+  bool current_cond_fullfilled = true;
+  if (vec_len(pp_cond_stack) > 0) {
+    Cond *current_cond = vec_last(pp_cond_stack);
+    current_cond_fullfilled = current_cond->fullfilled;
+  }
+
   String *directive = read_identifier(reader);
   if (directive == NULL) {
     skip_to_eol(reader);
@@ -428,7 +439,7 @@ static bool pp_directive(Reader *reader, Map *define_map,
     bool defined = map_get(define_map, str_get_raw(ident)) != NULL;
     Cond *cond = NEW(Cond);
     cond->start = range_from_reader(reader, start, end);
-    cond->fullfilled = defined;
+    cond->fullfilled = current_cond_fullfilled && defined;
     vec_push(pp_cond_stack, cond);
     return true;
   }
@@ -445,7 +456,7 @@ static bool pp_directive(Reader *reader, Map *define_map,
     bool defined = map_get(define_map, str_get_raw(ident)) != NULL;
     Cond *cond = NEW(Cond);
     cond->start = range_from_reader(reader, start, end);
-    cond->fullfilled = !defined;
+    cond->fullfilled = current_cond_fullfilled && !defined;
     vec_push(pp_cond_stack, cond);
     return true;
   }
@@ -459,7 +470,7 @@ static bool pp_directive(Reader *reader, Map *define_map,
                   "#if, #ifdef, #ifndefがありません");
     }
     Cond *cond = vec_last(pp_cond_stack);
-    cond->fullfilled = !cond->fullfilled;
+    cond->fullfilled = outer_cond_fullfilled && !cond->fullfilled;
     return true;
   }
 
