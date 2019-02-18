@@ -1411,10 +1411,58 @@ static Expr *new_expr_binop(Scope *scope, int op, Expr *lhs, Expr *rhs,
       return lhs;
     }
     break;
-  case EX_LOGAND:
-  case EX_LOGOR:
+  case EX_LOGAND: {
+    bool lhs_is_true = false;
+    if (lhs->ty == EX_NUM) {
+      int lval;
+      SET_NUMBER_VAL(lval, &lhs->num_val);
+      if (lval == 0) {
+        return new_expr_num(new_number_int(0),
+                            range_join(lhs->range, rhs->range));
+      }
+      lhs_is_true = true;
+    }
+    if (rhs->ty == EX_NUM) {
+      int rval;
+      SET_NUMBER_VAL(rval, &rhs->num_val);
+      if (rval == 0) {
+        return new_expr_num(new_number_int(0),
+                            range_join(lhs->range, rhs->range));
+      }
+      if (lhs_is_true) {
+        return new_expr_num(new_number_int(1),
+                            range_join(lhs->range, rhs->range));
+      }
+    }
     val_type = new_type(TY_S_INT, false);
     break;
+  }
+  case EX_LOGOR: {
+    bool lhs_is_false = false;
+    if (lhs->ty == EX_NUM) {
+      int lval;
+      SET_NUMBER_VAL(lval, &lhs->num_val);
+      if (lval != 0) {
+        return new_expr_num(new_number_int(1),
+                            range_join(lhs->range, rhs->range));
+      }
+      lhs_is_false = true;
+    }
+    if (rhs->ty == EX_NUM) {
+      int rval;
+      SET_NUMBER_VAL(rval, &rhs->num_val);
+      if (rval != 0) {
+        return new_expr_num(new_number_int(1),
+                            range_join(lhs->range, rhs->range));
+      }
+      if (lhs_is_false) {
+        return new_expr_num(new_number_int(0),
+                            range_join(lhs->range, rhs->range));
+      }
+    }
+    val_type = new_type(TY_S_INT, false);
+    break;
+  }
   case '=':
     rhs = new_expr_cast(scope, lhs->val_type, rhs, rhs->range);
     val_type = lhs->val_type;
