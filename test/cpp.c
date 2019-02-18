@@ -40,6 +40,20 @@ static int n2 = 300;
 #error "never come"
 #endif
 
+#define FOO
+#if defined(FOO)
+static int n3 = 400;
+#else
+#error "FOO must be defined"
+#endif
+
+#undef FOO
+#if !defined(FOO)
+static int n4 = 500;
+#else
+#error "FOO must not be defined"
+#endif
+
 static void check_int(int a, int b) {
   if (a != b) {
     printf("FAILED %d != %d\n", a, b);
@@ -51,6 +65,8 @@ int main(void) {
   check_int(100, n0);
   check_int(200, n1);
   check_int(300, n2);
+  check_int(400, n3);
+  check_int(500, n4);
 
   puts("OK");
   return 0;

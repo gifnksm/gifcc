@@ -600,21 +600,96 @@ static bool pp_cond_fullfilled(Vector *pp_cond_stack) {
 static bool pp_read_if_cond(Reader *reader, Map *define_map) {
   Vector *tokens = new_vector();
 
+  enum { NORMAL, DEFINE, OPEN_PAREN, IDENT_IN_PAREN } state = NORMAL;
+  Range def_start = {};
+
   // read (normal) tokens until next line break
   while (true) {
     skip_space_or_comment(reader);
     char ch = reader_peek(reader);
     if (ch == '\n' || ch == '\0') {
+      int here_offset = reader_get_offset(reader);
+      Range here = range_from_reader(reader, here_offset, here_offset);
+      switch (state) {
+      case NORMAL:
+        break;
+      case DEFINE:
+      case OPEN_PAREN:
+        range_error(here, "識別子がありません");
+      case IDENT_IN_PAREN:
+        range_error(here, "`)`がありません");
+      }
       break;
     }
-    if (!read_normal_token(reader, define_map, tokens)) {
+
+    // passing NULL prevents macro expansion
+    if (!read_normal_token(reader, state == NORMAL ? define_map : NULL,
+                           tokens)) {
       reader_error_here(reader, "トークナイズできません: `%c`",
                         reader_peek(reader));
     }
+    if (vec_len(tokens) == 0) {
+      continue;
+    }
+
+    Token *token = vec_last(tokens);
+    switch (state) {
+    case NORMAL:
+      if (token->ty == TK_IDENT && strcmp(token->name, "defined") == 0) {
+        state = DEFINE;
+        def_start = token->range;
+        vec_pop(tokens);
+      }
+      break;
+    case DEFINE: {
+      if (token->ty == '(') {
+        state = OPEN_PAREN;
+        vec_pop(tokens);
+      } else {
+        // Assume Only idents and keywords have name
+        if (token->name == NULL) {
+          range_error(token->range, "識別子がありません");
+        }
+        bool defined = map_get(define_map, token->name);
+        Token *num_token =
+            new_token_num((Number){.type = TY_S_INT, .s_int_val = defined},
+                          range_join(def_start, token->range));
+        vec_pop(tokens);
+        vec_push(tokens, num_token);
+        state = NORMAL;
+      }
+      break;
+    }
+    case OPEN_PAREN: {
+      // Assume Only idents and keywords have name
+      if (token->name == NULL) {
+        range_error(token->range, "識別子がありません");
+      }
+      bool defined = map_get(define_map, token->name);
+      Token *num_token =
+          new_token_num((Number){.type = TY_S_INT, .s_int_val = defined},
+                        range_join(def_start, token->range));
+      vec_pop(tokens);
+      vec_push(tokens, num_token);
+      state = IDENT_IN_PAREN;
+      break;
+    }
+    case IDENT_IN_PAREN: {
+      // Assume Only idents and keywords have name
+      if (token->ty != ')') {
+        range_error(token->range, "`)`がありません");
+      }
+      vec_pop(tokens);
+      state = NORMAL;
+      break;
+    }
+    }
   }
 
-  int here = reader_get_offset(reader);
-  Token *eof_token = new_token(TK_EOF, range_from_reader(reader, here, here));
+  int here_offset = reader_get_offset(reader);
+  Range here = range_from_reader(reader, here_offset, here_offset);
+
+  Token *eof_token = new_token(TK_EOF, here);
   vec_push(tokens, eof_token);
 
   Scope *scope = new_pp_scope();
@@ -624,7 +699,7 @@ static bool pp_read_if_cond(Reader *reader, Map *define_map) {
     range_error(token_peek(tokenizer)->range, "改行がありません");
   }
   if (expr->ty != EX_NUM) {
-    range_error(expr->range, "定数式ではありません");
+    range_error(expr->range, "定数式ではありません: %d", expr->ty);
   }
 
   int val;
@@ -771,7 +846,7 @@ static bool identifier_or_keyword(Reader *reader, Map *define_map,
   Range range = range_from_reader(reader, start, end);
   char *raw_str = str_get_raw(str);
 
-  Vector *defined = map_get(define_map, raw_str);
+  Vector *defined = define_map != NULL ? map_get(define_map, raw_str) : NULL;
   if (defined != NULL) {
     for (int i = 0; i < vec_len(defined); i++) {
       Token *pptoken = vec_get(defined, i);
