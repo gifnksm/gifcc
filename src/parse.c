@@ -1124,13 +1124,16 @@ static Expr *new_expr_unary(Scope *scope, int ty, Expr *operand, Range range) {
   }
 
   Type *val_type;
-  if (ty == '&') {
+  switch (ty) {
+  case '&': {
     if (is_array_type(operand->val_type)) {
       val_type = new_type_ptr(operand->val_type->ptrof, false);
     } else {
       val_type = new_type_ptr(operand->val_type, false);
     }
-  } else if (ty == '*') {
+    break;
+  }
+  case '*': {
     if (operand->val_type->ty != TY_PTR) {
       range_error(range, "ポインタ型でない値に対するデリファレンスです");
     }
@@ -1138,9 +1141,22 @@ static Expr *new_expr_unary(Scope *scope, int ty, Expr *operand, Range range) {
       return operand;
     }
     val_type = operand->val_type->ptrof;
-  } else {
-    val_type = operand->val_type;
+    break;
   }
+  case '!': {
+    return new_expr_binop(
+        scope, EX_EQEQ, operand,
+        new_expr_cast(scope, operand->val_type,
+                      new_expr_num(new_number_int(0), operand->range),
+                      operand->range),
+        operand->range);
+  }
+  default: {
+    val_type = operand->val_type;
+    break;
+  }
+  }
+
   Expr *expr = new_expr(ty, val_type, range);
   expr->lhs = NULL;
   expr->rhs = operand;
@@ -1157,34 +1173,52 @@ static Expr *new_expr_unary(Scope *scope, int ty, Expr *operand, Range range) {
 #define BINOP(op, num, r, a, b)                                                \
   switch ((op)) {                                                              \
   case '*':                                                                    \
-    *(r) = (a) * (b);                                                          \
+    *(r) = ((a) * (b));                                                        \
     return (num);                                                              \
   case '/':                                                                    \
-    *(r) = (a) / (b);                                                          \
+    *(r) = ((a) / (b));                                                        \
     return (num);                                                              \
   case '%':                                                                    \
-    *(r) = (a) % (b);                                                          \
+    *(r) = ((a) % (b));                                                        \
     return (num);                                                              \
   case '+':                                                                    \
-    *(r) = (a) + (b);                                                          \
+    *(r) = ((a) + (b));                                                        \
     return (num);                                                              \
   case '-':                                                                    \
-    *(r) = (a) - (b);                                                          \
+    *(r) = ((a) - (b));                                                        \
     return (num);                                                              \
   case '&':                                                                    \
-    *(r) = (a) & (b);                                                          \
+    *(r) = ((a) & (b));                                                        \
     return (num);                                                              \
   case '^':                                                                    \
-    *(r) = (a) ^ (b);                                                          \
+    *(r) = ((a) ^ (b));                                                        \
     return (num);                                                              \
   case '|':                                                                    \
-    *(r) = (a) | (b);                                                          \
+    *(r) = ((a) | (b));                                                        \
     return (num);                                                              \
   case EX_LSHIFT:                                                              \
-    *(r) = (a) << (b);                                                         \
+    *(r) = ((a) << (b));                                                       \
     return (num);                                                              \
   case EX_RSHIFT:                                                              \
-    *(r) = (a) >> (b);                                                         \
+    *(r) = ((a) >> (b));                                                       \
+    return (num);                                                              \
+  case '<':                                                                    \
+    *(r) = ((a) < (b));                                                        \
+    return (num);                                                              \
+  case '>':                                                                    \
+    *(r) = ((a) > (b));                                                        \
+    return (num);                                                              \
+  case EX_LTEQ:                                                                \
+    *(r) = ((a) <= (b));                                                       \
+    return (num);                                                              \
+  case EX_GTEQ:                                                                \
+    *(r) = ((a) >= (b));                                                       \
+    return (num);                                                              \
+  case EX_EQEQ:                                                                \
+    *(r) = ((a) == (b));                                                       \
+    return (num);                                                              \
+  case EX_NOTEQ:                                                               \
+    *(r) = ((a) != (b));                                                       \
     return (num);                                                              \
   }
 
@@ -1394,6 +1428,12 @@ static Expr *new_expr_binop(Scope *scope, int op, Expr *lhs, Expr *rhs,
   case EX_EQEQ:
   case EX_NOTEQ:
     val_type = arith_converted(scope, &lhs, &rhs);
+    if (lhs->ty == EX_NUM && rhs->ty == EX_NUM) {
+      lhs->num_val =
+          eval_binop(op, val_type->ty, lhs->num_val, rhs->num_val, range);
+      lhs->range = range;
+      return new_expr_cast(scope, new_type(TY_S_INT, false), lhs, range);
+    }
     val_type = new_type(TY_S_INT, false);
     break;
   // and
