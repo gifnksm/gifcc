@@ -1650,6 +1650,15 @@ static Expr *new_expr_cond(Scope *scope, Expr *cond, Expr *then_expr,
     range_error(range, "条件演算子の両辺の型が異なります: %d, %d",
                 then_expr->val_type->ty, else_expr->val_type->ty);
   }
+
+  if (cond->ty == EX_NUM) {
+    int i = 0;
+    SET_NUMBER_VAL(i, &cond->num_val);
+    if (i != 0) {
+      return then_expr;
+    }
+    return else_expr;
+  }
   Expr *expr = new_expr(EX_COND, then_expr->val_type, range);
   expr->cond = cond;
   expr->lhs = then_expr;
