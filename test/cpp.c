@@ -54,6 +54,13 @@ static int n4 = 500;
 #error "FOO must not be defined"
 #endif
 
+// comment                                      \
+this is also commen
+// clang-format off
+static int n5 = 6\
+00;
+// clang-format on
+
 static void check_int(int a, int b) {
   if (a != b) {
     printf("FAILED %d != %d\n", a, b);
@@ -67,6 +74,7 @@ int main(void) {
   check_int(300, n2);
   check_int(400, n3);
   check_int(500, n4);
+  check_int(600, n5);
 
   puts("OK");
   return 0;

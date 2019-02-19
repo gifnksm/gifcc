@@ -108,11 +108,22 @@ static char reader_peek_ahead(const Reader *reader, int n) {
 void reader_succ(Reader *reader) {
   File *file = peek_file(reader);
   assert(file != NULL);
-  reader->offset++;
-  file->offset++;
-  if (file->offset >= file->size) {
-    vec_pop(reader->file_stack);
-    switch_file(reader, peek_file(reader));
+  while (true) {
+    reader->offset++;
+    file->offset++;
+    if (file->offset >= file->size) {
+      vec_pop(reader->file_stack);
+      switch_file(reader, peek_file(reader));
+      return;
+    }
+
+    // Ignore "\\\n"
+    if (file->source[file->offset] != '\\' ||
+        file->source[file->offset + 1] != '\n') {
+      break;
+    }
+    reader->offset++;
+    file->offset++;
   }
 }
 
