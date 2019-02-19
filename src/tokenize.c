@@ -878,9 +878,9 @@ static bool try_include(Reader *reader, const char *base_path,
 }
 
 static bool read_normal_token(Reader *reader, Map *define_map, Vector *tokens) {
-  return punctuator(reader, tokens) ||
-         identifier_or_keyword(reader, define_map, tokens) ||
-         constant(reader, tokens) || string_literal(reader, tokens);
+  return punctuator(reader, tokens) || constant(reader, tokens) ||
+         string_literal(reader, tokens) ||
+         identifier_or_keyword(reader, define_map, tokens);
 }
 
 static bool punctuator(Reader *reader, Vector *tokens) {
@@ -1049,7 +1049,12 @@ static bool decimal_constant(Reader *reader, Vector *tokens) {
 
 static bool character_constant(Reader *reader, Vector *tokens) {
   int start = reader_get_offset(reader);
-  if (!reader_consume(reader, '\'')) {
+  bool is_wide;
+  if (reader_consume_str(reader, "L\'")) {
+    is_wide = true;
+  } else if (reader_consume(reader, '\'')) {
+    is_wide = false;
+  } else {
     return false;
   }
   char ch;
@@ -1061,8 +1066,13 @@ static bool character_constant(Reader *reader, Vector *tokens) {
   reader_expect(reader, '\'');
 
   int end = reader_get_offset(reader);
-  vec_push(tokens, new_token_num(new_number_int(ch),
-                                 range_from_reader(reader, start, end)));
+  if (is_wide) {
+    vec_push(tokens, new_token_num(new_number_wchar_t(ch),
+                                   range_from_reader(reader, start, end)));
+  } else {
+    vec_push(tokens, new_token_num(new_number_int(ch),
+                                   range_from_reader(reader, start, end)));
+  }
   return true;
 }
 

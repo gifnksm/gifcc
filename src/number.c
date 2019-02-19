@@ -57,3 +57,4 @@ Number new_number_size_t(size_t val) { return new_number(TY_SIZE_T, val); }
 Number new_number_ptrdiff_t(ptrdiff_t val) {
   return new_number(TY_PTRDIFF_T, val);
 }
+Number new_number_wchar_t(wchar_t val) { return new_number(TY_WCHAR_T, val); }

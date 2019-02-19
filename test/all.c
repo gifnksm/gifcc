@@ -2087,6 +2087,11 @@ static void test58(void) {
   check_int(1, (0xffffffffffffffff) > 0);
 }
 
+static void test59(void) {
+  wchar_t wc = L'x';
+  check_int('x', wc);
+}
+
 static int num_check = 0;
 static void check_int(int a, int b) {
   if (a != b) {
@@ -2117,7 +2122,8 @@ int main(void) {
       {"test47", test47}, {"test48", test48}, {"test49", test49},
       {"test51", test51}, {"test52", test52}, {"test53", test53},
       {"test54", test54}, {"test55", test55}, {"test56", test56},
-      {"test57", test57}, {"test58", test58}, {NULL, NULL},
+      {"test57", test57}, {"test58", test58}, {"test59", test59},
+      {NULL, NULL},
   };
   int i = 0;
   for (i = 0; test_list[i].name != NULL; i++) {

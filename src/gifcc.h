@@ -460,6 +460,7 @@ Number new_number(type_t ty, unsigned long long val);
 Number new_number_int(int val);
 Number new_number_size_t(size_t val);
 Number new_number_ptrdiff_t(ptrdiff_t val);
+Number new_number_wchar_t(wchar_t val);
 
 // tokenize.c
 Tokenizer *new_tokenizer(Reader *reader);
