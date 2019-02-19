@@ -453,31 +453,7 @@ static Token *new_token_int_from_str(const char *str, const char *suffix,
     }
   }
 
-  Number num = {.type = ty};
-  switch (ty) {
-  case TY_S_INT:
-    num.s_int_val = val;
-    break;
-  case TY_U_INT:
-    num.u_int_val = val;
-    break;
-  case TY_S_LONG:
-    num.s_long_val = val;
-    break;
-  case TY_U_LONG:
-    num.u_long_val = val;
-    break;
-  case TY_S_LLONG:
-    num.s_llong_val = val;
-    break;
-  case TY_U_LLONG:
-    num.u_llong_val = val;
-    break;
-  default:
-    assert(false);
-  }
-
-  return new_token_num(num, range);
+  return new_token_num(new_number(ty, val), range);
 }
 
 static Token *new_token_ident(char *name, Range range) {
@@ -753,9 +729,8 @@ static bool pp_read_if_cond(Reader *reader, Map *define_map) {
           range_error(token->range, "識別子がありません");
         }
         bool defined = map_get(define_map, token->name);
-        Token *num_token =
-            new_token_num((Number){.type = TY_S_INT, .s_int_val = defined},
-                          range_join(def_start, token->range));
+        Token *num_token = new_token_num(new_number_int(defined),
+                                         range_join(def_start, token->range));
         vec_pop(tokens);
         vec_push(tokens, num_token);
         state = NORMAL;
@@ -768,9 +743,8 @@ static bool pp_read_if_cond(Reader *reader, Map *define_map) {
         range_error(token->range, "識別子がありません");
       }
       bool defined = map_get(define_map, token->name);
-      Token *num_token =
-          new_token_num((Number){.type = TY_S_INT, .s_int_val = defined},
-                        range_join(def_start, token->range));
+      Token *num_token = new_token_num(new_number_int(defined),
+                                       range_join(def_start, token->range));
       vec_pop(tokens);
       vec_push(tokens, num_token);
       state = IDENT_IN_PAREN;
@@ -1087,7 +1061,7 @@ static bool character_constant(Reader *reader, Vector *tokens) {
   reader_expect(reader, '\'');
 
   int end = reader_get_offset(reader);
-  vec_push(tokens, new_token_num((Number){.type = TY_S_INT, .s_int_val = ch},
+  vec_push(tokens, new_token_num(new_number_int(ch),
                                  range_from_reader(reader, start, end)));
   return true;
 }

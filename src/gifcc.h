@@ -2,6 +2,7 @@
 
 #include <assert.h>
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdnoreturn.h>
@@ -453,6 +454,12 @@ __attribute__((format(printf, 4, 5))) void range_warn_raw(Range range,
                                                           const char *fmt, ...);
 void range_warn_raw_v(Range range, const char *dbg_file, int dbg_line,
                       const char *fmt, va_list ap);
+
+// number.c
+Number new_number(type_t ty, unsigned long long val);
+Number new_number_int(int val);
+Number new_number_size_t(size_t val);
+Number new_number_ptrdiff_t(ptrdiff_t val);
 
 // tokenize.c
 Tokenizer *new_tokenizer(Reader *reader);
