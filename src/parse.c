@@ -1624,7 +1624,6 @@ static Expr *new_expr_binop(Scope *scope, int op, Expr *lhs, Expr *rhs,
     if (val_type == NULL) {
       binop_type_error(op, lhs, rhs);
     }
-    assert(val_type->ty == TY_S_INT || val_type->ty == TY_S_LONG);
     if (lhs->ty == EX_NUM && rhs->ty == EX_NUM) {
       lhs->num_val =
           eval_binop(op, val_type->ty, lhs->num_val, rhs->num_val, range);
