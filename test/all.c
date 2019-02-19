@@ -2092,6 +2092,8 @@ static void test59(void) {
   check_int('x', wc);
 }
 
+static void test60(void) { check_int(1, 1 ? 1 : 0l); }
+
 static int num_check = 0;
 static void check_int(int a, int b) {
   if (a != b) {
@@ -2123,7 +2125,7 @@ int main(void) {
       {"test51", test51}, {"test52", test52}, {"test53", test53},
       {"test54", test54}, {"test55", test55}, {"test56", test56},
       {"test57", test57}, {"test58", test58}, {"test59", test59},
-      {NULL, NULL},
+      {"test60", test60}, {NULL, NULL},
   };
   int i = 0;
   for (i = 0; test_list[i].name != NULL; i++) {

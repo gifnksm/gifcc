@@ -1709,9 +1709,16 @@ static Expr *new_expr_cond(Scope *scope, Expr *cond, Expr *then_expr,
   else_expr = coerce_array2ptr(scope, else_expr);
   else_expr = coerce_func2ptr(scope, else_expr);
 
-  if (!is_sametype(then_expr->val_type, else_expr->val_type)) {
-    range_error(range, "条件演算子の両辺の型が異なります: %d, %d",
-                then_expr->val_type->ty, else_expr->val_type->ty);
+  Type *val_type;
+  if (is_arith_type(then_expr->val_type) &&
+      is_arith_type(else_expr->val_type)) {
+    val_type = arith_converted(scope, &then_expr, &else_expr);
+  } else {
+    if (!is_sametype(then_expr->val_type, else_expr->val_type)) {
+      range_error(range, "条件演算子の両辺の型が異なります: %d, %d",
+                  then_expr->val_type->ty, else_expr->val_type->ty);
+    }
+    val_type = then_expr->val_type;
   }
 
   if (cond->ty == EX_NUM) {
@@ -1722,7 +1729,7 @@ static Expr *new_expr_cond(Scope *scope, Expr *cond, Expr *then_expr,
     }
     return else_expr;
   }
-  Expr *expr = new_expr(EX_COND, then_expr->val_type, range);
+  Expr *expr = new_expr(EX_COND, val_type, range);
   expr->cond = cond;
   expr->lhs = then_expr;
   expr->rhs = else_expr;
