@@ -171,7 +171,12 @@ static void gen_expr(Expr *expr) {
   const Reg *r = get_int_reg(expr->val_type, expr->range);
 
   if (expr->ty == EX_NUM) {
-    printf("  push %s\n", num2str(expr->num_val, expr->range));
+    if (get_val_size(expr->val_type, expr->range) < 4) {
+      printf("  push %s\n", num2str(expr->num_val, expr->range));
+    } else {
+      printf("  mov %s, %s\n", r->rax, num2str(expr->num_val, expr->range));
+      printf("  push rax\n");
+    }
     return;
   }
 
