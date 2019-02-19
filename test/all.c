@@ -2079,6 +2079,12 @@ static void test58(void) {
   check_int(123, 123LLu);
   check_int(123, 123lu);
   check_int(123, 123llu);
+
+  check_int(1, (~0ULL) >> ((sizeof(long long) * 8) - 1));
+  check_int(1, (~0U) >> ((sizeof(int) * 8) - 1));
+
+  check_int(1, (0xffffffffffffffff) >> ((sizeof(long long) * 8) - 1));
+  check_int(1, (0xffffffffffffffff) > 0);
 }
 
 static int num_check = 0;

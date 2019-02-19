@@ -113,6 +113,8 @@ static Number eval_unaryop(int op, type_t type, Number na, Range range);
 static Expr *new_expr_unary(Scope *scope, int op, Expr *operand, Range range);
 static Number eval_binop(int op, type_t type, Number na, Number nb,
                          Range range);
+static Number eval_binop_shift(int op, type_t type, Number na, Number nb,
+                               Range range);
 static Expr *new_expr_binop(Scope *scope, int op, Expr *lhs, Expr *rhs,
                             Range range);
 static Expr *new_expr_cond(Scope *scope, Expr *cond, Expr *then_expr,
@@ -1309,12 +1311,6 @@ static Expr *new_expr_unary(Scope *scope, int op, Expr *operand, Range range) {
   case '|':                                                                    \
     *(r) = ((a) | (b));                                                        \
     return (num);                                                              \
-  case EX_LSHIFT:                                                              \
-    *(r) = ((a) << (b));                                                       \
-    return (num);                                                              \
-  case EX_RSHIFT:                                                              \
-    *(r) = ((a) >> (b));                                                       \
-    return (num);                                                              \
   case '<':                                                                    \
     *(r) = ((a) < (b));                                                        \
     return (num);                                                              \
@@ -1385,6 +1381,83 @@ static Number eval_binop(int op, type_t type, Number na, Number nb,
     SET_NUMBER_VAL(a, &na);
     SET_NUMBER_VAL(b, &nb);
     BINOP(op, num, r, a, b);
+    break;
+  }
+
+  case TY_VOID:
+  case TY_CHAR:
+  case TY_S_CHAR:
+  case TY_S_SHORT:
+  case TY_U_CHAR:
+  case TY_U_SHORT:
+  case TY_PTR:
+  case TY_ENUM:
+  case TY_ARRAY:
+  case TY_FUNC:
+  case TY_STRUCT:
+  case TY_UNION:
+    break;
+  }
+  range_error(range, "不正な型の演算です: %d(%c), %d, %d, %d", op, op, type,
+              na.type, nb.type);
+}
+
+#define BINOP_SHIFT(op, num, r, a, b)                                          \
+  switch ((op)) {                                                              \
+  case EX_LSHIFT:                                                              \
+    *(r) = ((a) << (b));                                                       \
+    return (num);                                                              \
+  case EX_RSHIFT:                                                              \
+    *(r) = ((a) >> (b));                                                       \
+    return (num);                                                              \
+  }
+
+static Number eval_binop_shift(int op, type_t type, Number na, Number nb,
+                               Range range) {
+  unsigned char width;
+  SET_NUMBER_VAL(width, &nb);
+
+  Number num = {.type = type};
+  switch (type) {
+  case TY_S_INT: {
+    signed int a, *r = &num.s_int_val;
+    SET_NUMBER_VAL(a, &na);
+    BINOP_SHIFT(op, num, r, a, width);
+    break;
+  }
+
+  case TY_S_LONG: {
+    signed long a, *r = &num.s_long_val;
+    SET_NUMBER_VAL(a, &na);
+    BINOP_SHIFT(op, num, r, a, width);
+    break;
+  }
+
+  case TY_S_LLONG: {
+    signed long long a, *r = &num.s_llong_val;
+    SET_NUMBER_VAL(a, &na);
+    BINOP_SHIFT(op, num, r, a, width);
+    break;
+  }
+
+  case TY_U_INT: {
+    unsigned int a, *r = &num.u_int_val;
+    SET_NUMBER_VAL(a, &na);
+    BINOP_SHIFT(op, num, r, a, width);
+    break;
+  }
+
+  case TY_U_LONG: {
+    unsigned long a, *r = &num.u_long_val;
+    SET_NUMBER_VAL(a, &na);
+    BINOP_SHIFT(op, num, r, a, width);
+    break;
+  }
+
+  case TY_U_LLONG: {
+    unsigned long long a, *r = &num.u_llong_val;
+    SET_NUMBER_VAL(a, &na);
+    BINOP_SHIFT(op, num, r, a, width);
     break;
   }
 
@@ -1528,7 +1601,7 @@ static Expr *new_expr_binop(Scope *scope, int op, Expr *lhs, Expr *rhs,
     }
     if (lhs->ty == EX_NUM && rhs->ty == EX_NUM) {
       lhs->num_val =
-          eval_binop(op, val_type->ty, lhs->num_val, rhs->num_val, range);
+          eval_binop_shift(op, val_type->ty, lhs->num_val, rhs->num_val, range);
       lhs->range = range;
       return lhs;
     }
