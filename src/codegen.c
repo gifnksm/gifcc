@@ -386,14 +386,7 @@ static void gen_expr(Expr *expr) {
     return;
   }
   if (expr->ty == '!') {
-    // `!`
-    gen_expr(expr->rhs);
-    printf("  pop rax\n");
-    printf("  cmp %s, 0\n", r->rax);
-    printf("  sete al\n");
-    printf("  movzb %s, al\n", r->rax);
-    printf("  push rax\n");
-    return;
+    assert(false);
   }
   if (expr->ty == EX_INC) {
     if (expr->lhs == NULL) {

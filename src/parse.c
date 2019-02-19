@@ -109,7 +109,8 @@ static Expr *new_expr_call(Scope *scope, Expr *callee, Vector *argument,
 static Expr *new_expr_postfix(Scope *scope, int ty, Expr *operand, Range range);
 static Expr *new_expr_cast(Scope *scope, Type *val_type, Expr *operand,
                            Range range);
-static Expr *new_expr_unary(Scope *scope, int ty, Expr *operand, Range range);
+static Number eval_unaryop(int op, type_t type, Number na, Range range);
+static Expr *new_expr_unary(Scope *scope, int op, Expr *operand, Range range);
 static Number eval_binop(int op, type_t type, Number na, Number nb,
                          Range range);
 static Expr *new_expr_binop(Scope *scope, int op, Expr *lhs, Expr *rhs,
@@ -1116,15 +1117,88 @@ static Expr *new_expr_cast(Scope *scope, Type *val_type, Expr *operand,
   return expr;
 }
 
-static Expr *new_expr_unary(Scope *scope, int ty, Expr *operand, Range range) {
-  if (ty != '&') {
+#define UNARYOP(op, num, r, a)                                                 \
+  switch ((op)) {                                                              \
+  case '-':                                                                    \
+    *(r) = (-(a));                                                             \
+    return (num);                                                              \
+  case '~':                                                                    \
+    *(r) = (~(a));                                                             \
+    return (num);                                                              \
+  }
+
+static Number eval_unaryop(int op, type_t type, Number na, Range range) {
+  Number num = {.type = type};
+  switch (type) {
+  case TY_S_INT: {
+    signed int a, *r = &num.s_int_val;
+    SET_NUMBER_VAL(a, &na);
+    UNARYOP(op, num, r, a);
+    break;
+  }
+
+  case TY_S_LONG: {
+    signed long a, *r = &num.s_long_val;
+    SET_NUMBER_VAL(a, &na);
+    UNARYOP(op, num, r, a);
+    break;
+  }
+
+  case TY_S_LLONG: {
+    signed long long a, *r = &num.s_llong_val;
+    SET_NUMBER_VAL(a, &na);
+    UNARYOP(op, num, r, a);
+    break;
+  }
+
+  case TY_U_INT: {
+    unsigned int a, *r = &num.u_int_val;
+    SET_NUMBER_VAL(a, &na);
+    UNARYOP(op, num, r, a);
+    break;
+  }
+
+  case TY_U_LONG: {
+    unsigned long a, *r = &num.u_long_val;
+    SET_NUMBER_VAL(a, &na);
+    UNARYOP(op, num, r, a);
+    break;
+  }
+
+  case TY_U_LLONG: {
+    unsigned long long a, *r = &num.u_llong_val;
+    SET_NUMBER_VAL(a, &na);
+    UNARYOP(op, num, r, a);
+    break;
+  }
+
+  case TY_VOID:
+  case TY_CHAR:
+  case TY_S_CHAR:
+  case TY_S_SHORT:
+  case TY_U_CHAR:
+  case TY_U_SHORT:
+  case TY_PTR:
+  case TY_ENUM:
+  case TY_ARRAY:
+  case TY_FUNC:
+  case TY_STRUCT:
+  case TY_UNION:
+    break;
+  }
+  range_error(range, "不正な型の演算です: %d(%c), %d, %d", op, op, type,
+              na.type);
+}
+
+static Expr *new_expr_unary(Scope *scope, int op, Expr *operand, Range range) {
+  if (op != '&') {
     // & 以外は array, func は ptr とみなす
     operand = coerce_array2ptr(scope, operand);
     operand = coerce_func2ptr(scope, operand);
   }
 
   Type *val_type;
-  switch (ty) {
+  switch (op) {
   case '&': {
     if (is_array_type(operand->val_type)) {
       val_type = new_type_ptr(operand->val_type->ptrof, false);
@@ -1151,16 +1225,55 @@ static Expr *new_expr_unary(Scope *scope, int ty, Expr *operand, Range range) {
                       operand->range),
         operand->range);
   }
-  default: {
+  case '+':
+    if (!is_arith_type(operand->val_type)) {
+      range_error(range, "不正な型の値に対する演算です: 算術型ではありません");
+    }
+    if (is_integer_type(operand->val_type)) {
+      val_type = integer_promoted(scope, &operand);
+    }
+    return operand;
+  case '-':
+    if (!is_arith_type(operand->val_type)) {
+      range_error(range, "不正な型の値に対する演算です: 算術型ではありません");
+    }
+    if (is_integer_type(operand->val_type)) {
+      val_type = integer_promoted(scope, &operand);
+    } else {
+      val_type = operand->val_type;
+    }
+    if (operand->ty == EX_NUM) {
+      operand->num_val =
+          eval_unaryop(op, val_type->ty, operand->num_val, range);
+      operand->range = range;
+      return operand;
+    }
+    break;
+  case '~':
+    if (!is_integer_type(operand->val_type)) {
+      range_error(range, "不正な型の値に対する演算です: 整数型ではありません");
+    }
+    val_type = integer_promoted(scope, &operand);
+    if (operand->ty == EX_NUM) {
+      operand->num_val =
+          eval_unaryop(op, val_type->ty, operand->num_val, range);
+      operand->range = range;
+      return operand;
+    }
+    break;
+  case EX_INC:
+  case EX_DEC: {
     val_type = operand->val_type;
     break;
+  default:
+    assert(false);
   }
   }
 
-  Expr *expr = new_expr(ty, val_type, range);
+  Expr *expr = new_expr(op, val_type, range);
   expr->lhs = NULL;
   expr->rhs = operand;
-  if (ty == EX_INC || ty == EX_DEC) {
+  if (op == EX_INC || op == EX_DEC) {
     if (is_ptr_type(operand->val_type)) {
       expr->incdec_size = get_val_size(expr->val_type->ptrof, expr->range);
     } else {
