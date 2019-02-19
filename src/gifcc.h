@@ -153,6 +153,10 @@ typedef enum {
   TY_ENUM,
 } type_t;
 
+#define TY_SIZE_T TY_U_LONG
+#define TY_PTRDIFF_T TY_S_LONG
+#define TY_WCHAR_T TY_S_INT
+
 typedef struct Number {
   type_t type;
   union {

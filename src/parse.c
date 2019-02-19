@@ -4,6 +4,7 @@
 #include <stdalign.h>
 #include <stdarg.h>
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -50,8 +51,10 @@ typedef struct VarDef {
   Function *func;
 } VarDef;
 
+static Number new_number(type_t ty, unsigned long long val);
 static Number new_number_int(int val);
-static Number new_number_size(int val);
+static Number new_number_size_t(size_t val);
+static Number new_number_ptrdiff_t(ptrdiff_t val);
 static Initializer *new_initializer(Type *type);
 static GlobalCtxt *new_global_ctxt(void);
 static FuncCtxt *new_func_ctxt(char *name, Type *type);
@@ -201,11 +204,63 @@ TranslationUnit *parse(Reader *reader) {
   return translation_unit(tokenizer);
 }
 
-static Number new_number_int(int val) {
-  return (Number){.type = TY_S_INT, .s_int_val = val};
+static Number new_number(type_t ty, unsigned long long val) {
+  Number num = {.type = ty};
+  switch (ty) {
+  case TY_CHAR:
+    num.char_val = val;
+    return num;
+  case TY_S_CHAR:
+    num.s_char_val = val;
+    return num;
+  case TY_S_INT:
+    num.s_int_val = val;
+    return num;
+  case TY_S_SHORT:
+    num.s_short_val = val;
+    return num;
+  case TY_S_LONG:
+    num.s_long_val = val;
+    return num;
+  case TY_S_LLONG:
+    num.s_llong_val = val;
+    return num;
+  case TY_U_CHAR:
+    num.s_char_val = val;
+    return num;
+  case TY_U_INT:
+    num.s_int_val = val;
+    return num;
+  case TY_U_SHORT:
+    num.s_short_val = val;
+    return num;
+  case TY_U_LONG:
+    num.s_long_val = val;
+    return num;
+  case TY_U_LLONG:
+    num.s_llong_val = val;
+    return num;
+  case TY_PTR:
+    num.ptr_val = val;
+    return num;
+  case TY_ENUM:
+    num.enum_val = val;
+    return num;
+  case TY_STRUCT:
+  case TY_UNION:
+  case TY_ARRAY:
+  case TY_VOID:
+  case TY_FUNC:
+    break;
+  }
+  assert(false);
 }
-static Number new_number_size(int val) {
-  return (Number){.type = TY_S_LONG, .ptr_val = val};
+static Number new_number_int(int val) { return new_number(TY_S_INT, val); }
+static Number new_number_size_t(size_t val) {
+  return new_number(TY_SIZE_T, val);
+}
+static Number new_number_ptrdiff_t(ptrdiff_t val) {
+  return new_number(TY_PTRDIFF_T, val);
 }
 
 static Initializer *new_initializer(Type *type) {
@@ -1512,7 +1567,7 @@ static Expr *new_expr_binop(Scope *scope, int op, Expr *lhs, Expr *rhs,
 
       // ptr + int => ptr + (size * int)
       Expr *size = new_expr_num(
-          new_number_size(get_val_size(lhs->val_type->ptrof, lhs->range)),
+          new_number_size_t(get_val_size(lhs->val_type->ptrof, lhs->range)),
           range);
       rhs = new_expr_binop(scope, '*', rhs, size, range);
       val_type = lhs->val_type;
@@ -1526,7 +1581,7 @@ static Expr *new_expr_binop(Scope *scope, int op, Expr *lhs, Expr *rhs,
 
       // int + ptr => (size * int) + ptr
       Expr *size = new_expr_num(
-          new_number_size(get_val_size(rhs->val_type->ptrof, rhs->range)),
+          new_number_size_t(get_val_size(rhs->val_type->ptrof, rhs->range)),
           range);
       lhs = new_expr_binop(scope, '*', lhs, size, range);
       val_type = rhs->val_type;
@@ -1556,16 +1611,16 @@ static Expr *new_expr_binop(Scope *scope, int op, Expr *lhs, Expr *rhs,
         Expr *sub = new_expr('-', new_type(TY_S_LONG, false), range);
         sub->lhs = lhs;
         sub->rhs = rhs;
-        Expr *size = new_expr_num(
-            new_number_size(get_val_size(lhs->val_type->ptrof, lhs->range)),
-            range);
+        Expr *size = new_expr_num(new_number_ptrdiff_t(get_val_size(
+                                      lhs->val_type->ptrof, lhs->range)),
+                                  range);
         return new_expr_binop(scope, '/', sub, size, range);
       }
 
       if (is_integer_type(rhs->val_type)) {
         // int - int
         Expr *size = new_expr_num(
-            new_number_size(get_val_size(lhs->val_type->ptrof, lhs->range)),
+            new_number_size_t(get_val_size(lhs->val_type->ptrof, lhs->range)),
             range);
         rhs = new_expr_binop(scope, '*', rhs, size, range);
         val_type = lhs->val_type;
@@ -1775,7 +1830,7 @@ static Expr *new_expr_arrow(Scope *scope, Expr *operand, char *name,
   }
   Expr *expr = new_expr('+', new_type_ptr(member->type, false), range);
   expr->lhs = operand;
-  expr->rhs = new_expr_num(new_number_size(member->offset), range);
+  expr->rhs = new_expr_num(new_number_size_t(member->offset), range);
   return new_expr_unary(scope, '*', expr, range);
 }
 
@@ -1980,13 +2035,13 @@ static Expr *unary_expression(Tokenizer *tokenizer, Scope *scope) {
         !token_is_typename(scope, token_peek_ahead(tokenizer, 1))) {
       Expr *expr = unary_expression(tokenizer, scope);
       return new_expr_num(
-          new_number_size(get_val_size(expr->val_type, expr->range)),
+          new_number_size_t(get_val_size(expr->val_type, expr->range)),
           range_join(token->range, expr->range));
     }
     token_expect(tokenizer, '(');
     Type *type = type_name(scope, tokenizer);
     Token *end = token_expect(tokenizer, ')');
-    return new_expr_num(new_number_size(get_val_size(type, end->range)),
+    return new_expr_num(new_number_size_t(get_val_size(type, end->range)),
                         range_join(token->range, end->range));
   }
   return postfix_expression(tokenizer, scope);
