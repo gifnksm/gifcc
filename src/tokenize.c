@@ -2,6 +2,7 @@
 #include <assert.h>
 #include <ctype.h>
 #include <libgen.h>
+#include <limits.h>
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stdlib.h>
@@ -57,6 +58,8 @@ static bool read_token(Tokenizer *tokenizer);
 static Token *new_token(int ty, Range range);
 static Token *token_clone(Token *token);
 static Token *new_token_num(Number val, Range range);
+static Token *new_token_int_from_str(const char *str, const char *suffix,
+                                     int base, Range range);
 static Token *new_token_ident(char *name, Range range);
 static Token *new_token_str(char *str, Range range);
 static bool pp_directive(Reader *reader, Map *define_map,
@@ -376,6 +379,105 @@ static Token *new_token_num(Number val, Range range) {
   Token *token = new_token(TK_NUM, range);
   token->num_val = val;
   return token;
+}
+
+static Token *new_token_int_from_str(const char *str, const char *suffix,
+                                     int base, Range range) {
+  typedef struct Suffix {
+    const char *suffix;
+    type_t type;
+  } Suffix;
+  Suffix SUFFIX[] = {
+      // unsigned long long int
+      {"ull", TY_U_LLONG},
+      {"llu", TY_U_LLONG},
+      {"uLL", TY_U_LLONG},
+      {"LLu", TY_U_LLONG},
+      {"Ull", TY_U_LLONG},
+      {"llU", TY_U_LLONG},
+      {"ULL", TY_U_LLONG},
+      {"LLU", TY_U_LLONG},
+      // unsigned long int
+      {"ul", TY_U_LONG},
+      {"lu", TY_U_LONG},
+      {"uL", TY_U_LONG},
+      {"Lu", TY_U_LONG},
+      {"Ul", TY_U_LONG},
+      {"lU", TY_U_LONG},
+      {"UL", TY_U_LONG},
+      {"LU", TY_U_LONG},
+      // unsigned int
+      {"u", TY_U_INT},
+      {"U", TY_U_INT},
+      // signed long long int
+      {"ll", TY_S_LLONG},
+      {"LL", TY_S_LLONG},
+      // signed long int
+      {"l", TY_S_LONG},
+      {"L", TY_S_LONG},
+      // stub
+      {NULL, TY_VOID},
+  };
+
+  char *endptr = NULL;
+  unsigned long long val = strtoull(str, &endptr, base);
+  if (*endptr != '\0') {
+    range_warn(range, "オーバーフローしました");
+  }
+  type_t ty = TY_VOID;
+  if (strcmp(suffix, "") == 0) {
+    // no suffix
+    if (val <= INT_MAX) {
+      ty = TY_S_INT;
+    } else if (base != 10 && val <= UINT_MAX) {
+      ty = TY_U_INT;
+    } else if (val <= LONG_MAX) {
+      ty = TY_S_LONG;
+    } else if (base != 10 && val <= ULONG_MAX) {
+      ty = TY_U_LONG;
+    } else if (val <= LLONG_MAX) {
+      ty = TY_S_LLONG;
+    } else {
+      assert(val <= ULLONG_MAX);
+      ty = TY_U_LLONG;
+    }
+  } else {
+    for (int i = 0; SUFFIX[i].suffix != NULL; i++) {
+      if (strcmp(SUFFIX[i].suffix, suffix) == 0) {
+        ty = SUFFIX[i].type;
+        break;
+      }
+    }
+    if (ty == TY_VOID) {
+      range_error(range, "不正な整数のサフィックスです");
+    }
+  }
+
+  Number num = {.type = ty};
+  switch (ty) {
+  case TY_S_INT:
+    num.s_int_val = val;
+    break;
+  case TY_U_INT:
+    num.u_int_val = val;
+    break;
+  case TY_S_LONG:
+    num.s_long_val = val;
+    break;
+  case TY_U_LONG:
+    num.u_long_val = val;
+    break;
+  case TY_S_LLONG:
+    num.s_llong_val = val;
+    break;
+  case TY_U_LLONG:
+    num.u_llong_val = val;
+    break;
+  default:
+    assert(false);
+  }
+
+  return new_token_num(num, range);
 }
 
 static Token *new_token_ident(char *name, Range range) {
@@ -871,6 +973,20 @@ static bool integer_constant(Reader *reader, Vector *tokens) {
          octal_constant(reader, tokens) || decimal_constant(reader, tokens);
 }
 
+static String *read_string_suffix(Reader *reader) {
+  String *str = new_string();
+  while (true) {
+    char ch = reader_peek(reader);
+    if ((ch < 'a' || 'z' < ch) && (ch < 'A' || 'Z' < ch)) {
+      break;
+    }
+    str_push(str, ch);
+    reader_succ(reader);
+  }
+  str_push(str, '\0');
+  return str;
+}
+
 static bool hexadecimal_constant(Reader *reader, Vector *tokens) {
   int start = reader_get_offset(reader);
 
@@ -878,24 +994,28 @@ static bool hexadecimal_constant(Reader *reader, Vector *tokens) {
     return false;
   }
 
-  int val = 0;
-
   if (!is_hex_digit(reader_peek(reader))) {
     reader_error_offset(reader, start, "空の16進文字リテラルです");
   }
 
+  String *str = new_string();
   while (true) {
     char ch = reader_peek(reader);
     if (!is_hex_digit(ch)) {
       break;
     }
-    val = val * 0x10 + hex2num(ch);
+    str_push(str, ch);
     reader_succ(reader);
   }
+  str_push(str, '\0');
+
+  String *suffix = read_string_suffix(reader);
 
   int end = reader_get_offset(reader);
-  vec_push(tokens, new_token_num((Number){.type = TY_S_INT, .s_int_val = val},
-                                 range_from_reader(reader, start, end)));
+  vec_push(tokens,
+           new_token_int_from_str(str_get_raw(str), str_get_raw(suffix), 16,
+                                  range_from_reader(reader, start, end)));
+
   return true;
 }
 
@@ -906,20 +1026,23 @@ static bool octal_constant(Reader *reader, Vector *tokens) {
     return false;
   }
 
-  int val = 0;
-
+  String *str = new_string();
   while (true) {
     char ch = reader_peek(reader);
     if (!is_oct_digit(ch)) {
       break;
     }
-    val = val * 010 + oct2num(ch);
+    str_push(str, ch);
     reader_succ(reader);
   }
+  str_push(str, '\0');
+
+  String *suffix = read_string_suffix(reader);
 
   int end = reader_get_offset(reader);
-  vec_push(tokens, new_token_num((Number){.type = TY_S_INT, .s_int_val = val},
-                                 range_from_reader(reader, start, end)));
+  vec_push(tokens,
+           new_token_int_from_str(str_get_raw(str), str_get_raw(suffix), 8,
+                                  range_from_reader(reader, start, end)));
   return true;
 }
 
@@ -930,20 +1053,23 @@ static bool decimal_constant(Reader *reader, Vector *tokens) {
     return false;
   }
 
-  int val = 0;
-
+  String *str = new_string();
   while (true) {
     char ch = reader_peek(reader);
     if (!is_dec_digit(ch)) {
       break;
     }
-    val = val * 10 + dec2num(ch);
+    str_push(str, ch);
     reader_succ(reader);
   }
+  str_push(str, '\0');
+
+  String *suffix = read_string_suffix(reader);
 
   int end = reader_get_offset(reader);
-  vec_push(tokens, new_token_num((Number){.type = TY_S_INT, .s_int_val = val},
-                                 range_from_reader(reader, start, end)));
+  vec_push(tokens,
+           new_token_int_from_str(str_get_raw(str), str_get_raw(suffix), 10,
+                                  range_from_reader(reader, start, end)));
   return true;
 }
 

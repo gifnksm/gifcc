@@ -2048,6 +2048,39 @@ static void test57(void) {
   check_int(3, test57_y);
 }
 
+static void test58(void) {
+  check_int(4, sizeof(123));
+  check_int(8, sizeof(123L));
+  check_int(8, sizeof(123LL));
+
+  check_int(123, 123L);
+  check_int(123, 123LL);
+  check_int(123, 123l);
+  check_int(123, 123ll);
+
+  check_int(123, 123U);
+  check_int(123, 123UL);
+  check_int(123, 123ULL);
+  check_int(123, 123Ul);
+  check_int(123, 123Ull);
+
+  check_int(123, 123LU);
+  check_int(123, 123LLU);
+  check_int(123, 123lU);
+  check_int(123, 123llU);
+
+  check_int(123, 123u);
+  check_int(123, 123uL);
+  check_int(123, 123uLL);
+  check_int(123, 123ul);
+  check_int(123, 123ull);
+
+  check_int(123, 123Lu);
+  check_int(123, 123LLu);
+  check_int(123, 123lu);
+  check_int(123, 123llu);
+}
+
 static int num_check = 0;
 static void check_int(int a, int b) {
   if (a != b) {
@@ -2078,7 +2111,7 @@ int main(void) {
       {"test47", test47}, {"test48", test48}, {"test49", test49},
       {"test51", test51}, {"test52", test52}, {"test53", test53},
       {"test54", test54}, {"test55", test55}, {"test56", test56},
-      {"test57", test57}, {NULL, NULL},
+      {"test57", test57}, {"test58", test58}, {NULL, NULL},
   };
   int i = 0;
   for (i = 0; test_list[i].name != NULL; i++) {
