@@ -1007,7 +1007,7 @@ static Expr *new_expr_postfix(Scope *scope, int ty, Expr *operand,
   Expr *expr = new_expr(ty, operand->val_type, range);
   expr->lhs = operand;
   expr->rhs = NULL;
-  if (ty == EX_INC || ty == EX_DEC) {
+  if (ty == EX_POST_INC || ty == EX_POST_DEC) {
     if (is_ptr_type(operand->val_type)) {
       expr->incdec_size =
           get_val_size(operand->val_type->ptrof, operand->range);
@@ -1937,10 +1937,10 @@ static Expr *postfix_expression(Tokenizer *tokenizer, Scope *scope) {
       expr = new_expr_call(scope, expr, argument,
                            range_join(expr->range, end->range));
     } else if ((token = token_consume(tokenizer, TK_INC)) != NULL) {
-      expr = new_expr_postfix(scope, EX_INC, expr,
+      expr = new_expr_postfix(scope, EX_POST_INC, expr,
                               range_join(expr->range, token->range));
     } else if ((token = token_consume(tokenizer, TK_DEC)) != NULL) {
-      expr = new_expr_postfix(scope, EX_DEC, expr, token->range);
+      expr = new_expr_postfix(scope, EX_POST_DEC, expr, token->range);
     } else {
       return expr;
     }

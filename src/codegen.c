@@ -413,7 +413,7 @@ static void gen_expr(Expr *expr) {
     printf("  push rdi\n");
     return;
   }
-  if (expr->ty == EX_INC) {
+  if (expr->ty == EX_POST_INC) {
     // 後置の `++`
     gen_lval(expr->lhs);
     printf("  pop rax\n");
@@ -423,7 +423,7 @@ static void gen_expr(Expr *expr) {
     printf("  mov [rax], %s\n", r->rdi);
     return;
   }
-  if (expr->ty == EX_DEC) {
+  if (expr->ty == EX_POST_DEC) {
     // 後置の `--`
     gen_lval(expr->lhs);
     printf("  pop rax\n");

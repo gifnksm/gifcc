@@ -284,6 +284,7 @@ static void dump_expr(Expr *expr, int level) {
   }
 
   switch (expr->ty) {
+  // primary expression
   case EX_NUM:
     dump_range_start(expr->range);
     dump_indent(level);
@@ -313,6 +314,8 @@ static void dump_expr(Expr *expr, int level) {
     print_string_literal(expr->name);
     printf(")\n");
     return;
+
+  // prefix unary operator
   case EX_PRE_INC:
     dump_binop_expr_incdec(expr, "[++]", level);
     return;
@@ -337,6 +340,41 @@ static void dump_expr(Expr *expr, int level) {
   case EX_LOG_NOT:
     dump_binop_expr(expr, "[!]", level);
     return;
+  case EX_CAST:
+    dump_range_start(expr->range);
+    dump_indent(level);
+    dump_type(expr->val_type);
+    printf("(CAST\n");
+    dump_expr(expr->expr, level + 1);
+    dump_range_end(expr->range);
+    dump_indent(level);
+    printf(")\n");
+    return;
+
+  // postfix unary operator
+  case EX_CALL:
+    dump_range_start(expr->range);
+    dump_indent(level);
+    dump_type(expr->val_type);
+    printf("(CALL\n");
+    dump_expr(expr->callee, level + 1);
+    if (expr->argument != NULL) {
+      for (int i = 0; i < vec_len(expr->argument); i++) {
+        dump_expr(vec_get(expr->argument, i), level + 1);
+      }
+    }
+    dump_range_end(expr->range);
+    dump_indent(level);
+    printf(")\n");
+    return;
+  case EX_POST_INC:
+    dump_binop_expr_incdec(expr, "[++]", level);
+    return;
+  case EX_POST_DEC:
+    dump_binop_expr_incdec(expr, "[--]", level);
+    return;
+
+  // binary operator
   case EX_ADD:
     dump_binop_expr(expr, "[+]", level);
     return;
@@ -397,6 +435,8 @@ static void dump_expr(Expr *expr, int level) {
   case EX_COMMA:
     dump_binop_expr(expr, "[,]", level);
     return;
+
+  // ternary unary operator
   case EX_COND:
     dump_range_start(expr->range);
     dump_indent(level);
@@ -405,37 +445,6 @@ static void dump_expr(Expr *expr, int level) {
     dump_expr(expr->cond, level + 1);
     dump_expr(expr->lhs, level + 1);
     dump_expr(expr->rhs, level + 1);
-    dump_range_end(expr->range);
-    dump_indent(level);
-    printf(")\n");
-    return;
-  case EX_INC:
-    dump_binop_expr_incdec(expr, "[++]", level);
-    return;
-  case EX_DEC:
-    dump_binop_expr_incdec(expr, "[--]", level);
-    return;
-  case EX_CALL:
-    dump_range_start(expr->range);
-    dump_indent(level);
-    dump_type(expr->val_type);
-    printf("(CALL\n");
-    dump_expr(expr->callee, level + 1);
-    if (expr->argument != NULL) {
-      for (int i = 0; i < vec_len(expr->argument); i++) {
-        dump_expr(vec_get(expr->argument, i), level + 1);
-      }
-    }
-    dump_range_end(expr->range);
-    dump_indent(level);
-    printf(")\n");
-    return;
-  case EX_CAST:
-    dump_range_start(expr->range);
-    dump_indent(level);
-    dump_type(expr->val_type);
-    printf("(CAST\n");
-    dump_expr(expr->expr, level + 1);
     dump_range_end(expr->range);
     dump_indent(level);
     printf(")\n");

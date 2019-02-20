@@ -204,6 +204,11 @@ enum {
   EX_LOG_NOT,
   EX_CAST,
 
+  // postfix unary operator
+  EX_CALL,
+  EX_POST_INC,
+  EX_POST_DEC,
+
   // binary operator
   EX_ADD,
   EX_SUB,
@@ -228,10 +233,6 @@ enum {
 
   // ternary operator
   EX_COND,
-
-  EX_INC,
-  EX_DEC,
-  EX_CALL,
 };
 
 typedef enum {
