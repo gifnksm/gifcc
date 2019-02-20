@@ -2895,9 +2895,9 @@ static void gen_init(Scope *scope, Vector *stmts, Initializer *init,
   if (init->elements != NULL) {
     for (int i = 0; i < vec_len(init->elements); i++) {
       Expr *index = new_expr_num(new_number_int(i), dest->range);
-      Initializer *meminit = vec_get(init->elements, i);
+      Initializer *eleminit = vec_get(init->elements, i);
       Expr *mem = new_expr_index(scope, dest, index, dest->range);
-      gen_init(scope, stmts, meminit, mem);
+      gen_init(scope, stmts, eleminit, mem);
     }
     return;
   }

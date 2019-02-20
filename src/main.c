@@ -728,11 +728,12 @@ int main(int argc, char **argv) {
   }
 
   TranslationUnit *tunit = parse(reader);
-
   if (output_mode == OUTPUT_AST) {
     output_ast(tunit);
     return 0;
   }
+
+  sema(tunit);
 
   gen(tunit);
 

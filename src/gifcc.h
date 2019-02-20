@@ -536,6 +536,7 @@ Expr *constant_expression(Tokenizer *tokenizer, Scope *scope);
 TranslationUnit *parse(Reader *reader);
 
 // sema.c
+void sema_expr(Expr *expr);
 void sema(TranslationUnit *tunit);
 
 // codegen.c

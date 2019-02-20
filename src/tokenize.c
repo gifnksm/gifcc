@@ -774,6 +774,7 @@ static bool pp_read_if_cond(Reader *reader, Map *define_map) {
   if (token_peek(tokenizer)->ty != TK_EOF) {
     range_error(token_peek(tokenizer)->range, "改行がありません");
   }
+  sema_expr(expr);
   if (expr->ty != EX_NUM) {
     range_error(expr->range, "定数式ではありません: %d", expr->ty);
   }
