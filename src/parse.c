@@ -101,7 +101,7 @@ static Expr *coerce_func2ptr(Scope *scope, Expr *expr);
 static Expr *new_expr(int ty, Type *val_type, Range range);
 static Expr *new_expr_num(Number val, Range range);
 static Expr *new_expr_ident(Scope *scope, char *name, Range range);
-static Expr *new_expr_str(Scope *scope, char *val, Range range);
+static Expr *new_expr_str(Scope *scope, const char *val, Range range);
 static Expr *new_expr_call(Scope *scope, Expr *callee, Vector *argument,
                            Range range);
 static Expr *new_expr_postfix(Scope *scope, int ty, Expr *operand, Range range);
@@ -939,7 +939,7 @@ static Expr *new_expr_ident(Scope *scope, char *name, Range range) {
   return expr;
 }
 
-static Expr *new_expr_str(Scope *scope, char *val, Range range) {
+static Expr *new_expr_str(Scope *scope, const char *val, Range range) {
   Type *type = new_type_ptr(new_type(TY_CHAR, true), false);
   Expr *expr = new_expr(EX_STR, type, range);
 
