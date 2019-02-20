@@ -1263,12 +1263,15 @@ static Expr *new_expr_unary(Scope *scope, int op, Expr *operand, Range range) {
   return expr;
 }
 
-#define BINOP(op, num, r, a, b)                                                \
+#define BINOP(op, num, r, a, b, range)                                         \
   switch ((op)) {                                                              \
   case EX_MUL:                                                                 \
     *(r) = ((a) * (b));                                                        \
     return (num);                                                              \
   case EX_DIV:                                                                 \
+    if (b == 0) {                                                              \
+      range_error(range, "ゼロ除算です");                                      \
+    }                                                                          \
     *(r) = ((a) / (b));                                                        \
     return (num);                                                              \
   case EX_MOD:                                                                 \
@@ -1318,7 +1321,7 @@ static Number eval_binop(int op, type_t type, Number na, Number nb,
     signed int a, b, *r = &num.s_int_val;
     SET_NUMBER_VAL(a, &na);
     SET_NUMBER_VAL(b, &nb);
-    BINOP(op, num, r, a, b);
+    BINOP(op, num, r, a, b, range);
     break;
   }
 
@@ -1326,7 +1329,7 @@ static Number eval_binop(int op, type_t type, Number na, Number nb,
     signed long a, b, *r = &num.s_long_val;
     SET_NUMBER_VAL(a, &na);
     SET_NUMBER_VAL(b, &nb);
-    BINOP(op, num, r, a, b);
+    BINOP(op, num, r, a, b, range);
     break;
   }
 
@@ -1334,7 +1337,7 @@ static Number eval_binop(int op, type_t type, Number na, Number nb,
     signed long long a, b, *r = &num.s_llong_val;
     SET_NUMBER_VAL(a, &na);
     SET_NUMBER_VAL(b, &nb);
-    BINOP(op, num, r, a, b);
+    BINOP(op, num, r, a, b, range);
     break;
   }
 
@@ -1342,7 +1345,7 @@ static Number eval_binop(int op, type_t type, Number na, Number nb,
     unsigned int a, b, *r = &num.u_int_val;
     SET_NUMBER_VAL(a, &na);
     SET_NUMBER_VAL(b, &nb);
-    BINOP(op, num, r, a, b);
+    BINOP(op, num, r, a, b, range);
     break;
   }
 
@@ -1350,7 +1353,7 @@ static Number eval_binop(int op, type_t type, Number na, Number nb,
     unsigned long a, b, *r = &num.u_long_val;
     SET_NUMBER_VAL(a, &na);
     SET_NUMBER_VAL(b, &nb);
-    BINOP(op, num, r, a, b);
+    BINOP(op, num, r, a, b, range);
     break;
   }
 
@@ -1358,7 +1361,7 @@ static Number eval_binop(int op, type_t type, Number na, Number nb,
     unsigned long long a, b, *r = &num.u_llong_val;
     SET_NUMBER_VAL(a, &na);
     SET_NUMBER_VAL(b, &nb);
-    BINOP(op, num, r, a, b);
+    BINOP(op, num, r, a, b, range);
     break;
   }
 
