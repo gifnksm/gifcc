@@ -2093,6 +2093,14 @@ static void test59(void) {
 }
 
 static void test60(void) { check_int(1, 1 ? 1 : 0l); }
+static void test61(void) {
+  int a[3 + 5] = {};
+  check_int(8, sizeof(a) / sizeof(a[0]));
+  int i;
+  for (i = 0; i < sizeof(a) / sizeof(a[0]); i++) {
+    check_int(0, a[i]);
+  }
+}
 
 static int num_check = 0;
 static void check_int(int a, int b) {
@@ -2125,7 +2133,7 @@ int main(void) {
       {"test51", test51}, {"test52", test52}, {"test53", test53},
       {"test54", test54}, {"test55", test55}, {"test56", test56},
       {"test57", test57}, {"test58", test58}, {"test59", test59},
-      {"test60", test60}, {NULL, NULL},
+      {"test60", test60}, {"test61", test61}, {NULL, NULL},
   };
   int i = 0;
   for (i = 0; test_list[i].name != NULL; i++) {

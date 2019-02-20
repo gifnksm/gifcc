@@ -1941,8 +1941,9 @@ static Type *type_name(Scope *scope, Tokenizer *tokenizer) {
     if (token_peek(tokenizer)->ty == ']') {
       type = new_type_unsized_array(type, false);
     } else {
-      type =
-          new_type_array(type, token_expect(tokenizer, TK_NUM)->num_val, false);
+      Expr *len = constant_expression(tokenizer, scope);
+      assert(len->ty == EX_NUM);
+      type = new_type_array(type, len->num, false);
     }
     token_expect(tokenizer, ']');
   }
@@ -1991,8 +1992,9 @@ static void direct_declarator(Scope *scope, Tokenizer *tokenizer,
       if (token_peek(tokenizer)->ty == ']') {
         *placeholder = *new_type_unsized_array(inner, false);
       } else {
-        *placeholder = *new_type_array(
-            inner, token_expect(tokenizer, TK_NUM)->num_val, false);
+        Expr *len = constant_expression(tokenizer, scope);
+        assert(len->ty == EX_NUM);
+        *placeholder = *new_type_array(inner, len->num, false);
       }
       placeholder = inner;
       Token *end = token_expect(tokenizer, ']');
@@ -2169,17 +2171,18 @@ static void array_initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
     int idx = 0;
 
     if (token_consume(tokenizer, '[')) {
-      Token *num = token_expect(tokenizer, TK_NUM);
+      Expr *idx_expr = constant_expression(tokenizer, scope);
+      assert(idx_expr->ty == EX_NUM);
       token_expect(tokenizer, ']');
       token_consume(tokenizer, '=');
       int i;
-      SET_NUMBER_VAL(i, &num->num_val);
+      SET_NUMBER_VAL(i, &idx_expr->num);
       if (type->array_len < 0) {
         vec_extend((*init)->elements, i + 1);
       } else {
         if (i >= type->array_len) {
-          range_error(num->range, "配列サイズを超過するインデックスです: %d",
-                      i);
+          range_error(idx_expr->range,
+                      "配列サイズを超過するインデックスです: %d", i);
         }
       }
       Initializer *eleminit = vec_get((*init)->elements, i);
