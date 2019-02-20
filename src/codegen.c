@@ -349,7 +349,7 @@ static void gen_expr(Expr *expr) {
   }
   if (expr->ty == EX_PLUS) {
     // 単項の `+`
-    gen_expr(expr->rhs);
+    assert(false);
     return;
   }
   if (expr->ty == EX_MINUS) {

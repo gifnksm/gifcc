@@ -278,11 +278,6 @@ static void dump_binop_expr_incdec(Expr *expr, char *label, int level) {
 }
 
 static void dump_expr(Expr *expr, int level) {
-  if (expr->ty <= 255) {
-    dump_binop_expr(expr, (char[]){'[', expr->ty, ']', '\0'}, level);
-    return;
-  }
-
   switch (expr->ty) {
   // primary expression
   case EX_NUM:
