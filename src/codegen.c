@@ -293,7 +293,7 @@ static void gen_expr(Expr *expr) {
     return;
   }
 
-  if (expr->ty == '=') {
+  if (expr->ty == EX_ASSIGN) {
     gen_lval(expr->lhs);
     gen_expr(expr->rhs);
     printf("  pop rdi\n");
@@ -446,16 +446,16 @@ static void gen_expr(Expr *expr) {
   printf("  pop rax\n");
 
   switch (expr->ty) {
-  case '+':
+  case EX_ADD:
     printf("  add %s, %s\n", r->rax, r->rdi);
     break;
-  case '-':
+  case EX_SUB:
     printf("  sub %s, %s\n", r->rax, r->rdi);
     break;
-  case '*':
+  case EX_MUL:
     printf("  imul %s, %s\n", r->rax, r->rdi);
     break;
-  case '/':
+  case EX_DIV:
     if (is_signed_int_type(expr->lhs->val_type, expr->lhs->range)) {
       printf("  mov %s, 0\n", r->rdx);
       printf("  idiv %s\n", r->rdi);
@@ -464,7 +464,7 @@ static void gen_expr(Expr *expr) {
       printf("  div %s\n", r->rdi);
     }
     break;
-  case '%':
+  case EX_MOD:
     printf("  mov %s, 0\n", r->rdx);
     printf("  div %s\n", r->rdi);
     printf("  mov %s, %s\n", r->rax, r->rdx);
@@ -479,7 +479,7 @@ static void gen_expr(Expr *expr) {
     printf("  setne al\n");
     printf("  movzb %s, al\n", r->rax);
     break;
-  case '<':
+  case EX_LT:
     printf("  cmp %s, %s\n", r->rax, r->rdi);
     if (is_signed_int_type(expr->lhs->val_type, expr->lhs->range)) {
       printf("  setl al\n");
@@ -488,7 +488,7 @@ static void gen_expr(Expr *expr) {
     }
     printf("  movzb %s, al\n", r->rax);
     break;
-  case '>':
+  case EX_GT:
     printf("  cmp %s, %s\n", r->rax, r->rdi);
     if (is_signed_int_type(expr->lhs->val_type, expr->lhs->range)) {
       printf("  setg al\n");
@@ -527,16 +527,16 @@ static void gen_expr(Expr *expr) {
       printf("  shr %s, cl\n", r->rax);
     }
     break;
-  case '&':
+  case EX_AND:
     printf("  and %s, %s\n", r->rax, r->rdi);
     break;
-  case '^':
+  case EX_XOR:
     printf("  xor %s, %s\n", r->rax, r->rdi);
     break;
-  case '|':
+  case EX_OR:
     printf("  or %s, %s\n", r->rax, r->rdi);
     break;
-  case ',':
+  case EX_COMMA:
     printf("  mov %s, %s\n", r->rax, r->rdi);
     break;
   default:

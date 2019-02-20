@@ -1278,34 +1278,34 @@ static Expr *new_expr_unary(Scope *scope, int op, Expr *operand, Range range) {
 
 #define BINOP(op, num, r, a, b)                                                \
   switch ((op)) {                                                              \
-  case '*':                                                                    \
+  case EX_MUL:                                                                 \
     *(r) = ((a) * (b));                                                        \
     return (num);                                                              \
-  case '/':                                                                    \
+  case EX_DIV:                                                                 \
     *(r) = ((a) / (b));                                                        \
     return (num);                                                              \
-  case '%':                                                                    \
+  case EX_MOD:                                                                 \
     *(r) = ((a) % (b));                                                        \
     return (num);                                                              \
-  case '+':                                                                    \
+  case EX_ADD:                                                                 \
     *(r) = ((a) + (b));                                                        \
     return (num);                                                              \
-  case '-':                                                                    \
+  case EX_SUB:                                                                 \
     *(r) = ((a) - (b));                                                        \
     return (num);                                                              \
-  case '&':                                                                    \
+  case EX_AND:                                                                 \
     *(r) = ((a) & (b));                                                        \
     return (num);                                                              \
-  case '^':                                                                    \
+  case EX_XOR:                                                                 \
     *(r) = ((a) ^ (b));                                                        \
     return (num);                                                              \
-  case '|':                                                                    \
+  case EX_OR:                                                                  \
     *(r) = ((a) | (b));                                                        \
     return (num);                                                              \
-  case '<':                                                                    \
+  case EX_LT:                                                                  \
     *(r) = ((a) < (b));                                                        \
     return (num);                                                              \
-  case '>':                                                                    \
+  case EX_GT:                                                                  \
     *(r) = ((a) > (b));                                                        \
     return (num);                                                              \
   case EX_LTEQ:                                                                \
@@ -1480,9 +1480,9 @@ static Expr *new_expr_binop(Scope *scope, int op, Expr *lhs, Expr *rhs,
   Type *val_type;
   switch (op) {
   // multiplicative
-  case '*':
-  case '/':
-  case '%':
+  case EX_MUL:
+  case EX_DIV:
+  case EX_MOD:
     val_type = arith_converted(scope, &lhs, &rhs);
     if (val_type == NULL) {
       binop_type_error(op, lhs, rhs);
@@ -1495,7 +1495,7 @@ static Expr *new_expr_binop(Scope *scope, int op, Expr *lhs, Expr *rhs,
     }
     break;
   // additive
-  case '+':
+  case EX_ADD:
     if (is_ptr_type(lhs->val_type)) {
       if (is_ptr_type(rhs->val_type) || !is_integer_type(rhs->val_type)) {
         binop_type_error(op, lhs, rhs);
@@ -1505,7 +1505,7 @@ static Expr *new_expr_binop(Scope *scope, int op, Expr *lhs, Expr *rhs,
       Expr *size = new_expr_num(
           new_number_size_t(get_val_size(lhs->val_type->ptrof, lhs->range)),
           range);
-      rhs = new_expr_binop(scope, '*', rhs, size, range);
+      rhs = new_expr_binop(scope, EX_MUL, rhs, size, range);
       val_type = lhs->val_type;
       break;
     }
@@ -1519,7 +1519,7 @@ static Expr *new_expr_binop(Scope *scope, int op, Expr *lhs, Expr *rhs,
       Expr *size = new_expr_num(
           new_number_size_t(get_val_size(rhs->val_type->ptrof, rhs->range)),
           range);
-      lhs = new_expr_binop(scope, '*', lhs, size, range);
+      lhs = new_expr_binop(scope, EX_MUL, lhs, size, range);
       val_type = rhs->val_type;
       break;
     }
@@ -1536,7 +1536,7 @@ static Expr *new_expr_binop(Scope *scope, int op, Expr *lhs, Expr *rhs,
       return lhs;
     }
     break;
-  case '-':
+  case EX_SUB:
     if (is_ptr_type(lhs->val_type)) {
       if (is_ptr_type(rhs->val_type)) {
         if (!is_sametype(lhs->val_type, rhs->val_type)) {
@@ -1544,13 +1544,13 @@ static Expr *new_expr_binop(Scope *scope, int op, Expr *lhs, Expr *rhs,
         }
 
         // ptr - ptr
-        Expr *sub = new_expr('-', new_type(TY_S_LONG, false), range);
+        Expr *sub = new_expr(EX_SUB, new_type(TY_S_LONG, false), range);
         sub->lhs = lhs;
         sub->rhs = rhs;
         Expr *size = new_expr_num(new_number_ptrdiff_t(get_val_size(
                                       lhs->val_type->ptrof, lhs->range)),
                                   range);
-        return new_expr_binop(scope, '/', sub, size, range);
+        return new_expr_binop(scope, EX_DIV, sub, size, range);
       }
 
       if (is_integer_type(rhs->val_type)) {
@@ -1558,7 +1558,7 @@ static Expr *new_expr_binop(Scope *scope, int op, Expr *lhs, Expr *rhs,
         Expr *size = new_expr_num(
             new_number_size_t(get_val_size(lhs->val_type->ptrof, lhs->range)),
             range);
-        rhs = new_expr_binop(scope, '*', rhs, size, range);
+        rhs = new_expr_binop(scope, EX_MUL, rhs, size, range);
         val_type = lhs->val_type;
         break;
       }
@@ -1598,8 +1598,8 @@ static Expr *new_expr_binop(Scope *scope, int op, Expr *lhs, Expr *rhs,
     }
     break;
 
-  case '<':
-  case '>':
+  case EX_LT:
+  case EX_GT:
   case EX_LTEQ:
   case EX_GTEQ:
   case EX_EQEQ:
@@ -1614,9 +1614,9 @@ static Expr *new_expr_binop(Scope *scope, int op, Expr *lhs, Expr *rhs,
     val_type = new_type(TY_S_INT, false);
     break;
   // and
-  case '&':
-  case '^':
-  case '|':
+  case EX_AND:
+  case EX_XOR:
+  case EX_OR:
     if (!is_integer_type(lhs->val_type) || !is_integer_type(rhs->val_type)) {
       binop_type_error(op, lhs, rhs);
     }
@@ -1683,11 +1683,11 @@ static Expr *new_expr_binop(Scope *scope, int op, Expr *lhs, Expr *rhs,
     val_type = new_type(TY_S_INT, false);
     break;
   }
-  case '=':
+  case EX_ASSIGN:
     rhs = new_expr_cast(scope, lhs->val_type, rhs, rhs->range);
     val_type = lhs->val_type;
     break;
-  case ',':
+  case EX_COMMA:
     val_type = lhs->val_type;
     break;
   default:
@@ -1743,8 +1743,8 @@ static Expr *new_expr_index(Scope *scope, Expr *array, Expr *index,
   index = coerce_array2ptr(scope, index);
   index = coerce_func2ptr(scope, index);
 
-  return new_expr_unary(scope, '*',
-                        new_expr_binop(scope, '+', array, index, range), range);
+  return new_expr_unary(
+      scope, '*', new_expr_binop(scope, EX_ADD, array, index, range), range);
 }
 
 static Expr *new_expr_dot(Scope *scope, Expr *operand, char *name,
@@ -1770,7 +1770,7 @@ static Expr *new_expr_arrow(Scope *scope, Expr *operand, char *name,
   if (member == NULL) {
     range_error(range, "存在しないメンバへのアクセスです: %s", name);
   }
-  Expr *expr = new_expr('+', new_type_ptr(member->type, false), range);
+  Expr *expr = new_expr(EX_ADD, new_type_ptr(member->type, false), range);
   expr->lhs = operand;
   expr->rhs = new_expr_num(new_number_size_t(member->offset), range);
   return new_expr_unary(scope, '*', expr, range);
@@ -2028,12 +2028,14 @@ static Expr *binary_expression(Tokenizer *tokenizer, Scope *scope,
 }
 
 static Expr *multiplicative_expression(Tokenizer *tokenizer, Scope *scope) {
-  const int OPS[] = {'*', '/', '%', '\0'};
-  return binary_expression(tokenizer, scope, OPS, OPS, cast_expression);
+  const int TKS[] = {'*', '/', '%', '\0'};
+  const int EXS[] = {EX_MUL, EX_DIV, EX_MOD, '\0'};
+  return binary_expression(tokenizer, scope, TKS, EXS, cast_expression);
 }
 static Expr *additive_expression(Tokenizer *tokenizer, Scope *scope) {
-  const int OPS[] = {'+', '-', '\0'};
-  return binary_expression(tokenizer, scope, OPS, OPS,
+  const int TKS[] = {'+', '-', '\0'};
+  const int EXS[] = {EX_ADD, EX_SUB, '\0'};
+  return binary_expression(tokenizer, scope, TKS, EXS,
                            multiplicative_expression);
 }
 static Expr *shift_expression(Tokenizer *tokenizer, Scope *scope) {
@@ -2043,7 +2045,7 @@ static Expr *shift_expression(Tokenizer *tokenizer, Scope *scope) {
 }
 static Expr *relational_expression(Tokenizer *tokenizer, Scope *scope) {
   const int TKS[] = {'<', '>', TK_LTEQ, TK_GTEQ, '\0'};
-  const int EXS[] = {'<', '>', EX_LTEQ, EX_GTEQ, '\0'};
+  const int EXS[] = {EX_LT, EX_GT, EX_LTEQ, EX_GTEQ, '\0'};
   return binary_expression(tokenizer, scope, TKS, EXS, shift_expression);
 }
 static Expr *equality_expression(Tokenizer *tokenizer, Scope *scope) {
@@ -2052,16 +2054,19 @@ static Expr *equality_expression(Tokenizer *tokenizer, Scope *scope) {
   return binary_expression(tokenizer, scope, TKS, EXS, relational_expression);
 }
 static Expr *and_expression(Tokenizer *tokenizer, Scope *scope) {
-  const int OPS[] = {'&', '\0'};
-  return binary_expression(tokenizer, scope, OPS, OPS, equality_expression);
+  const int TKS[] = {'&', '\0'};
+  const int EXS[] = {EX_AND, '\0'};
+  return binary_expression(tokenizer, scope, TKS, EXS, equality_expression);
 }
 static Expr *exclusive_or_expression(Tokenizer *tokenizer, Scope *scope) {
-  const int OPS[] = {'^', '\0'};
-  return binary_expression(tokenizer, scope, OPS, OPS, and_expression);
+  const int TKS[] = {'^', '\0'};
+  const int EXS[] = {EX_XOR, '\0'};
+  return binary_expression(tokenizer, scope, TKS, EXS, and_expression);
 }
 static Expr *inclusive_or_expression(Tokenizer *tokenizer, Scope *scope) {
-  const int OPS[] = {'|', '\0'};
-  return binary_expression(tokenizer, scope, OPS, OPS, exclusive_or_expression);
+  const int TKS[] = {'|', '\0'};
+  const int EXS[] = {EX_OR, '\0'};
+  return binary_expression(tokenizer, scope, TKS, EXS, exclusive_or_expression);
 }
 static Expr *logical_and_expression(Tokenizer *tokenizer, Scope *scope) {
   const int TKS[] = {TK_LOGAND, '\0'};
@@ -2089,7 +2094,7 @@ static Expr *assignment_expression(Tokenizer *tokenizer, Scope *scope) {
   Expr *lhs = conditional_expression(tokenizer, scope);
   if (token_consume(tokenizer, '=')) {
     Expr *rhs = assignment_expression(tokenizer, scope);
-    return new_expr_binop(scope, '=', lhs, rhs,
+    return new_expr_binop(scope, EX_ASSIGN, lhs, rhs,
                           range_join(lhs->range, rhs->range));
   }
 
@@ -2099,12 +2104,17 @@ static Expr *assignment_expression(Tokenizer *tokenizer, Scope *scope) {
   } Pair;
 
   const Pair PAIRS[] = {
-      {TK_MUL_ASSIGN, '*'},          {TK_DIV_ASSIGN, '/'},
-      {TK_MOD_ASSIGN, '%'},          {TK_ADD_ASSIGN, '+'},
-      {TK_SUB_ASSIGN, '-'},          {TK_SUB_ASSIGN, '-'},
-      {TK_LSHIFT_ASSIGN, EX_LSHIFT}, {TK_RSHIFT_ASSIGN, EX_RSHIFT},
-      {TK_AND_ASSIGN, '&'},          {TK_OR_ASSIGN, '|'},
-      {TK_XOR_ASSIGN, '^'},          {TK_EOF, '\0'},
+      {TK_MUL_ASSIGN, EX_MUL},
+      {TK_DIV_ASSIGN, EX_DIV},
+      {TK_MOD_ASSIGN, EX_MOD},
+      {TK_ADD_ASSIGN, EX_ADD},
+      {TK_SUB_ASSIGN, EX_SUB},
+      {TK_LSHIFT_ASSIGN, EX_LSHIFT},
+      {TK_RSHIFT_ASSIGN, EX_RSHIFT},
+      {TK_AND_ASSIGN, EX_AND},
+      {TK_XOR_ASSIGN, EX_XOR},
+      {TK_OR_ASSIGN, EX_OR},
+      {TK_EOF, '\0'},
   };
 
   for (int i = 0; PAIRS[i].token_ty != TK_EOF; i++) {
@@ -2112,7 +2122,7 @@ static Expr *assignment_expression(Tokenizer *tokenizer, Scope *scope) {
     if (token_consume(tokenizer, p->token_ty)) {
       Expr *rhs = assignment_expression(tokenizer, scope);
       Range range = range_join(lhs->range, rhs->range);
-      return new_expr_binop(scope, '=', lhs,
+      return new_expr_binop(scope, EX_ASSIGN, lhs,
                             new_expr_binop(scope, p->expr_ty, lhs, rhs, range),
                             range);
     }
@@ -2122,8 +2132,9 @@ static Expr *assignment_expression(Tokenizer *tokenizer, Scope *scope) {
 }
 
 static Expr *expression(Tokenizer *tokenizer, Scope *scope) {
-  const int OPS[] = {',', '\0'};
-  return binary_expression(tokenizer, scope, OPS, OPS, assignment_expression);
+  const int TKS[] = {',', '\0'};
+  const int EXS[] = {EX_COMMA, '\0'};
+  return binary_expression(tokenizer, scope, TKS, EXS, assignment_expression);
 }
 
 Expr *constant_expression(Tokenizer *tokenizer, Scope *scope) {
@@ -2876,7 +2887,7 @@ static Stmt *statement(Tokenizer *tokenizer, Scope *scope) {
 static void gen_init(Scope *scope, Vector *stmts, Initializer *init,
                      Expr *dest) {
   if (init == NULL) {
-    Expr *expr = new_expr_binop(scope, '=', dest,
+    Expr *expr = new_expr_binop(scope, EX_ASSIGN, dest,
                                 new_expr_num(new_number_int(0), dest->range),
                                 dest->range);
     Stmt *s = new_stmt_expr(expr, expr->range);
@@ -2906,7 +2917,7 @@ static void gen_init(Scope *scope, Vector *stmts, Initializer *init,
   }
 
   if (init->expr != NULL) {
-    Expr *expr = new_expr_binop(scope, '=', dest, init->expr,
+    Expr *expr = new_expr_binop(scope, EX_ASSIGN, dest, init->expr,
                                 range_join(dest->range, init->expr->range));
     Stmt *s = new_stmt_expr(expr, expr->range);
     vec_push(stmts, s);

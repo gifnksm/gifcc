@@ -37,8 +37,8 @@ enum {
   TK_LSHIFT_ASSIGN, // `<<=`
   TK_RSHIFT_ASSIGN, // `>>=`
   TK_AND_ASSIGN,    // `&=`
-  TK_OR_ASSIGN,     // `|=`
   TK_XOR_ASSIGN,    // `^=`
+  TK_OR_ASSIGN,     // `|=`
   TK_ARROW,         // `->`
   TK_ELIPSIS,       // `...`
   TK_VOID,          // `void`
@@ -191,14 +191,26 @@ enum {
   EX_STACK_VAR,
   EX_GLOBAL_VAR,
   EX_STR,
+  EX_ADD,
+  EX_SUB,
+  EX_MUL,
+  EX_DIV,
+  EX_MOD,
   EX_EQEQ,
   EX_NOTEQ,
+  EX_LT,
+  EX_GT,
   EX_LTEQ,
   EX_GTEQ,
   EX_LSHIFT,
   EX_RSHIFT,
+  EX_AND,
+  EX_XOR,
+  EX_OR,
   EX_LOGAND,
   EX_LOGOR,
+  EX_ASSIGN,
+  EX_COMMA,
   EX_COND,
   EX_INC,
   EX_DEC,

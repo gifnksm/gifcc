@@ -313,6 +313,21 @@ static void dump_expr(Expr *expr, int level) {
     print_string_literal(expr->name);
     printf(")\n");
     return;
+  case EX_ADD:
+    dump_binop_expr(expr, "[+]", level);
+    return;
+  case EX_SUB:
+    dump_binop_expr(expr, "[-]", level);
+    return;
+  case EX_MUL:
+    dump_binop_expr(expr, "[*]", level);
+    return;
+  case EX_DIV:
+    dump_binop_expr(expr, "[/]", level);
+    return;
+  case EX_MOD:
+    dump_binop_expr(expr, "[%]", level);
+    return;
   case EX_EQEQ:
     dump_binop_expr(expr, "[==]", level);
     return;
@@ -321,6 +336,12 @@ static void dump_expr(Expr *expr, int level) {
     return;
   case EX_LTEQ:
     dump_binop_expr(expr, "[<=]", level);
+    return;
+  case EX_LT:
+    dump_binop_expr(expr, "[<]", level);
+    return;
+  case EX_GT:
+    dump_binop_expr(expr, "[>]", level);
     return;
   case EX_GTEQ:
     dump_binop_expr(expr, "[>=]", level);
@@ -331,11 +352,26 @@ static void dump_expr(Expr *expr, int level) {
   case EX_RSHIFT:
     dump_binop_expr(expr, "[>>]", level);
     return;
+  case EX_AND:
+    dump_binop_expr(expr, "[&]", level);
+    return;
+  case EX_XOR:
+    dump_binop_expr(expr, "[^]", level);
+    return;
+  case EX_OR:
+    dump_binop_expr(expr, "[|]", level);
+    return;
   case EX_LOGAND:
     dump_binop_expr(expr, "[&&]", level);
     return;
   case EX_LOGOR:
     dump_binop_expr(expr, "[||]", level);
+    return;
+  case EX_ASSIGN:
+    dump_binop_expr(expr, "[=]", level);
+    return;
+  case EX_COMMA:
+    dump_binop_expr(expr, "[,]", level);
     return;
   case EX_COND:
     dump_range_start(expr->range);
