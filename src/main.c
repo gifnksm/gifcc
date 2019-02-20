@@ -665,6 +665,7 @@ typedef enum {
   OUTPUT_ASM,
   OUTPUT_TOKEN,
   OUTPUT_AST,
+  OUTPUT_SEMA,
 } output_t;
 
 struct option longopts[] = {
@@ -692,6 +693,8 @@ int main(int argc, char **argv) {
         output_mode = OUTPUT_TOKEN;
       } else if (strcmp(optarg, "ast") == 0) {
         output_mode = OUTPUT_AST;
+      } else if (strcmp(optarg, "sema") == 0) {
+        output_mode = OUTPUT_SEMA;
       } else {
         error("不明なオプションの値です: %s", optarg);
         return 1;
@@ -734,6 +737,10 @@ int main(int argc, char **argv) {
   }
 
   sema(tunit);
+  if (output_mode == OUTPUT_SEMA) {
+    output_ast(tunit);
+    return 0;
+  }
 
   gen(tunit);
 
