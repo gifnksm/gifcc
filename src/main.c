@@ -65,6 +65,8 @@ static void dump_number(Number num) {
     printf("%d", num.enum_val);
     break;
   case TY_VOID:
+    printf("void");
+    break;
   case TY_ARRAY:
   case TY_FUNC:
   case TY_STRUCT:

@@ -5,6 +5,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <stdnoreturn.h>
 
 #define NEW(type) ((type *)calloc(1, sizeof(type)))

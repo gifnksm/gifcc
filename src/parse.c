@@ -107,12 +107,7 @@ static Expr *new_expr_call(Scope *scope, Expr *callee, Vector *argument,
 static Expr *new_expr_postfix(Scope *scope, int ty, Expr *operand, Range range);
 static Expr *new_expr_cast(Scope *scope, Type *val_type, Expr *operand,
                            Range range);
-static Number eval_unaryop(int op, type_t type, Number na, Range range);
 static Expr *new_expr_unary(Scope *scope, int op, Expr *operand, Range range);
-static Number eval_binop(int op, type_t type, Number na, Number nb,
-                         Range range);
-static Number eval_binop_shift(int op, type_t type, Number na, Number nb,
-                               Range range);
 static Expr *new_expr_binop(Scope *scope, int op, Expr *lhs, Expr *rhs,
                             Range range);
 static Expr *new_expr_cond(Scope *scope, Expr *cond, Expr *then_expr,
@@ -1023,161 +1018,9 @@ static Expr *new_expr_cast(Scope *scope, Type *val_type, Expr *operand,
     return operand;
   }
 
-  if (operand->ty == EX_NUM) {
-    Number *opnum = &operand->num;
-    switch (val_type->ty) {
-    case TY_VOID:
-      operand->val_type = val_type;
-      return operand;
-    case TY_CHAR:
-      SET_NUMBER_VAL(opnum->char_val, opnum);
-      operand->val_type = val_type;
-      opnum->type = val_type->ty;
-      return operand;
-    case TY_S_CHAR:
-      SET_NUMBER_VAL(opnum->s_char_val, opnum);
-      operand->val_type = val_type;
-      opnum->type = val_type->ty;
-      return operand;
-    case TY_S_SHORT:
-      SET_NUMBER_VAL(opnum->s_short_val, opnum);
-      operand->val_type = val_type;
-      opnum->type = val_type->ty;
-      return operand;
-    case TY_S_INT:
-      SET_NUMBER_VAL(opnum->s_int_val, opnum);
-      operand->val_type = val_type;
-      opnum->type = val_type->ty;
-      return operand;
-    case TY_S_LONG:
-      SET_NUMBER_VAL(opnum->s_long_val, opnum);
-      operand->val_type = val_type;
-      opnum->type = val_type->ty;
-      return operand;
-    case TY_S_LLONG:
-      SET_NUMBER_VAL(opnum->s_llong_val, opnum);
-      operand->val_type = val_type;
-      opnum->type = val_type->ty;
-      return operand;
-    case TY_U_CHAR:
-      SET_NUMBER_VAL(opnum->u_char_val, opnum);
-      operand->val_type = val_type;
-      opnum->type = val_type->ty;
-      return operand;
-    case TY_U_SHORT:
-      SET_NUMBER_VAL(opnum->u_short_val, opnum);
-      operand->val_type = val_type;
-      opnum->type = val_type->ty;
-      return operand;
-    case TY_U_INT:
-      SET_NUMBER_VAL(opnum->u_int_val, opnum);
-      operand->val_type = val_type;
-      opnum->type = val_type->ty;
-      return operand;
-    case TY_U_LONG:
-      SET_NUMBER_VAL(opnum->u_long_val, opnum);
-      operand->val_type = val_type;
-      opnum->type = val_type->ty;
-      return operand;
-    case TY_U_LLONG:
-      SET_NUMBER_VAL(opnum->u_llong_val, opnum);
-      operand->val_type = val_type;
-      opnum->type = val_type->ty;
-      return operand;
-    case TY_PTR:
-      SET_NUMBER_VAL(opnum->ptr_val, opnum);
-      operand->val_type = val_type;
-      opnum->type = val_type->ty;
-      return operand;
-    case TY_ENUM:
-      SET_NUMBER_VAL(opnum->enum_val, opnum);
-      operand->val_type = val_type;
-      opnum->type = val_type->ty;
-      return operand;
-    case TY_ARRAY:
-    case TY_FUNC:
-    case TY_STRUCT:
-    case TY_UNION:
-      break;
-    }
-  }
-
   Expr *expr = new_expr(EX_CAST, val_type, range);
   expr->unop.operand = operand;
   return expr;
-}
-
-#define UNARYOP(op, num, r, a)                                                 \
-  switch ((op)) {                                                              \
-  case EX_MINUS:                                                               \
-    *(r) = (-(a));                                                             \
-    return (num);                                                              \
-  case EX_NOT:                                                                 \
-    *(r) = (~(a));                                                             \
-    return (num);                                                              \
-  }
-
-static Number eval_unaryop(int op, type_t type, Number na, Range range) {
-  Number num = {.type = type};
-  switch (type) {
-  case TY_S_INT: {
-    signed int a, *r = &num.s_int_val;
-    SET_NUMBER_VAL(a, &na);
-    UNARYOP(op, num, r, a);
-    break;
-  }
-
-  case TY_S_LONG: {
-    signed long a, *r = &num.s_long_val;
-    SET_NUMBER_VAL(a, &na);
-    UNARYOP(op, num, r, a);
-    break;
-  }
-
-  case TY_S_LLONG: {
-    signed long long a, *r = &num.s_llong_val;
-    SET_NUMBER_VAL(a, &na);
-    UNARYOP(op, num, r, a);
-    break;
-  }
-
-  case TY_U_INT: {
-    unsigned int a, *r = &num.u_int_val;
-    SET_NUMBER_VAL(a, &na);
-    UNARYOP(op, num, r, a);
-    break;
-  }
-
-  case TY_U_LONG: {
-    unsigned long a, *r = &num.u_long_val;
-    SET_NUMBER_VAL(a, &na);
-    UNARYOP(op, num, r, a);
-    break;
-  }
-
-  case TY_U_LLONG: {
-    unsigned long long a, *r = &num.u_llong_val;
-    SET_NUMBER_VAL(a, &na);
-    UNARYOP(op, num, r, a);
-    break;
-  }
-
-  case TY_VOID:
-  case TY_CHAR:
-  case TY_S_CHAR:
-  case TY_S_SHORT:
-  case TY_U_CHAR:
-  case TY_U_SHORT:
-  case TY_PTR:
-  case TY_ENUM:
-  case TY_ARRAY:
-  case TY_FUNC:
-  case TY_STRUCT:
-  case TY_UNION:
-    break;
-  }
-  range_error(range, "不正な型の演算です: %d(%c), %d, %d", op, op, type,
-              na.type);
 }
 
 static Expr *new_expr_unary(Scope *scope, int op, Expr *operand, Range range) {
@@ -1212,13 +1055,6 @@ static Expr *new_expr_unary(Scope *scope, int op, Expr *operand, Range range) {
     break;
   }
   case EX_PLUS:
-    if (!is_arith_type(operand->val_type)) {
-      range_error(range, "不正な型の値に対する演算です: 算術型ではありません");
-    }
-    if (is_integer_type(operand->val_type)) {
-      val_type = integer_promoted(scope, &operand);
-    }
-    return operand;
   case EX_MINUS:
     if (!is_arith_type(operand->val_type)) {
       range_error(range, "不正な型の値に対する演算です: 算術型ではありません");
@@ -1227,11 +1063,6 @@ static Expr *new_expr_unary(Scope *scope, int op, Expr *operand, Range range) {
       val_type = integer_promoted(scope, &operand);
     } else {
       val_type = operand->val_type;
-    }
-    if (operand->ty == EX_NUM) {
-      operand->num = eval_unaryop(op, val_type->ty, operand->num, range);
-      operand->range = range;
-      return operand;
     }
     break;
   case EX_LOG_NOT: {
@@ -1247,11 +1078,6 @@ static Expr *new_expr_unary(Scope *scope, int op, Expr *operand, Range range) {
       range_error(range, "不正な型の値に対する演算です: 整数型ではありません");
     }
     val_type = integer_promoted(scope, &operand);
-    if (operand->ty == EX_NUM) {
-      operand->num = eval_unaryop(op, val_type->ty, operand->num, range);
-      operand->range = range;
-      return operand;
-    }
     break;
   default:
     assert(false);
@@ -1261,203 +1087,6 @@ static Expr *new_expr_unary(Scope *scope, int op, Expr *operand, Range range) {
   Expr *expr = new_expr(op, val_type, range);
   expr->unop.operand = operand;
   return expr;
-}
-
-#define BINOP(op, num, r, a, b, range)                                         \
-  switch ((op)) {                                                              \
-  case EX_MUL:                                                                 \
-    *(r) = ((a) * (b));                                                        \
-    return (num);                                                              \
-  case EX_DIV:                                                                 \
-    if (b == 0) {                                                              \
-      range_error(range, "ゼロ除算です");                                      \
-    }                                                                          \
-    *(r) = ((a) / (b));                                                        \
-    return (num);                                                              \
-  case EX_MOD:                                                                 \
-    *(r) = ((a) % (b));                                                        \
-    return (num);                                                              \
-  case EX_ADD:                                                                 \
-    *(r) = ((a) + (b));                                                        \
-    return (num);                                                              \
-  case EX_SUB:                                                                 \
-    *(r) = ((a) - (b));                                                        \
-    return (num);                                                              \
-  case EX_AND:                                                                 \
-    *(r) = ((a) & (b));                                                        \
-    return (num);                                                              \
-  case EX_XOR:                                                                 \
-    *(r) = ((a) ^ (b));                                                        \
-    return (num);                                                              \
-  case EX_OR:                                                                  \
-    *(r) = ((a) | (b));                                                        \
-    return (num);                                                              \
-  case EX_LT:                                                                  \
-    *(r) = ((a) < (b));                                                        \
-    return (num);                                                              \
-  case EX_GT:                                                                  \
-    *(r) = ((a) > (b));                                                        \
-    return (num);                                                              \
-  case EX_LTEQ:                                                                \
-    *(r) = ((a) <= (b));                                                       \
-    return (num);                                                              \
-  case EX_GTEQ:                                                                \
-    *(r) = ((a) >= (b));                                                       \
-    return (num);                                                              \
-  case EX_EQEQ:                                                                \
-    *(r) = ((a) == (b));                                                       \
-    return (num);                                                              \
-  case EX_NOTEQ:                                                               \
-    *(r) = ((a) != (b));                                                       \
-    return (num);                                                              \
-  }
-
-static Number eval_binop(int op, type_t type, Number na, Number nb,
-                         Range range) {
-  assert(na.type == nb.type);
-  Number num = {.type = type};
-  switch (type) {
-  case TY_S_INT: {
-    signed int a, b, *r = &num.s_int_val;
-    SET_NUMBER_VAL(a, &na);
-    SET_NUMBER_VAL(b, &nb);
-    BINOP(op, num, r, a, b, range);
-    break;
-  }
-
-  case TY_S_LONG: {
-    signed long a, b, *r = &num.s_long_val;
-    SET_NUMBER_VAL(a, &na);
-    SET_NUMBER_VAL(b, &nb);
-    BINOP(op, num, r, a, b, range);
-    break;
-  }
-
-  case TY_S_LLONG: {
-    signed long long a, b, *r = &num.s_llong_val;
-    SET_NUMBER_VAL(a, &na);
-    SET_NUMBER_VAL(b, &nb);
-    BINOP(op, num, r, a, b, range);
-    break;
-  }
-
-  case TY_U_INT: {
-    unsigned int a, b, *r = &num.u_int_val;
-    SET_NUMBER_VAL(a, &na);
-    SET_NUMBER_VAL(b, &nb);
-    BINOP(op, num, r, a, b, range);
-    break;
-  }
-
-  case TY_U_LONG: {
-    unsigned long a, b, *r = &num.u_long_val;
-    SET_NUMBER_VAL(a, &na);
-    SET_NUMBER_VAL(b, &nb);
-    BINOP(op, num, r, a, b, range);
-    break;
-  }
-
-  case TY_U_LLONG: {
-    unsigned long long a, b, *r = &num.u_llong_val;
-    SET_NUMBER_VAL(a, &na);
-    SET_NUMBER_VAL(b, &nb);
-    BINOP(op, num, r, a, b, range);
-    break;
-  }
-
-  case TY_VOID:
-  case TY_CHAR:
-  case TY_S_CHAR:
-  case TY_S_SHORT:
-  case TY_U_CHAR:
-  case TY_U_SHORT:
-  case TY_PTR:
-  case TY_ENUM:
-  case TY_ARRAY:
-  case TY_FUNC:
-  case TY_STRUCT:
-  case TY_UNION:
-    break;
-  }
-  range_error(range, "不正な型の演算です: %d(%c), %d, %d, %d", op, op, type,
-              na.type, nb.type);
-}
-
-#define BINOP_SHIFT(op, num, r, a, b)                                          \
-  switch ((op)) {                                                              \
-  case EX_LSHIFT:                                                              \
-    *(r) = ((a) << (b));                                                       \
-    return (num);                                                              \
-  case EX_RSHIFT:                                                              \
-    *(r) = ((a) >> (b));                                                       \
-    return (num);                                                              \
-  }
-
-static Number eval_binop_shift(int op, type_t type, Number na, Number nb,
-                               Range range) {
-  unsigned char width;
-  SET_NUMBER_VAL(width, &nb);
-
-  Number num = {.type = type};
-  switch (type) {
-  case TY_S_INT: {
-    signed int a, *r = &num.s_int_val;
-    SET_NUMBER_VAL(a, &na);
-    BINOP_SHIFT(op, num, r, a, width);
-    break;
-  }
-
-  case TY_S_LONG: {
-    signed long a, *r = &num.s_long_val;
-    SET_NUMBER_VAL(a, &na);
-    BINOP_SHIFT(op, num, r, a, width);
-    break;
-  }
-
-  case TY_S_LLONG: {
-    signed long long a, *r = &num.s_llong_val;
-    SET_NUMBER_VAL(a, &na);
-    BINOP_SHIFT(op, num, r, a, width);
-    break;
-  }
-
-  case TY_U_INT: {
-    unsigned int a, *r = &num.u_int_val;
-    SET_NUMBER_VAL(a, &na);
-    BINOP_SHIFT(op, num, r, a, width);
-    break;
-  }
-
-  case TY_U_LONG: {
-    unsigned long a, *r = &num.u_long_val;
-    SET_NUMBER_VAL(a, &na);
-    BINOP_SHIFT(op, num, r, a, width);
-    break;
-  }
-
-  case TY_U_LLONG: {
-    unsigned long long a, *r = &num.u_llong_val;
-    SET_NUMBER_VAL(a, &na);
-    BINOP_SHIFT(op, num, r, a, width);
-    break;
-  }
-
-  case TY_VOID:
-  case TY_CHAR:
-  case TY_S_CHAR:
-  case TY_S_SHORT:
-  case TY_U_CHAR:
-  case TY_U_SHORT:
-  case TY_PTR:
-  case TY_ENUM:
-  case TY_ARRAY:
-  case TY_FUNC:
-  case TY_STRUCT:
-  case TY_UNION:
-    break;
-  }
-  range_error(range, "不正な型の演算です: %d(%c), %d, %d, %d", op, op, type,
-              na.type, nb.type);
 }
 
 static Expr *new_expr_binop(Scope *scope, int op, Expr *lhs, Expr *rhs,
@@ -1476,11 +1105,6 @@ static Expr *new_expr_binop(Scope *scope, int op, Expr *lhs, Expr *rhs,
     val_type = arith_converted(scope, &lhs, &rhs);
     if (val_type == NULL) {
       binop_type_error(op, lhs, rhs);
-    }
-    if (lhs->ty == EX_NUM && rhs->ty == EX_NUM) {
-      lhs->num = eval_binop(op, val_type->ty, lhs->num, rhs->num, range);
-      lhs->range = range;
-      return lhs;
     }
     break;
   // additive
@@ -1517,11 +1141,6 @@ static Expr *new_expr_binop(Scope *scope, int op, Expr *lhs, Expr *rhs,
     val_type = arith_converted(scope, &lhs, &rhs);
     if (val_type == NULL) {
       binop_type_error(op, lhs, rhs);
-    }
-    if (lhs->ty == EX_NUM && rhs->ty == EX_NUM) {
-      lhs->num = eval_binop(op, val_type->ty, lhs->num, rhs->num, range);
-      lhs->range = range;
-      return lhs;
     }
     break;
   case EX_SUB:
@@ -1561,11 +1180,6 @@ static Expr *new_expr_binop(Scope *scope, int op, Expr *lhs, Expr *rhs,
     if (val_type == NULL) {
       binop_type_error(op, lhs, rhs);
     }
-    if (lhs->ty == EX_NUM && rhs->ty == EX_NUM) {
-      lhs->num = eval_binop(op, val_type->ty, lhs->num, rhs->num, range);
-      lhs->range = range;
-      return lhs;
-    }
     break;
   // shift
   case EX_LSHIFT:
@@ -1577,11 +1191,6 @@ static Expr *new_expr_binop(Scope *scope, int op, Expr *lhs, Expr *rhs,
     if (val_type == NULL) {
       binop_type_error(op, lhs, rhs);
     }
-    if (lhs->ty == EX_NUM && rhs->ty == EX_NUM) {
-      lhs->num = eval_binop_shift(op, val_type->ty, lhs->num, rhs->num, range);
-      lhs->range = range;
-      return lhs;
-    }
     break;
 
   case EX_LT:
@@ -1590,12 +1199,7 @@ static Expr *new_expr_binop(Scope *scope, int op, Expr *lhs, Expr *rhs,
   case EX_GTEQ:
   case EX_EQEQ:
   case EX_NOTEQ:
-    val_type = arith_converted(scope, &lhs, &rhs);
-    if (lhs->ty == EX_NUM && rhs->ty == EX_NUM) {
-      lhs->num = eval_binop(op, val_type->ty, lhs->num, rhs->num, range);
-      lhs->range = range;
-      return new_expr_cast(scope, new_type(TY_S_INT, false), lhs, range);
-    }
+    arith_converted(scope, &lhs, &rhs);
     val_type = new_type(TY_S_INT, false);
     break;
   // and
@@ -1609,64 +1213,14 @@ static Expr *new_expr_binop(Scope *scope, int op, Expr *lhs, Expr *rhs,
     if (val_type == NULL) {
       binop_type_error(op, lhs, rhs);
     }
-    if (lhs->ty == EX_NUM && rhs->ty == EX_NUM) {
-      lhs->num = eval_binop(op, val_type->ty, lhs->num, rhs->num, range);
-      lhs->range = range;
-      return lhs;
-    }
     break;
   case EX_LOG_AND: {
-    bool lhs_is_true = false;
-    if (lhs->ty == EX_NUM) {
-      int lval;
-      SET_NUMBER_VAL(lval, &lhs->num);
-      if (lval == 0) {
-        return new_expr_num(new_number_int(0),
-                            range_join(lhs->range, rhs->range));
-      }
-      lhs_is_true = true;
-    }
-    if (rhs->ty == EX_NUM) {
-      int rval;
-      SET_NUMBER_VAL(rval, &rhs->num);
-      if (rval == 0) {
-        return new_expr_num(new_number_int(0),
-                            range_join(lhs->range, rhs->range));
-      }
-      if (lhs_is_true) {
-        return new_expr_num(new_number_int(1),
-                            range_join(lhs->range, rhs->range));
-      }
-    }
     val_type = new_type(TY_S_INT, false);
     break;
   }
-  case EX_LOG_OR: {
-    bool lhs_is_false = false;
-    if (lhs->ty == EX_NUM) {
-      int lval;
-      SET_NUMBER_VAL(lval, &lhs->num);
-      if (lval != 0) {
-        return new_expr_num(new_number_int(1),
-                            range_join(lhs->range, rhs->range));
-      }
-      lhs_is_false = true;
-    }
-    if (rhs->ty == EX_NUM) {
-      int rval;
-      SET_NUMBER_VAL(rval, &rhs->num);
-      if (rval != 0) {
-        return new_expr_num(new_number_int(1),
-                            range_join(lhs->range, rhs->range));
-      }
-      if (lhs_is_false) {
-        return new_expr_num(new_number_int(0),
-                            range_join(lhs->range, rhs->range));
-      }
-    }
+  case EX_LOG_OR:
     val_type = new_type(TY_S_INT, false);
     break;
-  }
   case EX_ASSIGN:
     rhs = new_expr_cast(scope, lhs->val_type, rhs, rhs->range);
     val_type = lhs->val_type;
@@ -1705,14 +1259,6 @@ static Expr *new_expr_cond(Scope *scope, Expr *cond, Expr *then_expr,
     val_type = then_expr->val_type;
   }
 
-  if (cond->ty == EX_NUM) {
-    int i = 0;
-    SET_NUMBER_VAL(i, &cond->num);
-    if (i != 0) {
-      return then_expr;
-    }
-    return else_expr;
-  }
   Expr *expr = new_expr(EX_COND, val_type, range);
   expr->cond.cond = cond;
   expr->cond.then_expr = then_expr;
@@ -2124,7 +1670,12 @@ static Expr *expression(Tokenizer *tokenizer, Scope *scope) {
 }
 
 Expr *constant_expression(Tokenizer *tokenizer, Scope *scope) {
-  return conditional_expression(tokenizer, scope);
+  Expr *expr = conditional_expression(tokenizer, scope);
+  sema_expr(expr);
+  if (expr->ty != EX_NUM) {
+    range_error(expr->range, "定数式ではありません");
+  }
+  return expr;
 }
 
 static Vector *declaration(Tokenizer *tokenizer, Scope *scope) {
@@ -2331,6 +1882,7 @@ static void enumerator(Scope *scope, Tokenizer *tokenizer, Type *type,
   if (token_consume(tokenizer, '=')) {
     Expr *expr = constant_expression(tokenizer, scope);
     expr = new_expr_cast(scope, type, expr, expr->range);
+    sema_expr(expr);
     if (expr->ty != EX_NUM) {
       range_error(expr->range, "列挙型の値が定数式の数値ではありません");
     }
