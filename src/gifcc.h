@@ -186,7 +186,7 @@ typedef struct {
   Range range;
 } Token;
 
-enum {
+typedef enum {
   // primary expression
   EX_NUM = 256, // 整数のノードの型
   EX_STACK_VAR,
@@ -233,7 +233,7 @@ enum {
 
   // ternary operator
   EX_COND,
-};
+} expr_t;
 
 typedef enum {
   ST_EXPR,
@@ -305,9 +305,9 @@ typedef struct StringLiteral {
 } StringLiteral;
 
 typedef struct Expr {
-  int ty;         // ノードの型
+  expr_t ty;
   Type *val_type; // 値の型
-  Range range;    // ソースコード中の位置
+  Range range;
 
   union {
     // EX_NUM
@@ -534,6 +534,9 @@ int get_val_size(Type *ty, Range range);
 int get_val_align(Type *ty, Range range);
 Expr *constant_expression(Tokenizer *tokenizer, Scope *scope);
 TranslationUnit *parse(Reader *reader);
+
+// sema.c
+void sema(TranslationUnit *tunit);
 
 // codegen.c
 char *make_label(const char *s);
