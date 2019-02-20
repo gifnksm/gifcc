@@ -187,10 +187,24 @@ typedef struct {
 } Token;
 
 enum {
+  // primary expression
   EX_NUM = 256, // 整数のノードの型
   EX_STACK_VAR,
   EX_GLOBAL_VAR,
   EX_STR,
+
+  // prefix unary operator
+  EX_PRE_INC,
+  EX_PRE_DEC,
+  EX_ADDRESS,
+  EX_INDIRECT,
+  EX_PLUS,
+  EX_MINUS,
+  EX_NOT,
+  EX_LOG_NOT,
+  EX_CAST,
+
+  // binary operator
   EX_ADD,
   EX_SUB,
   EX_MUL,
@@ -207,15 +221,17 @@ enum {
   EX_AND,
   EX_XOR,
   EX_OR,
-  EX_LOGAND,
-  EX_LOGOR,
+  EX_LOG_AND,
+  EX_LOG_OR,
   EX_ASSIGN,
   EX_COMMA,
+
+  // ternary operator
   EX_COND,
+
   EX_INC,
   EX_DEC,
   EX_CALL,
-  EX_CAST,
 };
 
 typedef enum {

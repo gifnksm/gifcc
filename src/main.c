@@ -313,6 +313,30 @@ static void dump_expr(Expr *expr, int level) {
     print_string_literal(expr->name);
     printf(")\n");
     return;
+  case EX_PRE_INC:
+    dump_binop_expr_incdec(expr, "[++]", level);
+    return;
+  case EX_PRE_DEC:
+    dump_binop_expr_incdec(expr, "[--]", level);
+    return;
+  case EX_ADDRESS:
+    dump_binop_expr(expr, "[&]", level);
+    return;
+  case EX_INDIRECT:
+    dump_binop_expr(expr, "[&]", level);
+    return;
+  case EX_PLUS:
+    dump_binop_expr(expr, "[+]", level);
+    return;
+  case EX_MINUS:
+    dump_binop_expr(expr, "[-]", level);
+    return;
+  case EX_NOT:
+    dump_binop_expr(expr, "[~]", level);
+    return;
+  case EX_LOG_NOT:
+    dump_binop_expr(expr, "[!]", level);
+    return;
   case EX_ADD:
     dump_binop_expr(expr, "[+]", level);
     return;
@@ -361,10 +385,10 @@ static void dump_expr(Expr *expr, int level) {
   case EX_OR:
     dump_binop_expr(expr, "[|]", level);
     return;
-  case EX_LOGAND:
+  case EX_LOG_AND:
     dump_binop_expr(expr, "[&&]", level);
     return;
-  case EX_LOGOR:
+  case EX_LOG_OR:
     dump_binop_expr(expr, "[||]", level);
     return;
   case EX_ASSIGN:

@@ -105,7 +105,7 @@ static void gen_lval(Expr *expr) {
     printf("  push rax\n");
     return;
   }
-  if (expr->ty == '*' && expr->lhs == NULL) {
+  if (expr->ty == EX_INDIRECT) {
     gen_expr(expr->rhs);
     return;
   }
@@ -271,28 +271,6 @@ static void gen_expr(Expr *expr) {
     return;
   }
 
-  if (expr->ty == EX_CAST) {
-    Expr *operand = expr->expr;
-    gen_expr(operand);
-    const Reg *from = get_int_reg(operand->val_type, operand->range);
-    int from_size = get_val_size(operand->val_type, operand->range);
-    int to_size = get_val_size(expr->val_type, expr->range);
-    if (to_size > from_size) {
-      printf("  pop rax\n");
-      if (is_signed_int_type(operand->val_type, operand->range)) {
-        printf("  movsx %s, %s\n", r->rax, from->rax);
-      } else {
-        if (from_size < 4) {
-          printf("  movzx %s, %s\n", r->rax, from->rax);
-        } else {
-          printf("  mov %s, %s\n", from->rax, from->rax);
-        }
-      }
-      printf("  push rax\n");
-    }
-    return;
-  }
-
   if (expr->ty == EX_ASSIGN) {
     gen_lval(expr->lhs);
     gen_expr(expr->rhs);
@@ -303,7 +281,7 @@ static void gen_expr(Expr *expr) {
     return;
   }
 
-  if (expr->ty == EX_LOGAND) {
+  if (expr->ty == EX_LOG_AND) {
     char *false_label = make_label("logand.false");
     char *end_label = make_label("logand.end");
     gen_expr(expr->lhs);
@@ -322,7 +300,7 @@ static void gen_expr(Expr *expr) {
     return;
   }
 
-  if (expr->ty == EX_LOGOR) {
+  if (expr->ty == EX_LOG_OR) {
     char *true_label = make_label("logor.true");
     char *end_label = make_label("logor.end");
     gen_expr(expr->lhs);
@@ -356,12 +334,12 @@ static void gen_expr(Expr *expr) {
     return;
   }
 
-  if (expr->ty == '&' && expr->lhs == NULL) {
+  if (expr->ty == EX_ADDRESS) {
     // 単項の `&`
     gen_lval(expr->rhs);
     return;
   }
-  if (expr->ty == '*' && expr->lhs == NULL) {
+  if (expr->ty == EX_INDIRECT) {
     // 単項の `*`
     gen_expr(expr->rhs);
     printf("  pop rax\n");
@@ -369,12 +347,12 @@ static void gen_expr(Expr *expr) {
     printf("  push rax\n");
     return;
   }
-  if (expr->ty == '+' && expr->lhs == NULL) {
+  if (expr->ty == EX_PLUS) {
     // 単項の `+`
     gen_expr(expr->rhs);
     return;
   }
-  if (expr->ty == '-' && expr->lhs == NULL) {
+  if (expr->ty == EX_MINUS) {
     // 単項の `-`
     gen_expr(expr->rhs);
     printf("  pop rax\n");
@@ -382,7 +360,7 @@ static void gen_expr(Expr *expr) {
     printf("  push rax\n");
     return;
   }
-  if (expr->ty == '~') {
+  if (expr->ty == EX_NOT) {
     // `~`
     gen_expr(expr->rhs);
     printf("  pop rax\n");
@@ -390,20 +368,52 @@ static void gen_expr(Expr *expr) {
     printf("  push rax\n");
     return;
   }
-  if (expr->ty == '!') {
+  if (expr->ty == EX_LOG_NOT) {
     assert(false);
   }
-  if (expr->ty == EX_INC) {
-    if (expr->lhs == NULL) {
-      // 前置の `++`
-      gen_lval(expr->rhs);
+
+  if (expr->ty == EX_CAST) {
+    Expr *operand = expr->expr;
+    gen_expr(operand);
+    const Reg *from = get_int_reg(operand->val_type, operand->range);
+    int from_size = get_val_size(operand->val_type, operand->range);
+    int to_size = get_val_size(expr->val_type, expr->range);
+    if (to_size > from_size) {
       printf("  pop rax\n");
-      printf("  mov %s, [rax]\n", r->rdi);
-      printf("  add %s, %d\n", r->rdi, expr->incdec_size);
-      printf("  mov [rax], %s\n", r->rdi);
-      printf("  push rdi\n");
-      return;
+      if (is_signed_int_type(operand->val_type, operand->range)) {
+        printf("  movsx %s, %s\n", r->rax, from->rax);
+      } else {
+        if (from_size < 4) {
+          printf("  movzx %s, %s\n", r->rax, from->rax);
+        } else {
+          printf("  mov %s, %s\n", from->rax, from->rax);
+        }
+      }
+      printf("  push rax\n");
     }
+    return;
+  }
+  if (expr->ty == EX_PRE_INC) {
+    // 前置の `++`
+    gen_lval(expr->rhs);
+    printf("  pop rax\n");
+    printf("  mov %s, [rax]\n", r->rdi);
+    printf("  add %s, %d\n", r->rdi, expr->incdec_size);
+    printf("  mov [rax], %s\n", r->rdi);
+    printf("  push rdi\n");
+    return;
+  }
+  if (expr->ty == EX_PRE_DEC) {
+    // 前置の `--`
+    gen_lval(expr->rhs);
+    printf("  pop rax\n");
+    printf("  mov %s, [rax]\n", r->rdi);
+    printf("  sub %s, %d\n", r->rdi, expr->incdec_size);
+    printf("  mov [rax], %s\n", r->rdi);
+    printf("  push rdi\n");
+    return;
+  }
+  if (expr->ty == EX_INC) {
     // 後置の `++`
     gen_lval(expr->lhs);
     printf("  pop rax\n");
@@ -413,18 +423,7 @@ static void gen_expr(Expr *expr) {
     printf("  mov [rax], %s\n", r->rdi);
     return;
   }
-
   if (expr->ty == EX_DEC) {
-    if (expr->lhs == NULL) {
-      // 前置の `--`
-      gen_lval(expr->rhs);
-      printf("  pop rax\n");
-      printf("  mov %s, [rax]\n", r->rdi);
-      printf("  sub %s, %d\n", r->rdi, expr->incdec_size);
-      printf("  mov [rax], %s\n", r->rdi);
-      printf("  push rdi\n");
-      return;
-    }
     // 後置の `--`
     gen_lval(expr->lhs);
     printf("  pop rax\n");
@@ -828,7 +827,7 @@ static void gen_gvar_init(Initializer *init, Range range) {
       case TY_UNION:
         range_error(range, "int型ではありません");
       }
-    } else if (expr->ty == '&' && expr->lhs == NULL && expr->rhs != NULL) {
+    } else if (expr->ty == EX_ADDRESS) {
       if (expr->rhs->ty != EX_GLOBAL_VAR) {
         range_error(range, "グローバル変数以外へのポインタです");
       }

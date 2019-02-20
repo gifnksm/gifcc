@@ -870,13 +870,13 @@ static Type *new_type_enum(char *tag, bool is_const) {
 
 static Expr *coerce_array2ptr(Scope *scope, Expr *expr) {
   if (is_array_type(expr->val_type)) {
-    return new_expr_unary(scope, '&', expr, expr->range);
+    return new_expr_unary(scope, EX_ADDRESS, expr, expr->range);
   }
   return expr;
 }
 static Expr *coerce_func2ptr(Scope *scope, Expr *expr) {
   if (is_func_type(expr->val_type)) {
-    return new_expr_unary(scope, '&', expr, expr->range);
+    return new_expr_unary(scope, EX_ADDRESS, expr, expr->range);
   }
   return expr;
 }
@@ -1112,10 +1112,10 @@ static Expr *new_expr_cast(Scope *scope, Type *val_type, Expr *operand,
 
 #define UNARYOP(op, num, r, a)                                                 \
   switch ((op)) {                                                              \
-  case '-':                                                                    \
+  case EX_MINUS:                                                               \
     *(r) = (-(a));                                                             \
     return (num);                                                              \
-  case '~':                                                                    \
+  case EX_NOT:                                                                 \
     *(r) = (~(a));                                                             \
     return (num);                                                              \
   }
@@ -1184,7 +1184,7 @@ static Number eval_unaryop(int op, type_t type, Number na, Range range) {
 }
 
 static Expr *new_expr_unary(Scope *scope, int op, Expr *operand, Range range) {
-  if (op != '&') {
+  if (op != EX_ADDRESS) {
     // & 以外は array, func は ptr とみなす
     operand = coerce_array2ptr(scope, operand);
     operand = coerce_func2ptr(scope, operand);
@@ -1192,7 +1192,11 @@ static Expr *new_expr_unary(Scope *scope, int op, Expr *operand, Range range) {
 
   Type *val_type;
   switch (op) {
-  case '&': {
+  case EX_PRE_INC:
+  case EX_PRE_DEC: {
+    val_type = operand->val_type;
+    break;
+  case EX_ADDRESS: {
     if (is_array_type(operand->val_type)) {
       val_type = new_type_ptr(operand->val_type->ptrof, false);
     } else {
@@ -1200,7 +1204,7 @@ static Expr *new_expr_unary(Scope *scope, int op, Expr *operand, Range range) {
     }
     break;
   }
-  case '*': {
+  case EX_INDIRECT: {
     if (operand->val_type->ty != TY_PTR) {
       range_error(range, "ポインタ型でない値に対するデリファレンスです");
     }
@@ -1210,15 +1214,7 @@ static Expr *new_expr_unary(Scope *scope, int op, Expr *operand, Range range) {
     val_type = operand->val_type->ptrof;
     break;
   }
-  case '!': {
-    return new_expr_binop(
-        scope, EX_EQEQ, operand,
-        new_expr_cast(scope, operand->val_type,
-                      new_expr_num(new_number_int(0), operand->range),
-                      operand->range),
-        operand->range);
-  }
-  case '+':
+  case EX_PLUS:
     if (!is_arith_type(operand->val_type)) {
       range_error(range, "不正な型の値に対する演算です: 算術型ではありません");
     }
@@ -1226,7 +1222,7 @@ static Expr *new_expr_unary(Scope *scope, int op, Expr *operand, Range range) {
       val_type = integer_promoted(scope, &operand);
     }
     return operand;
-  case '-':
+  case EX_MINUS:
     if (!is_arith_type(operand->val_type)) {
       range_error(range, "不正な型の値に対する演算です: 算術型ではありません");
     }
@@ -1242,7 +1238,15 @@ static Expr *new_expr_unary(Scope *scope, int op, Expr *operand, Range range) {
       return operand;
     }
     break;
-  case '~':
+  case EX_LOG_NOT: {
+    return new_expr_binop(
+        scope, EX_EQEQ, operand,
+        new_expr_cast(scope, operand->val_type,
+                      new_expr_num(new_number_int(0), operand->range),
+                      operand->range),
+        operand->range);
+  }
+  case EX_NOT:
     if (!is_integer_type(operand->val_type)) {
       range_error(range, "不正な型の値に対する演算です: 整数型ではありません");
     }
@@ -1254,10 +1258,6 @@ static Expr *new_expr_unary(Scope *scope, int op, Expr *operand, Range range) {
       return operand;
     }
     break;
-  case EX_INC:
-  case EX_DEC: {
-    val_type = operand->val_type;
-    break;
   default:
     assert(false);
   }
@@ -1266,7 +1266,7 @@ static Expr *new_expr_unary(Scope *scope, int op, Expr *operand, Range range) {
   Expr *expr = new_expr(op, val_type, range);
   expr->lhs = NULL;
   expr->rhs = operand;
-  if (op == EX_INC || op == EX_DEC) {
+  if (op == EX_PRE_INC || op == EX_PRE_DEC) {
     if (is_ptr_type(operand->val_type)) {
       expr->incdec_size = get_val_size(expr->val_type->ptrof, expr->range);
     } else {
@@ -1631,7 +1631,7 @@ static Expr *new_expr_binop(Scope *scope, int op, Expr *lhs, Expr *rhs,
       return lhs;
     }
     break;
-  case EX_LOGAND: {
+  case EX_LOG_AND: {
     bool lhs_is_true = false;
     if (lhs->ty == EX_NUM) {
       int lval;
@@ -1657,7 +1657,7 @@ static Expr *new_expr_binop(Scope *scope, int op, Expr *lhs, Expr *rhs,
     val_type = new_type(TY_S_INT, false);
     break;
   }
-  case EX_LOGOR: {
+  case EX_LOG_OR: {
     bool lhs_is_false = false;
     if (lhs->ty == EX_NUM) {
       int lval;
@@ -1743,8 +1743,9 @@ static Expr *new_expr_index(Scope *scope, Expr *array, Expr *index,
   index = coerce_array2ptr(scope, index);
   index = coerce_func2ptr(scope, index);
 
-  return new_expr_unary(
-      scope, '*', new_expr_binop(scope, EX_ADD, array, index, range), range);
+  return new_expr_unary(scope, EX_INDIRECT,
+                        new_expr_binop(scope, EX_ADD, array, index, range),
+                        range);
 }
 
 static Expr *new_expr_dot(Scope *scope, Expr *operand, char *name,
@@ -1752,8 +1753,8 @@ static Expr *new_expr_dot(Scope *scope, Expr *operand, char *name,
   if (operand->val_type->ty != TY_STRUCT && operand->val_type->ty != TY_UNION) {
     range_error(range, "構造体または共用体以外のメンバへのアクセスです");
   }
-  return new_expr_arrow(scope, new_expr_unary(scope, '&', operand, range), name,
-                        range);
+  return new_expr_arrow(
+      scope, new_expr_unary(scope, EX_ADDRESS, operand, range), name, range);
 }
 
 static Expr *new_expr_arrow(Scope *scope, Expr *operand, char *name,
@@ -1773,7 +1774,7 @@ static Expr *new_expr_arrow(Scope *scope, Expr *operand, char *name,
   Expr *expr = new_expr(EX_ADD, new_type_ptr(member->type, false), range);
   expr->lhs = operand;
   expr->rhs = new_expr_num(new_number_size_t(member->offset), range);
-  return new_expr_unary(scope, '*', expr, range);
+  return new_expr_unary(scope, EX_INDIRECT, expr, range);
 }
 
 static Stmt *new_stmt(int ty, Range range) {
@@ -1959,7 +1960,8 @@ static Vector *argument_expression_list(Tokenizer *tokenizer, Scope *scope) {
 
 static Expr *unary_expression(Tokenizer *tokenizer, Scope *scope) {
   const int TKS[] = {'&', '*', '+', '-', '~', '!', TK_INC, TK_DEC, '\0'};
-  const int EXS[] = {'&', '*', '+', '-', '~', '!', EX_INC, EX_DEC, '\0'};
+  const int EXS[] = {EX_ADDRESS, EX_INDIRECT, EX_PLUS,    EX_MINUS, EX_NOT,
+                     EX_LOG_NOT, EX_PRE_INC,  EX_PRE_DEC, '\0'};
   for (int i = 0; TKS[i] != '\0'; i++) {
     int tk = TKS[i];
     int ex = EXS[i];
@@ -2070,12 +2072,12 @@ static Expr *inclusive_or_expression(Tokenizer *tokenizer, Scope *scope) {
 }
 static Expr *logical_and_expression(Tokenizer *tokenizer, Scope *scope) {
   const int TKS[] = {TK_LOGAND, '\0'};
-  const int EXS[] = {EX_LOGAND, '\0'};
+  const int EXS[] = {EX_LOG_AND, '\0'};
   return binary_expression(tokenizer, scope, TKS, EXS, inclusive_or_expression);
 }
 static Expr *logical_or_expression(Tokenizer *tokenizer, Scope *scope) {
   const int TKS[] = {TK_LOGOR, '\0'};
-  const int EXS[] = {EX_LOGOR, '\0'};
+  const int EXS[] = {EX_LOG_OR, '\0'};
   return binary_expression(tokenizer, scope, TKS, EXS, logical_and_expression);
 }
 static Expr *conditional_expression(Tokenizer *tokenizer, Scope *scope) {
