@@ -195,7 +195,7 @@ void int_vec_push(IntVector *vec, int elem) {
   vec->data[vec->len++] = elem;
 }
 
-void print_string_literal(char *str) {
+void print_string_literal(const char *str) {
   printf("\"");
   for (int i = 0; str[i] != '\0'; i++) {
     switch (str[i]) {

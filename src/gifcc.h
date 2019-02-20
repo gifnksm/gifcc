@@ -278,6 +278,7 @@ typedef struct Initializer {
 } Initializer;
 
 typedef struct StackVar {
+  char *name;
   int offset;
   Type *type;
   Range range;
@@ -299,8 +300,8 @@ typedef struct Param {
 } Param;
 
 typedef struct StringLiteral {
-  char *name;
-  char *val;
+  const char *name;
+  const char *val;
 } StringLiteral;
 
 typedef struct Expr {
@@ -308,23 +309,46 @@ typedef struct Expr {
   Type *val_type; // 値の型
   Range range;    // ソースコード中の位置
 
-  struct Expr *lhs;  // 左辺
-  struct Expr *rhs;  // 右辺
-  struct Expr *cond; // 条件式 (tyがEX_CONDの場合のみ使う)
+  union {
+    // EX_NUM
+    Number num;
 
-  Number num_val;  // tyがEX_NUMの場合のみ使う
-  char *name;      // tyがEX_IDENT, EX_STR, `.` の場合のみ使う
-  int incdec_size; // tyがEX_INC, EX_DECの場合のみ使う
+    // EX_STACK_VAR
+    StackVar *stack_var;
 
-  // EX_CALL: <callee>(<argument>...)
-  struct Expr *callee;
-  Vector *argument;
+    // EX_GLOBAL_VAR
+    struct {
+      const char *name;
+      GlobalVar *def;
+    } global_var;
 
-  StackVar *stack_var;
-  GlobalVar *global_var;
+    // EX_STR
+    const char *str;
 
-  // EX_CAST: (<val_type>)<expr>
-  struct Expr *expr;
+    // EX_CALL
+    struct {
+      Expr *callee;
+      Vector *argument;
+    } call;
+
+    // EX_COND
+    struct {
+      Expr *cond;
+      Expr *then_expr;
+      Expr *else_expr;
+    } cond;
+
+    // other unary operator
+    struct {
+      Expr *operand;
+    } unop;
+
+    // other binary operator
+    struct {
+      Expr *lhs;
+      Expr *rhs;
+    } binop;
+  };
 } Expr;
 
 typedef struct Stmt {
@@ -429,7 +453,7 @@ int int_vec_len(const IntVector *vec);
 int int_vec_get(const IntVector *vec, int n);
 void int_vec_push(IntVector *vec, int elem);
 // Misc
-void print_string_literal(char *str);
+void print_string_literal(const char *str);
 int __attribute__((format(printf, 2, 3)))
 alloc_printf(char **strp, const char *fmt, ...);
 int alloc_printf_v(char **strp, const char *fmt, va_list ap);

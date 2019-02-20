@@ -343,6 +343,7 @@ static StackVar *register_stack_var(Scope *scope, Token *name, Type *type,
   FuncCtxt *fcx = scope->func_ctxt;
 
   StackVar *var = NEW(StackVar);
+  var->name = name->name;
   var->offset = INT_MIN; // Initialize with invalid value
   var->type = type;
   var->range = range;
@@ -891,7 +892,7 @@ static Expr *new_expr(int ty, Type *val_type, Range range) {
 
 static Expr *new_expr_num(Number val, Range range) {
   Expr *expr = new_expr(EX_NUM, new_type(val.type, false), range);
-  expr->num_val = val;
+  expr->num = val;
   return expr;
 }
 
@@ -926,15 +927,19 @@ static Expr *new_expr_ident(Scope *scope, char *name, Range range) {
     range_warn(range, "未定義の識別子です: %s", name);
     ty = EX_GLOBAL_VAR;
     type = new_type(TY_S_INT, false);
-    svar = NULL;
     gvar = new_global_variable(type, name, range, false);
   }
+
   Expr *expr = new_expr(ty, type, range);
-  expr->name = name;
-  expr->stack_var = svar;
-  expr->global_var = gvar;
-  if (num_val != NULL) {
-    expr->num_val = *num_val;
+  if (ty == EX_STACK_VAR) {
+    expr->stack_var = svar;
+  } else if (ty == EX_GLOBAL_VAR) {
+    expr->global_var.name = gvar != NULL ? gvar->name : name;
+    expr->global_var.def = gvar;
+  } else if (ty == EX_NUM) {
+    expr->num = *num_val;
+  } else {
+    assert(false);
   }
   return expr;
 }
@@ -943,9 +948,9 @@ static Expr *new_expr_str(Scope *scope, char *val, Range range) {
   Type *type = new_type_ptr(new_type(TY_CHAR, true), false);
   Expr *expr = new_expr(EX_STR, type, range);
 
-  expr->name = make_label("str");
+  expr->str = make_label("str");
   StringLiteral *str = NEW(StringLiteral);
-  str->name = expr->name;
+  str->name = expr->str;
   str->val = val;
   vec_push(scope->global_ctxt->str_list, str);
   return expr;
@@ -994,8 +999,8 @@ static Expr *new_expr_call(Scope *scope, Expr *callee, Vector *argument,
   }
 
   Expr *expr = new_expr(EX_CALL, ret_type, range);
-  expr->callee = callee;
-  expr->argument = argument;
+  expr->call.callee = callee;
+  expr->call.argument = argument;
   return expr;
 }
 
@@ -1005,16 +1010,7 @@ static Expr *new_expr_postfix(Scope *scope, int ty, Expr *operand,
   operand = coerce_func2ptr(scope, operand);
 
   Expr *expr = new_expr(ty, operand->val_type, range);
-  expr->lhs = operand;
-  expr->rhs = NULL;
-  if (ty == EX_POST_INC || ty == EX_POST_DEC) {
-    if (is_ptr_type(operand->val_type)) {
-      expr->incdec_size =
-          get_val_size(operand->val_type->ptrof, operand->range);
-    } else {
-      expr->incdec_size = 1;
-    }
-  }
+  expr->unop.operand = operand;
   return expr;
 }
 
@@ -1028,74 +1024,75 @@ static Expr *new_expr_cast(Scope *scope, Type *val_type, Expr *operand,
   }
 
   if (operand->ty == EX_NUM) {
+    Number *opnum = &operand->num;
     switch (val_type->ty) {
     case TY_VOID:
       operand->val_type = val_type;
       return operand;
     case TY_CHAR:
-      SET_NUMBER_VAL(operand->num_val.char_val, &operand->num_val);
+      SET_NUMBER_VAL(opnum->char_val, opnum);
       operand->val_type = val_type;
-      operand->num_val.type = val_type->ty;
+      opnum->type = val_type->ty;
       return operand;
     case TY_S_CHAR:
-      SET_NUMBER_VAL(operand->num_val.s_char_val, &operand->num_val);
+      SET_NUMBER_VAL(opnum->s_char_val, opnum);
       operand->val_type = val_type;
-      operand->num_val.type = val_type->ty;
+      opnum->type = val_type->ty;
       return operand;
     case TY_S_SHORT:
-      SET_NUMBER_VAL(operand->num_val.s_short_val, &operand->num_val);
+      SET_NUMBER_VAL(opnum->s_short_val, opnum);
       operand->val_type = val_type;
-      operand->num_val.type = val_type->ty;
+      opnum->type = val_type->ty;
       return operand;
     case TY_S_INT:
-      SET_NUMBER_VAL(operand->num_val.s_int_val, &operand->num_val);
+      SET_NUMBER_VAL(opnum->s_int_val, opnum);
       operand->val_type = val_type;
-      operand->num_val.type = val_type->ty;
+      opnum->type = val_type->ty;
       return operand;
     case TY_S_LONG:
-      SET_NUMBER_VAL(operand->num_val.s_long_val, &operand->num_val);
+      SET_NUMBER_VAL(opnum->s_long_val, opnum);
       operand->val_type = val_type;
-      operand->num_val.type = val_type->ty;
+      opnum->type = val_type->ty;
       return operand;
     case TY_S_LLONG:
-      SET_NUMBER_VAL(operand->num_val.s_llong_val, &operand->num_val);
+      SET_NUMBER_VAL(opnum->s_llong_val, opnum);
       operand->val_type = val_type;
-      operand->num_val.type = val_type->ty;
+      opnum->type = val_type->ty;
       return operand;
     case TY_U_CHAR:
-      SET_NUMBER_VAL(operand->num_val.u_char_val, &operand->num_val);
+      SET_NUMBER_VAL(opnum->u_char_val, opnum);
       operand->val_type = val_type;
-      operand->num_val.type = val_type->ty;
+      opnum->type = val_type->ty;
       return operand;
     case TY_U_SHORT:
-      SET_NUMBER_VAL(operand->num_val.u_short_val, &operand->num_val);
+      SET_NUMBER_VAL(opnum->u_short_val, opnum);
       operand->val_type = val_type;
-      operand->num_val.type = val_type->ty;
+      opnum->type = val_type->ty;
       return operand;
     case TY_U_INT:
-      SET_NUMBER_VAL(operand->num_val.u_int_val, &operand->num_val);
+      SET_NUMBER_VAL(opnum->u_int_val, opnum);
       operand->val_type = val_type;
-      operand->num_val.type = val_type->ty;
+      opnum->type = val_type->ty;
       return operand;
     case TY_U_LONG:
-      SET_NUMBER_VAL(operand->num_val.u_long_val, &operand->num_val);
+      SET_NUMBER_VAL(opnum->u_long_val, opnum);
       operand->val_type = val_type;
-      operand->num_val.type = val_type->ty;
+      opnum->type = val_type->ty;
       return operand;
     case TY_U_LLONG:
-      SET_NUMBER_VAL(operand->num_val.u_llong_val, &operand->num_val);
+      SET_NUMBER_VAL(opnum->u_llong_val, opnum);
       operand->val_type = val_type;
-      operand->num_val.type = val_type->ty;
+      opnum->type = val_type->ty;
       return operand;
     case TY_PTR:
-      SET_NUMBER_VAL(operand->num_val.ptr_val, &operand->num_val);
+      SET_NUMBER_VAL(opnum->ptr_val, opnum);
       operand->val_type = val_type;
-      operand->num_val.type = val_type->ty;
+      opnum->type = val_type->ty;
       return operand;
     case TY_ENUM:
-      SET_NUMBER_VAL(operand->num_val.enum_val, &operand->num_val);
+      SET_NUMBER_VAL(opnum->enum_val, opnum);
       operand->val_type = val_type;
-      operand->num_val.type = val_type->ty;
+      opnum->type = val_type->ty;
       return operand;
     case TY_ARRAY:
     case TY_FUNC:
@@ -1106,7 +1103,7 @@ static Expr *new_expr_cast(Scope *scope, Type *val_type, Expr *operand,
   }
 
   Expr *expr = new_expr(EX_CAST, val_type, range);
-  expr->expr = operand;
+  expr->unop.operand = operand;
   return expr;
 }
 
@@ -1232,8 +1229,7 @@ static Expr *new_expr_unary(Scope *scope, int op, Expr *operand, Range range) {
       val_type = operand->val_type;
     }
     if (operand->ty == EX_NUM) {
-      operand->num_val =
-          eval_unaryop(op, val_type->ty, operand->num_val, range);
+      operand->num = eval_unaryop(op, val_type->ty, operand->num, range);
       operand->range = range;
       return operand;
     }
@@ -1252,8 +1248,7 @@ static Expr *new_expr_unary(Scope *scope, int op, Expr *operand, Range range) {
     }
     val_type = integer_promoted(scope, &operand);
     if (operand->ty == EX_NUM) {
-      operand->num_val =
-          eval_unaryop(op, val_type->ty, operand->num_val, range);
+      operand->num = eval_unaryop(op, val_type->ty, operand->num, range);
       operand->range = range;
       return operand;
     }
@@ -1264,15 +1259,7 @@ static Expr *new_expr_unary(Scope *scope, int op, Expr *operand, Range range) {
   }
 
   Expr *expr = new_expr(op, val_type, range);
-  expr->lhs = NULL;
-  expr->rhs = operand;
-  if (op == EX_PRE_INC || op == EX_PRE_DEC) {
-    if (is_ptr_type(operand->val_type)) {
-      expr->incdec_size = get_val_size(expr->val_type->ptrof, expr->range);
-    } else {
-      expr->incdec_size = 1;
-    }
-  }
+  expr->unop.operand = operand;
   return expr;
 }
 
@@ -1488,8 +1475,7 @@ static Expr *new_expr_binop(Scope *scope, int op, Expr *lhs, Expr *rhs,
       binop_type_error(op, lhs, rhs);
     }
     if (lhs->ty == EX_NUM && rhs->ty == EX_NUM) {
-      lhs->num_val =
-          eval_binop(op, val_type->ty, lhs->num_val, rhs->num_val, range);
+      lhs->num = eval_binop(op, val_type->ty, lhs->num, rhs->num, range);
       lhs->range = range;
       return lhs;
     }
@@ -1530,8 +1516,7 @@ static Expr *new_expr_binop(Scope *scope, int op, Expr *lhs, Expr *rhs,
       binop_type_error(op, lhs, rhs);
     }
     if (lhs->ty == EX_NUM && rhs->ty == EX_NUM) {
-      lhs->num_val =
-          eval_binop(op, val_type->ty, lhs->num_val, rhs->num_val, range);
+      lhs->num = eval_binop(op, val_type->ty, lhs->num, rhs->num, range);
       lhs->range = range;
       return lhs;
     }
@@ -1545,8 +1530,8 @@ static Expr *new_expr_binop(Scope *scope, int op, Expr *lhs, Expr *rhs,
 
         // ptr - ptr
         Expr *sub = new_expr(EX_SUB, new_type(TY_S_LONG, false), range);
-        sub->lhs = lhs;
-        sub->rhs = rhs;
+        sub->binop.lhs = lhs;
+        sub->binop.rhs = rhs;
         Expr *size = new_expr_num(new_number_ptrdiff_t(get_val_size(
                                       lhs->val_type->ptrof, lhs->range)),
                                   range);
@@ -1574,8 +1559,7 @@ static Expr *new_expr_binop(Scope *scope, int op, Expr *lhs, Expr *rhs,
       binop_type_error(op, lhs, rhs);
     }
     if (lhs->ty == EX_NUM && rhs->ty == EX_NUM) {
-      lhs->num_val =
-          eval_binop(op, val_type->ty, lhs->num_val, rhs->num_val, range);
+      lhs->num = eval_binop(op, val_type->ty, lhs->num, rhs->num, range);
       lhs->range = range;
       return lhs;
     }
@@ -1591,8 +1575,7 @@ static Expr *new_expr_binop(Scope *scope, int op, Expr *lhs, Expr *rhs,
       binop_type_error(op, lhs, rhs);
     }
     if (lhs->ty == EX_NUM && rhs->ty == EX_NUM) {
-      lhs->num_val =
-          eval_binop_shift(op, val_type->ty, lhs->num_val, rhs->num_val, range);
+      lhs->num = eval_binop_shift(op, val_type->ty, lhs->num, rhs->num, range);
       lhs->range = range;
       return lhs;
     }
@@ -1606,8 +1589,7 @@ static Expr *new_expr_binop(Scope *scope, int op, Expr *lhs, Expr *rhs,
   case EX_NOTEQ:
     val_type = arith_converted(scope, &lhs, &rhs);
     if (lhs->ty == EX_NUM && rhs->ty == EX_NUM) {
-      lhs->num_val =
-          eval_binop(op, val_type->ty, lhs->num_val, rhs->num_val, range);
+      lhs->num = eval_binop(op, val_type->ty, lhs->num, rhs->num, range);
       lhs->range = range;
       return new_expr_cast(scope, new_type(TY_S_INT, false), lhs, range);
     }
@@ -1625,8 +1607,7 @@ static Expr *new_expr_binop(Scope *scope, int op, Expr *lhs, Expr *rhs,
       binop_type_error(op, lhs, rhs);
     }
     if (lhs->ty == EX_NUM && rhs->ty == EX_NUM) {
-      lhs->num_val =
-          eval_binop(op, val_type->ty, lhs->num_val, rhs->num_val, range);
+      lhs->num = eval_binop(op, val_type->ty, lhs->num, rhs->num, range);
       lhs->range = range;
       return lhs;
     }
@@ -1635,7 +1616,7 @@ static Expr *new_expr_binop(Scope *scope, int op, Expr *lhs, Expr *rhs,
     bool lhs_is_true = false;
     if (lhs->ty == EX_NUM) {
       int lval;
-      SET_NUMBER_VAL(lval, &lhs->num_val);
+      SET_NUMBER_VAL(lval, &lhs->num);
       if (lval == 0) {
         return new_expr_num(new_number_int(0),
                             range_join(lhs->range, rhs->range));
@@ -1644,7 +1625,7 @@ static Expr *new_expr_binop(Scope *scope, int op, Expr *lhs, Expr *rhs,
     }
     if (rhs->ty == EX_NUM) {
       int rval;
-      SET_NUMBER_VAL(rval, &rhs->num_val);
+      SET_NUMBER_VAL(rval, &rhs->num);
       if (rval == 0) {
         return new_expr_num(new_number_int(0),
                             range_join(lhs->range, rhs->range));
@@ -1661,7 +1642,7 @@ static Expr *new_expr_binop(Scope *scope, int op, Expr *lhs, Expr *rhs,
     bool lhs_is_false = false;
     if (lhs->ty == EX_NUM) {
       int lval;
-      SET_NUMBER_VAL(lval, &lhs->num_val);
+      SET_NUMBER_VAL(lval, &lhs->num);
       if (lval != 0) {
         return new_expr_num(new_number_int(1),
                             range_join(lhs->range, rhs->range));
@@ -1670,7 +1651,7 @@ static Expr *new_expr_binop(Scope *scope, int op, Expr *lhs, Expr *rhs,
     }
     if (rhs->ty == EX_NUM) {
       int rval;
-      SET_NUMBER_VAL(rval, &rhs->num_val);
+      SET_NUMBER_VAL(rval, &rhs->num);
       if (rval != 0) {
         return new_expr_num(new_number_int(1),
                             range_join(lhs->range, rhs->range));
@@ -1695,8 +1676,8 @@ static Expr *new_expr_binop(Scope *scope, int op, Expr *lhs, Expr *rhs,
   }
 
   Expr *expr = new_expr(op, val_type, range);
-  expr->lhs = lhs;
-  expr->rhs = rhs;
+  expr->binop.lhs = lhs;
+  expr->binop.rhs = rhs;
   return expr;
 }
 
@@ -1723,16 +1704,16 @@ static Expr *new_expr_cond(Scope *scope, Expr *cond, Expr *then_expr,
 
   if (cond->ty == EX_NUM) {
     int i = 0;
-    SET_NUMBER_VAL(i, &cond->num_val);
+    SET_NUMBER_VAL(i, &cond->num);
     if (i != 0) {
       return then_expr;
     }
     return else_expr;
   }
   Expr *expr = new_expr(EX_COND, val_type, range);
-  expr->cond = cond;
-  expr->lhs = then_expr;
-  expr->rhs = else_expr;
+  expr->cond.cond = cond;
+  expr->cond.then_expr = then_expr;
+  expr->cond.else_expr = else_expr;
   return expr;
 }
 
@@ -1772,8 +1753,8 @@ static Expr *new_expr_arrow(Scope *scope, Expr *operand, char *name,
     range_error(range, "存在しないメンバへのアクセスです: %s", name);
   }
   Expr *expr = new_expr(EX_ADD, new_type_ptr(member->type, false), range);
-  expr->lhs = operand;
-  expr->rhs = new_expr_num(new_number_size_t(member->offset), range);
+  expr->binop.lhs = operand;
+  expr->binop.rhs = new_expr_num(new_number_size_t(member->offset), range);
   return new_expr_unary(scope, EX_INDIRECT, expr, range);
 }
 
@@ -2350,7 +2331,7 @@ static void enumerator(Scope *scope, Tokenizer *tokenizer, Type *type,
     if (expr->ty != EX_NUM) {
       range_error(expr->range, "列挙型の値が定数式の数値ではありません");
     }
-    SET_NUMBER_VAL(*val, &expr->num_val);
+    SET_NUMBER_VAL(*val, &expr->num);
   }
   token_consume(tokenizer, ',');
 

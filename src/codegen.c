@@ -100,13 +100,12 @@ static void gen_lval(Expr *expr) {
     return;
   }
   if (expr->ty == EX_GLOBAL_VAR) {
-    printf("  lea rax, %s[rip]\n",
-           expr->global_var ? expr->global_var->name : expr->name);
+    printf("  lea rax, %s[rip]\n", expr->global_var.name);
     printf("  push rax\n");
     return;
   }
   if (expr->ty == EX_INDIRECT) {
-    gen_expr(expr->rhs);
+    gen_expr(expr->unop.operand);
     return;
   }
 
@@ -167,14 +166,21 @@ static char *num2str(Number num, Range range) {
   return strdup(buf);
 }
 
+static int get_incdec_size(Expr *expr) {
+  if (expr->val_type->ty == TY_PTR) {
+    return get_val_size(expr->val_type->ptrof, expr->range);
+  }
+  return 1;
+}
+
 static void gen_expr(Expr *expr) {
   const Reg *r = get_int_reg(expr->val_type, expr->range);
 
   if (expr->ty == EX_NUM) {
     if (get_val_size(expr->val_type, expr->range) < 4) {
-      printf("  push %s\n", num2str(expr->num_val, expr->range));
+      printf("  push %s\n", num2str(expr->num, expr->range));
     } else {
-      printf("  mov %s, %s\n", r->rax, num2str(expr->num_val, expr->range));
+      printf("  mov %s, %s\n", r->rax, num2str(expr->num, expr->range));
       printf("  push rax\n");
     }
     return;
@@ -190,33 +196,32 @@ static void gen_expr(Expr *expr) {
   }
 
   if (expr->ty == EX_GLOBAL_VAR) {
-    printf("  mov %s, %s[rip]\n", r->rax,
-           expr->global_var ? expr->global_var->name : expr->name);
+    printf("  mov %s, %s[rip]\n", r->rax, expr->global_var.name);
     printf("  push rax\n");
     return;
   }
 
   if (expr->ty == EX_STR) {
-    printf("  lea rax, %s[rip]\n", expr->name);
+    printf("  lea rax, %s[rip]\n", expr->str);
     printf("  push rax\n");
     return;
   }
 
   if (expr->ty == EX_CALL) {
     int num_push = 0;
-    Vector *arg = expr->argument;
+    Vector *arg = expr->call.argument;
     bool call_direct;
-    if (expr->callee->val_type->ty == TY_FUNC) {
+    if (expr->call.callee->val_type->ty == TY_FUNC) {
       call_direct = true;
-    } else if (expr->callee->val_type->ty == TY_PTR &&
-               expr->callee->val_type->ptrof->ty == TY_FUNC) {
+    } else if (expr->call.callee->val_type->ty == TY_PTR &&
+               expr->call.callee->val_type->ptrof->ty == TY_FUNC) {
       call_direct = false;
-    } else if (expr->callee->ty == EX_GLOBAL_VAR) {
+    } else if (expr->call.callee->ty == EX_GLOBAL_VAR) {
       call_direct = true;
     } else {
-      range_error(expr->callee->range,
+      range_error(expr->call.callee->range,
                   "関数または関数ポインタ以外を呼び出そうとしました: %d",
-                  expr->callee->val_type->ty);
+                  expr->call.callee->val_type->ty);
     }
     if (arg && vec_len(arg) > 0) {
       // 引数をスタックに積む
@@ -225,7 +230,7 @@ static void gen_expr(Expr *expr) {
       }
     }
     if (!call_direct) {
-      gen_expr(expr->callee);
+      gen_expr(expr->call.callee);
       printf("  pop r10\n");
     }
     if (arg && vec_len(arg) > 0) {
@@ -260,7 +265,7 @@ static void gen_expr(Expr *expr) {
     }
     printf("  mov al, 0\n");
     if (call_direct) {
-      printf("  call %s\n", expr->callee->name);
+      printf("  call %s\n", expr->call.callee->global_var.name);
     } else {
       printf("  call r10\n");
     }
@@ -272,8 +277,8 @@ static void gen_expr(Expr *expr) {
   }
 
   if (expr->ty == EX_ASSIGN) {
-    gen_lval(expr->lhs);
-    gen_expr(expr->rhs);
+    gen_lval(expr->binop.lhs);
+    gen_expr(expr->binop.rhs);
     printf("  pop rdi\n");
     printf("  pop rax\n");
     printf("  mov [rax], %s\n", r->rdi);
@@ -284,11 +289,11 @@ static void gen_expr(Expr *expr) {
   if (expr->ty == EX_LOG_AND) {
     char *false_label = make_label("logand.false");
     char *end_label = make_label("logand.end");
-    gen_expr(expr->lhs);
+    gen_expr(expr->binop.lhs);
     printf("  pop rax\n");
     printf("  cmp %s, 0\n", r->rax);
     printf("  je %s\n", false_label);
-    gen_expr(expr->rhs);
+    gen_expr(expr->binop.rhs);
     printf("  pop rax\n");
     printf("  cmp %s, 0\n", r->rax);
     printf("  je %s\n", false_label);
@@ -303,11 +308,11 @@ static void gen_expr(Expr *expr) {
   if (expr->ty == EX_LOG_OR) {
     char *true_label = make_label("logor.true");
     char *end_label = make_label("logor.end");
-    gen_expr(expr->lhs);
+    gen_expr(expr->binop.lhs);
     printf("  pop rax\n");
     printf("  cmp %s, 0\n", r->rax);
     printf("  jne %s\n", true_label);
-    gen_expr(expr->rhs);
+    gen_expr(expr->binop.rhs);
     printf("  pop rax\n");
     printf("  cmp %s, 0\n", r->rax);
     printf("  jne %s\n", true_label);
@@ -322,26 +327,26 @@ static void gen_expr(Expr *expr) {
   if (expr->ty == EX_COND) {
     char *else_label = make_label("cond.else");
     char *end_label = make_label("cond.end");
-    gen_expr(expr->cond);
+    gen_expr(expr->cond.cond);
     printf("  pop rax\n");
     printf("  cmp %s, 0\n", r->rax);
     printf("  je %s\n", else_label);
-    gen_expr(expr->lhs);
+    gen_expr(expr->cond.then_expr);
     printf("  jmp %s\n", end_label);
     printf("%s:\n", else_label);
-    gen_expr(expr->rhs);
+    gen_expr(expr->cond.else_expr);
     printf("%s:\n", end_label);
     return;
   }
 
   if (expr->ty == EX_ADDRESS) {
     // 単項の `&`
-    gen_lval(expr->rhs);
+    gen_lval(expr->unop.operand);
     return;
   }
   if (expr->ty == EX_INDIRECT) {
     // 単項の `*`
-    gen_expr(expr->rhs);
+    gen_expr(expr->unop.operand);
     printf("  pop rax\n");
     printf("  mov %s, [rax]\n", r->rax);
     printf("  push rax\n");
@@ -354,7 +359,7 @@ static void gen_expr(Expr *expr) {
   }
   if (expr->ty == EX_MINUS) {
     // 単項の `-`
-    gen_expr(expr->rhs);
+    gen_expr(expr->unop.operand);
     printf("  pop rax\n");
     printf("  neg %s\n", r->rax);
     printf("  push rax\n");
@@ -362,7 +367,7 @@ static void gen_expr(Expr *expr) {
   }
   if (expr->ty == EX_NOT) {
     // `~`
-    gen_expr(expr->rhs);
+    gen_expr(expr->unop.operand);
     printf("  pop rax\n");
     printf("  not %s\n", r->rax);
     printf("  push rax\n");
@@ -373,7 +378,7 @@ static void gen_expr(Expr *expr) {
   }
 
   if (expr->ty == EX_CAST) {
-    Expr *operand = expr->expr;
+    Expr *operand = expr->unop.operand;
     gen_expr(operand);
     const Reg *from = get_int_reg(operand->val_type, operand->range);
     int from_size = get_val_size(operand->val_type, operand->range);
@@ -395,51 +400,48 @@ static void gen_expr(Expr *expr) {
   }
   if (expr->ty == EX_PRE_INC) {
     // 前置の `++`
-    gen_lval(expr->rhs);
+    gen_lval(expr->unop.operand);
     printf("  pop rax\n");
     printf("  mov %s, [rax]\n", r->rdi);
-    printf("  add %s, %d\n", r->rdi, expr->incdec_size);
+    printf("  add %s, %d\n", r->rdi, get_incdec_size(expr));
     printf("  mov [rax], %s\n", r->rdi);
     printf("  push rdi\n");
     return;
   }
   if (expr->ty == EX_PRE_DEC) {
     // 前置の `--`
-    gen_lval(expr->rhs);
+    gen_lval(expr->unop.operand);
     printf("  pop rax\n");
     printf("  mov %s, [rax]\n", r->rdi);
-    printf("  sub %s, %d\n", r->rdi, expr->incdec_size);
+    printf("  sub %s, %d\n", r->rdi, get_incdec_size(expr));
     printf("  mov [rax], %s\n", r->rdi);
     printf("  push rdi\n");
     return;
   }
   if (expr->ty == EX_POST_INC) {
     // 後置の `++`
-    gen_lval(expr->lhs);
+    gen_lval(expr->unop.operand);
     printf("  pop rax\n");
     printf("  mov %s, [rax]\n", r->rdi);
     printf("  push rdi\n");
-    printf("  add %s, %d\n", r->rdi, expr->incdec_size);
+    printf("  add %s, %d\n", r->rdi, get_incdec_size(expr));
     printf("  mov [rax], %s\n", r->rdi);
     return;
   }
   if (expr->ty == EX_POST_DEC) {
     // 後置の `--`
-    gen_lval(expr->lhs);
+    gen_lval(expr->unop.operand);
     printf("  pop rax\n");
     printf("  mov %s, [rax]\n", r->rdi);
     printf("  push rdi\n");
-    printf("  sub %s, %d\n", r->rdi, expr->incdec_size);
+    printf("  sub %s, %d\n", r->rdi, get_incdec_size(expr));
     printf("  mov [rax], %s\n", r->rdi);
     return;
   }
 
   // 二項演算子
-  assert(expr->lhs != NULL);
-  assert(expr->rhs != NULL);
-
-  gen_expr(expr->lhs);
-  gen_expr(expr->rhs);
+  gen_expr(expr->binop.lhs);
+  gen_expr(expr->binop.rhs);
 
   printf("  pop rdi\n");
   printf("  pop rax\n");
@@ -455,7 +457,7 @@ static void gen_expr(Expr *expr) {
     printf("  imul %s, %s\n", r->rax, r->rdi);
     break;
   case EX_DIV:
-    if (is_signed_int_type(expr->lhs->val_type, expr->lhs->range)) {
+    if (is_signed_int_type(expr->binop.lhs->val_type, expr->binop.lhs->range)) {
       printf("  mov %s, 0\n", r->rdx);
       printf("  idiv %s\n", r->rdi);
     } else {
@@ -480,7 +482,7 @@ static void gen_expr(Expr *expr) {
     break;
   case EX_LT:
     printf("  cmp %s, %s\n", r->rax, r->rdi);
-    if (is_signed_int_type(expr->lhs->val_type, expr->lhs->range)) {
+    if (is_signed_int_type(expr->binop.lhs->val_type, expr->binop.lhs->range)) {
       printf("  setl al\n");
     } else {
       printf("  setb al\n");
@@ -489,7 +491,7 @@ static void gen_expr(Expr *expr) {
     break;
   case EX_GT:
     printf("  cmp %s, %s\n", r->rax, r->rdi);
-    if (is_signed_int_type(expr->lhs->val_type, expr->lhs->range)) {
+    if (is_signed_int_type(expr->binop.lhs->val_type, expr->binop.lhs->range)) {
       printf("  setg al\n");
     } else {
       printf("  seta al\n");
@@ -498,7 +500,7 @@ static void gen_expr(Expr *expr) {
     break;
   case EX_LTEQ:
     printf("  cmp %s, %s\n", r->rax, r->rdi);
-    if (is_signed_int_type(expr->lhs->val_type, expr->lhs->range)) {
+    if (is_signed_int_type(expr->binop.lhs->val_type, expr->binop.lhs->range)) {
       printf("  setle al\n");
     } else {
       printf("  setbe al\n");
@@ -507,7 +509,7 @@ static void gen_expr(Expr *expr) {
     break;
   case EX_GTEQ:
     printf("  cmp %s, %s\n", r->rax, r->rdi);
-    if (is_signed_int_type(expr->lhs->val_type, expr->lhs->range)) {
+    if (is_signed_int_type(expr->binop.lhs->val_type, expr->binop.lhs->range)) {
       printf("  setge al\n");
     } else {
       printf("  setae al\n");
@@ -520,7 +522,7 @@ static void gen_expr(Expr *expr) {
     break;
   case EX_RSHIFT:
     printf("  mov %s, %s\n", r->rcx, r->rdi);
-    if (is_signed_int_type(expr->lhs->val_type, expr->lhs->range)) {
+    if (is_signed_int_type(expr->binop.lhs->val_type, expr->binop.lhs->range)) {
       printf("  sar %s, cl\n", r->rax);
     } else {
       printf("  shr %s, cl\n", r->rax);
@@ -782,43 +784,43 @@ static void gen_gvar_init(Initializer *init, Range range) {
     if (expr->ty == EX_NUM) {
       switch (expr->val_type->ty) {
       case TY_CHAR:
-        printf("  .byte %hhd\n", expr->num_val.char_val);
+        printf("  .byte %hhd\n", expr->num.char_val);
         break;
       case TY_S_CHAR:
-        printf("  .byte %hhd\n", expr->num_val.s_char_val);
+        printf("  .byte %hhd\n", expr->num.s_char_val);
         break;
       case TY_S_SHORT:
-        printf("  .word %hd\n", expr->num_val.s_short_val);
+        printf("  .word %hd\n", expr->num.s_short_val);
         break;
       case TY_S_INT:
-        printf("  .long %d\n", expr->num_val.s_int_val);
+        printf("  .long %d\n", expr->num.s_int_val);
         break;
       case TY_S_LONG:
-        printf("  .quad %ld\n", expr->num_val.s_long_val);
+        printf("  .quad %ld\n", expr->num.s_long_val);
         break;
       case TY_S_LLONG:
-        printf("  .quad %lld\n", expr->num_val.s_llong_val);
+        printf("  .quad %lld\n", expr->num.s_llong_val);
         break;
       case TY_U_CHAR:
-        printf("  .byte %hhu\n", expr->num_val.u_char_val);
+        printf("  .byte %hhu\n", expr->num.u_char_val);
         break;
       case TY_U_SHORT:
-        printf("  .word %hu\n", expr->num_val.u_short_val);
+        printf("  .word %hu\n", expr->num.u_short_val);
         break;
       case TY_U_INT:
-        printf("  .long %u\n", expr->num_val.u_int_val);
+        printf("  .long %u\n", expr->num.u_int_val);
         break;
       case TY_U_LONG:
-        printf("  .quad %lu\n", expr->num_val.u_long_val);
+        printf("  .quad %lu\n", expr->num.u_long_val);
         break;
       case TY_U_LLONG:
-        printf("  .quad %llu\n", expr->num_val.u_llong_val);
+        printf("  .quad %llu\n", expr->num.u_llong_val);
         break;
       case TY_PTR:
-        printf("  .quad %" PRIdPTR "\n", expr->num_val.ptr_val);
+        printf("  .quad %" PRIdPTR "\n", expr->num.ptr_val);
         break;
       case TY_ENUM:
-        printf("  .long %d\n", expr->num_val.enum_val);
+        printf("  .long %d\n", expr->num.enum_val);
         break;
       case TY_VOID:
       case TY_ARRAY:
@@ -828,12 +830,11 @@ static void gen_gvar_init(Initializer *init, Range range) {
         range_error(range, "int型ではありません");
       }
     } else if (expr->ty == EX_ADDRESS) {
-      if (expr->rhs->ty != EX_GLOBAL_VAR) {
+      if (expr->unop.operand->ty != EX_GLOBAL_VAR) {
         range_error(range, "グローバル変数以外へのポインタです");
       }
-      Expr *gvar = expr->rhs;
-      printf("  .quad %s\n",
-             gvar->global_var != NULL ? gvar->global_var->name : gvar->name);
+      Expr *gvar = expr->unop.operand;
+      printf("  .quad %s\n", gvar->global_var.name);
     } else {
       range_error(range, "数値でもポインタでもありません");
     }

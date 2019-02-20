@@ -779,7 +779,7 @@ static bool pp_read_if_cond(Reader *reader, Map *define_map) {
   }
 
   int val;
-  SET_NUMBER_VAL(val, &expr->num_val);
+  SET_NUMBER_VAL(val, &expr->num);
   return val != 0;
 }
 
