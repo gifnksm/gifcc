@@ -2102,6 +2102,13 @@ static void test61(void) {
   }
 }
 
+static void test62(void) {
+  check_int(8, (7, 8));
+  int a;
+  *(a = 0, &a) = 3;
+  check_int(3, a);
+}
+
 static int num_check = 0;
 static void check_int(int a, int b) {
   if (a != b) {
@@ -2133,7 +2140,8 @@ int main(void) {
       {"test51", test51}, {"test52", test52}, {"test53", test53},
       {"test54", test54}, {"test55", test55}, {"test56", test56},
       {"test57", test57}, {"test58", test58}, {"test59", test59},
-      {"test60", test60}, {"test61", test61}, {NULL, NULL},
+      {"test60", test60}, {"test61", test61}, {"test62", test62},
+      {NULL, NULL},
   };
   int i = 0;
   for (i = 0; test_list[i].name != NULL; i++) {
