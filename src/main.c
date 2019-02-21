@@ -87,10 +87,10 @@ static void output_token(Reader *reader) {
            token_kind_to_str(token->ty));
     switch (token->ty) {
     case TK_NUM:
-      dump_number(token->num_val);
+      dump_number(token->num);
       break;
     case TK_IDENT:
-      printf("%s", token->name);
+      printf("%s", token->ident);
       break;
     case TK_STR:
       print_string_literal(token->str);
@@ -184,7 +184,7 @@ static void dump_type_inner(Type *ty) {
         }
         Param *param = vec_get(ty->func_param, i);
         dump_type_inner(param->type);
-        printf(" %s", param->name != NULL ? param->name->name : NULL);
+        printf(" %s", param->name != NULL ? param->name->ident : NULL);
       }
       if (ty->func_has_varargs) {
         printf(", ...");

@@ -295,7 +295,7 @@ static VarDef *register_var(Scope *scope, Token *name, Type *type, Range range,
       svar = register_stack_var(scope, name, type, range);
     } else {
       char buf[256];
-      sprintf(buf, "%s.%s", scope->func_ctxt->name, name->name);
+      sprintf(buf, "%s.%s", scope->func_ctxt->name, name->ident);
       ty = DEF_GLOBAL_VAR;
       gvar = register_global_var(scope, name, type, range, is_static);
       gvar->name = make_label(buf);
@@ -316,7 +316,7 @@ static VarDef *register_var(Scope *scope, Token *name, Type *type, Range range,
 }
 
 static VarDef *register_func(Scope *scope, Token *name, Type *type) {
-  (void)register_decl(scope, name->name, type, NULL, NULL, NULL);
+  (void)register_decl(scope, name->ident, type, NULL, NULL, NULL);
 
   VarDef *def = NEW(VarDef);
   def->type = DEF_FUNC;
@@ -332,20 +332,20 @@ static VarDef *register_func(Scope *scope, Token *name, Type *type) {
 static StackVar *register_stack_var(Scope *scope, Token *name, Type *type,
                                     Range range) {
   if (type->ty == TY_VOID) {
-    range_error(range, "void型の変数は定義できません: %s", name->name);
+    range_error(range, "void型の変数は定義できません: %s", name->ident);
   }
 
   FuncCtxt *fcx = scope->func_ctxt;
 
   StackVar *var = NEW(StackVar);
-  var->name = name->name;
+  var->name = name->ident;
   var->offset = INT_MIN; // Initialize with invalid value
   var->type = type;
   var->range = range;
   vec_push(fcx->var_list, var);
 
-  if (!register_decl(scope, name->name, type, var, NULL, NULL)) {
-    range_error(range, "同じ名前のローカル変数が複数あります: %s", name->name);
+  if (!register_decl(scope, name->ident, type, var, NULL, NULL)) {
+    range_error(range, "同じ名前のローカル変数が複数あります: %s", name->ident);
   }
 
   return var;
@@ -353,9 +353,9 @@ static StackVar *register_stack_var(Scope *scope, Token *name, Type *type,
 
 static GlobalVar *register_global_var(Scope *scope, Token *name, Type *type,
                                       Range range, bool is_static) {
-  GlobalVar *gvar = new_global_variable(type, name->name, range, is_static);
-  if (!register_decl(scope, name->name, type, NULL, gvar, NULL)) {
-    Decl *decl = get_decl(scope, name->name);
+  GlobalVar *gvar = new_global_variable(type, name->ident, range, is_static);
+  if (!register_decl(scope, name->ident, type, NULL, gvar, NULL)) {
+    Decl *decl = get_decl(scope, name->ident);
     if (decl->global_var == NULL) {
       decl->global_var = gvar;
     } else {
@@ -677,7 +677,7 @@ static bool token_is_typename(Scope *scope, Token *token) {
   case TK_ENUM:
     return true;
   case TK_IDENT:
-    return get_typedef(scope, token->name);
+    return get_typedef(scope, token->ident);
   default:
     return false;
   }
@@ -1422,10 +1422,10 @@ static Stmt *new_stmt_compound(Vector *stmts, Range range) {
 static Expr *primary_expression(Tokenizer *tokenizer, Scope *scope) {
   Token *token = NULL;
   if ((token = token_consume(tokenizer, TK_NUM)) != NULL) {
-    return new_expr_num(token->num_val, token->range);
+    return new_expr_num(token->num, token->range);
   }
   if ((token = token_consume(tokenizer, TK_IDENT)) != NULL) {
-    return new_expr_ident(scope, token->name, token->range);
+    return new_expr_ident(scope, token->ident, token->range);
   }
   if ((token = token_consume(tokenizer, TK_STR)) != NULL) {
     return new_expr_str(scope, token->str, token->range);
@@ -1450,11 +1450,11 @@ static Expr *postfix_expression(Tokenizer *tokenizer, Scope *scope) {
                             range_join(expr->range, end->range));
     } else if (token_consume(tokenizer, '.')) {
       Token *member = token_expect(tokenizer, TK_IDENT);
-      expr = new_expr_dot(scope, expr, member->name,
+      expr = new_expr_dot(scope, expr, member->ident,
                           range_join(expr->range, member->range));
     } else if (token_consume(tokenizer, TK_ARROW)) {
       Token *member = token_expect(tokenizer, TK_IDENT);
-      expr = new_expr_arrow(scope, expr, member->name,
+      expr = new_expr_arrow(scope, expr, member->ident,
                             range_join(expr->range, member->range));
     } else if (token_consume(tokenizer, '(')) {
       Vector *argument = NULL;
@@ -1692,14 +1692,14 @@ static Vector *declaration(Tokenizer *tokenizer, Scope *scope) {
   declarator(scope, tokenizer, base_type, &name, &type, &range);
 
   if (is_typedef) {
-    register_typedef(scope, name->name, type);
+    register_typedef(scope, name->ident, type);
   } else if (is_extern) {
-    register_decl(scope, name->name, type, NULL, NULL, NULL);
+    register_decl(scope, name->ident, type, NULL, NULL, NULL);
   } else {
     if (is_func_type(type)) {
       VarDef *def = register_func(scope, name, type);
       if (token_peek(tokenizer)->ty == '{') {
-        def->func = function_definition(tokenizer, scope, type, name->name,
+        def->func = function_definition(tokenizer, scope, type, name->ident,
                                         is_static, range);
         vec_push(def_list, def);
         return def_list;
@@ -1716,9 +1716,9 @@ static Vector *declaration(Tokenizer *tokenizer, Scope *scope) {
   while (token_consume(tokenizer, ',')) {
     declarator(scope, tokenizer, base_type, &name, &type, &range);
     if (is_typedef) {
-      register_typedef(scope, name->name, type);
+      register_typedef(scope, name->ident, type);
     } else if (is_extern) {
-      register_decl(scope, name->name, type, NULL, NULL, NULL);
+      register_decl(scope, name->ident, type, NULL, NULL, NULL);
     } else {
       if (is_func_type(type)) {
         (void)register_func(scope, name, type);
@@ -1806,7 +1806,7 @@ static Type *type_specifier(Scope *scope, Tokenizer *tokenizer) {
   case TK_ENUM:
     return enum_specifier(scope, tokenizer, token, is_const);
   case TK_IDENT: {
-    Type *type = get_typedef(scope, token->name);
+    Type *type = get_typedef(scope, token->ident);
     if (type != NULL) {
       if (is_const) {
         Type *copy_type = NEW(Type);
@@ -1830,12 +1830,12 @@ static void struct_declaration(Scope *scope, Tokenizer *tokenizer, Type *type) {
   Type *member_type;
   Range range;
   declarator(scope, tokenizer, base_type, &member_name, &member_type, &range);
-  register_member(type, member_name != NULL ? member_name->name : NULL,
+  register_member(type, member_name != NULL ? member_name->ident : NULL,
                   member_type, range);
 
   while (token_consume(tokenizer, ',')) {
     declarator(scope, tokenizer, base_type, &member_name, &member_type, &range);
-    register_member(type, member_name != NULL ? member_name->name : NULL,
+    register_member(type, member_name != NULL ? member_name->ident : NULL,
                     member_type, range);
   }
   token_expect(tokenizer, ';');
@@ -1851,12 +1851,12 @@ static Type *struct_or_union_specifier(Scope *scope, Tokenizer *tokenizer,
   }
 
   if (token_consume(tokenizer, '{')) {
-    Type *type = new_type_struct(token->ty, tag ? tag->name : NULL, is_const);
+    Type *type = new_type_struct(token->ty, tag ? tag->ident : NULL, is_const);
     if (tag != NULL) {
-      if (!register_tag(scope, tag->name, type)) {
+      if (!register_tag(scope, tag->ident, type)) {
         range_error(tag->range,
                     "同じタグ名の構造体または共用体の多重定義です: %s",
-                    tag->name);
+                    tag->ident);
       }
     }
     while (token_peek(tokenizer)->ty != '}') {
@@ -1866,7 +1866,7 @@ static Type *struct_or_union_specifier(Scope *scope, Tokenizer *tokenizer,
     return type;
   }
 
-  Type *type = get_tag(scope, tag->name);
+  Type *type = get_tag(scope, tag->ident);
   if (type != NULL) {
     return type;
   }
@@ -1891,8 +1891,8 @@ static void enumerator(Scope *scope, Tokenizer *tokenizer, Type *type,
   Number *number = NEW(Number);
   number->type = TY_ENUM;
   number->enum_val = *val;
-  if (!register_decl(scope, ident->name, type, NULL, NULL, number)) {
-    range_error(ident->range, "定義済みの識別子です: %s", ident->name);
+  if (!register_decl(scope, ident->ident, type, NULL, NULL, number)) {
+    range_error(ident->range, "定義済みの識別子です: %s", ident->ident);
   }
   (*val)++;
 }
@@ -1904,7 +1904,7 @@ static Type *enum_specifier(Scope *scope, Tokenizer *tokenizer, Token *token,
     range_error(token->range, "列挙型のタグまたは `{` がありません");
   }
 
-  char *tag = tag_ident != NULL ? tag_ident->name : NULL;
+  char *tag = tag_ident != NULL ? tag_ident->ident : NULL;
 
   if (token_consume(tokenizer, '{')) {
     Type *type = new_type_enum(tag != NULL ? tag : NULL, is_const);
@@ -2065,7 +2065,7 @@ static void struct_initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
       Token *ident = token_peek_ahead(tokenizer, 1);
       for (int i = 0; i < vec_len(type->member_list); i++) {
         Member *member = vec_get(type->member_list, i);
-        if (member->name == NULL || strcmp(member->name, ident->name) == 0) {
+        if (member->name == NULL || strcmp(member->name, ident->ident) == 0) {
           if (member->name != NULL) {
             token_expect(tokenizer, '.');
             token_expect(tokenizer, TK_IDENT);
@@ -2123,7 +2123,7 @@ static void union_initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
       Token *ident = token_peek_ahead(tokenizer, 1);
       for (int i = 0; i < vec_len(type->member_list); i++) {
         Member *member = vec_get(type->member_list, i);
-        if (member->name == NULL || strcmp(member->name, ident->name) == 0) {
+        if (member->name == NULL || strcmp(member->name, ident->ident) == 0) {
           if (member->name != NULL) {
             token_expect(tokenizer, '.');
             token_expect(tokenizer, TK_IDENT);
@@ -2403,7 +2403,7 @@ static Stmt *statement(Tokenizer *tokenizer, Scope *scope) {
   }
   case TK_GOTO: {
     token_succ(tokenizer);
-    char *name = token_expect(tokenizer, TK_IDENT)->name;
+    char *name = token_expect(tokenizer, TK_IDENT)->ident;
     Token *end = token_expect(tokenizer, ';');
     return new_stmt_goto(name, range_join(start->range, end->range));
   }
@@ -2439,7 +2439,7 @@ static Stmt *statement(Tokenizer *tokenizer, Scope *scope) {
       Token *ident = token_pop(tokenizer);
       token_expect(tokenizer, ':');
       Stmt *body = statement(tokenizer, scope);
-      Stmt *stmt = new_stmt_label(scope->func_ctxt, ident->name, body,
+      Stmt *stmt = new_stmt_label(scope->func_ctxt, ident->ident, body,
                                   range_join(start->range, body->range));
       return stmt;
     }
@@ -2524,7 +2524,8 @@ static Stmt *compound_statement(Tokenizer *tokenizer, Scope *scope) {
             continue;
           }
 
-          Expr *dest = new_expr_ident(scope, def->name->name, def->name->range);
+          Expr *dest =
+              new_expr_ident(scope, def->name->ident, def->name->range);
           gen_init(scope, stmts, init, dest);
           break;
         }
@@ -2602,17 +2603,17 @@ static TranslationUnit *translation_unit(Tokenizer *tokenizer) {
         vec_push(gcx->func_list, def->func);
         break;
       case DEF_GLOBAL_VAR: {
-        GlobalVar *prev_def = map_get(gvar_map, def->name->name);
+        GlobalVar *prev_def = map_get(gvar_map, def->name->ident);
         if (prev_def == NULL) {
           def->global_var->init = def->init;
           vec_push(gcx->gvar_list, def->global_var);
-          map_put(gvar_map, def->name->name, def->global_var);
+          map_put(gvar_map, def->name->ident, def->global_var);
         } else {
           if (def->init != NULL) {
             if (prev_def->init != NULL) {
               range_error(def->global_var->range,
                           "グローバル変数が複数回定義されました: %s",
-                          def->name->name);
+                          def->name->ident);
             }
             prev_def->init = def->init;
           }

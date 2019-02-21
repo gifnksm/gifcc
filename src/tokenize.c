@@ -57,10 +57,10 @@ static const char *SHORT_PUNCT_TOKENS = "=!<>&|^+-*/%();?:~{}[],.#";
 static bool read_token(Tokenizer *tokenizer, Vector *tokens);
 static Token *new_token(int ty, Range range);
 static Token *token_clone(Token *token);
-static Token *new_token_num(Number val, Range range);
+static Token *new_token_num(Number num, Range range);
 static Token *new_token_int_from_str(const char *str, const char *suffix,
                                      int base, Range range);
-static Token *new_token_ident(char *name, Range range);
+static Token *new_token_ident(char *ident, Range range);
 static Token *new_token_str(char *str, Range range);
 static bool pp_directive(Reader *reader, Map *define_map,
                          Vector *pp_cond_stack);
@@ -404,9 +404,9 @@ static Token *token_clone(Token *token) {
   return cloned;
 }
 
-static Token *new_token_num(Number val, Range range) {
+static Token *new_token_num(Number num, Range range) {
   Token *token = new_token(TK_NUM, range);
-  token->num_val = val;
+  token->num = num;
   return token;
 }
 
@@ -485,17 +485,17 @@ static Token *new_token_int_from_str(const char *str, const char *suffix,
   return new_token_num(new_number(ty, val), range);
 }
 
-static Token *new_token_ident(char *name, Range range) {
+static Token *new_token_ident(char *ident, Range range) {
   Token *token = new_token(TK_IDENT, range);
 
   for (int i = 0; LONG_IDENT_TOKENS[i].str != NULL; i++) {
     const LongToken *tk = &LONG_IDENT_TOKENS[i];
-    if (strcmp(name, tk->str) == 0) {
+    if (strcmp(ident, tk->str) == 0) {
       token->ty = tk->kind;
       break;
     }
   }
-  token->name = name;
+  token->ident = ident;
   return token;
 }
 
@@ -738,7 +738,7 @@ static bool pp_read_if_cond(Reader *reader, Map *define_map) {
     Token *token = vec_last(tokens);
     switch (state) {
     case NORMAL:
-      if (token->ty == TK_IDENT && strcmp(token->name, "defined") == 0) {
+      if (token->ty == TK_IDENT && strcmp(token->ident, "defined") == 0) {
         state = DEFINE;
         def_start = token->range;
         vec_pop(tokens);
@@ -749,11 +749,11 @@ static bool pp_read_if_cond(Reader *reader, Map *define_map) {
         state = OPEN_PAREN;
         vec_pop(tokens);
       } else {
-        // Assume Only idents and keywords have name
-        if (token->name == NULL) {
+        // Assume Only idents and keywords have non-null `ident`
+        if (token->ident == NULL) {
           range_error(token->range, "識別子がありません");
         }
-        bool defined = map_get(define_map, token->name);
+        bool defined = map_get(define_map, token->ident);
         Token *num_token = new_token_num(new_number_int(defined),
                                          range_join(def_start, token->range));
         vec_pop(tokens);
@@ -763,11 +763,11 @@ static bool pp_read_if_cond(Reader *reader, Map *define_map) {
       break;
     }
     case OPEN_PAREN: {
-      // Assume Only idents and keywords have name
-      if (token->name == NULL) {
+      // Assume Only idents and keywords have non-null `ident`
+      if (token->ident == NULL) {
         range_error(token->range, "識別子がありません");
       }
-      bool defined = map_get(define_map, token->name);
+      bool defined = map_get(define_map, token->ident);
       Token *num_token = new_token_num(new_number_int(defined),
                                        range_join(def_start, token->range));
       vec_pop(tokens);
@@ -776,7 +776,6 @@ static bool pp_read_if_cond(Reader *reader, Map *define_map) {
       break;
     }
     case IDENT_IN_PAREN: {
-      // Assume Only idents and keywords have name
       if (token->ty != ')') {
         range_error(token->range, "`)`がありません");
       }
@@ -796,11 +795,11 @@ static bool pp_read_if_cond(Reader *reader, Map *define_map) {
   for (int i = 0; i < vec_len(tokens); i++) {
     // replace all ident tokens (including keyword ident) into '0'
     Token *tk = vec_get(tokens, i);
-    if (tk->name != NULL) {
-      // Assume Only idents and keywords have name
-      tk->name = NULL;
+    if (tk->ident != NULL) {
+      // Assume Only idents and keywords have non-null `ident`
+      tk->ident = NULL;
       tk->ty = TK_NUM;
-      tk->num_val = new_number_int(0);
+      tk->num = new_number_int(0);
     }
   }
 

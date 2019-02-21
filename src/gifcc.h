@@ -180,11 +180,11 @@ typedef struct Number {
 
 // トークンの型
 typedef struct {
-  int ty;         // トークンの型
-  Number num_val; // tyがTK_NUMの場合、その数値
-  char *name;     // tyがTK_IDENTの場合、その名前
-  char *str;      // tyがTK_STRの場合、その値
+  int ty;
   Range range;
+  Number num;
+  char *ident;
+  char *str;
 } Token;
 
 typedef enum {
