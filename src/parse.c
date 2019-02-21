@@ -992,6 +992,14 @@ static Expr *new_expr_call(Scope *scope, Expr *callee, Vector *argument,
     Expr *arg = vec_get(argument, i);
     vec_set(argument, i, new_expr_cast(scope, param->type, arg, arg->range));
   }
+  // default argument promotion
+  for (int i = nparam; i < narg; i++) {
+    Expr *arg = vec_get(argument, i);
+    if (is_integer_type(arg->val_type)) {
+      integer_promoted(scope, &arg);
+    }
+    vec_set(argument, i, arg);
+  }
 
   Expr *expr = new_expr(EX_CALL, ret_type, range);
   expr->call.callee = callee;
