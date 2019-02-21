@@ -663,13 +663,9 @@ static bool pp_directive(Reader *reader, Map *define_map,
     if (ident == NULL) {
       reader_error_here(reader, "識別子がありません");
     }
-    int end = reader_get_offset(reader);
     skip_space_or_comment(reader);
     reader_expect(reader, '\n');
-    if (!map_remove(define_map, str_get_raw(ident))) {
-      range_warn(range_from_reader(reader, start, end),
-                 "未定義のマクロに対する#undefです");
-    }
+    map_remove(define_map, str_get_raw(ident));
     return true;
   }
 
