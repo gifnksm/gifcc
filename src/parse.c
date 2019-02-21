@@ -2018,6 +2018,13 @@ static void direct_declarator(Scope *scope, Tokenizer *tokenizer,
           Param *param = NEW(Param);
           declarator(scope, tokenizer, base_type, &param->name, &param->type,
                      &param->range);
+          if (is_array_type(param->type)) {
+            // array型の引数はポインタ型とみなす
+            Type *type = NEW(Type);
+            *type = *param->type;
+            type->ty = TY_PTR;
+            param->type = type;
+          }
           vec_push(params, param);
           if (token_peek(tokenizer)->ty == ')') {
             break;

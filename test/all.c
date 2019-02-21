@@ -2109,6 +2109,25 @@ static void test62(void) {
   check_int(3, a);
 }
 
+static int test63_func(int a[100]) {
+  check_int(8, sizeof(a));
+  int s = 0;
+  int i;
+  for (i = 0; i < 100; i++) {
+    s += a[i];
+  }
+  return s;
+}
+
+static void test63(void) {
+  int a[100];
+  int i;
+  for (i = 0; i < 100; i++) {
+    a[i] = i;
+  }
+  check_int(4950, test63_func(a));
+}
+
 static int num_check = 0;
 static void check_int(int a, int b) {
   if (a != b) {
@@ -2141,7 +2160,7 @@ int main(void) {
       {"test54", test54}, {"test55", test55}, {"test56", test56},
       {"test57", test57}, {"test58", test58}, {"test59", test59},
       {"test60", test60}, {"test61", test61}, {"test62", test62},
-      {NULL, NULL},
+      {"test63", test63}, {NULL, NULL},
   };
   int i = 0;
   for (i = 0; test_list[i].name != NULL; i++) {
