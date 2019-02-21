@@ -465,7 +465,7 @@ static bool register_typedef(Scope *scope, char *name, Type *type) {
 static Type *get_typedef(Scope *scope, char *name) {
   while (scope != NULL) {
     Type *type = map_get(scope->typedef_map, name);
-    if (type) {
+    if (type != NULL) {
       return type;
     }
     scope = scope->outer;
@@ -2495,9 +2495,10 @@ static Stmt *compound_statement(Tokenizer *tokenizer, Scope *scope) {
   Vector *stmts = new_vector();
   while (!token_consume(tokenizer, '}')) {
     Token *token = token_peek(tokenizer);
-    if (token_is_typename(scope, token) ||
-        token_is_storage_class_specifier(token) ||
-        token_is_type_qualifier(token)) {
+    if ((token->ty != TK_IDENT || token_peek_ahead(tokenizer, 1)->ty != ':') &&
+        (token_is_typename(scope, token) ||
+         token_is_storage_class_specifier(token) ||
+         token_is_type_qualifier(token))) {
 
       Vector *def_list = declaration(tokenizer, scope);
       for (int i = 0; i < vec_len(def_list); i++) {
