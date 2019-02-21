@@ -54,7 +54,7 @@ static const LongToken LONG_PUNCT_TOKENS[] = {
 };
 static const char *SHORT_PUNCT_TOKENS = "=!<>&|^+-*/%();?:~{}[],.#";
 
-static bool read_token(Tokenizer *tokenizer);
+static bool read_token(Tokenizer *tokenizer, Vector *tokens);
 static Token *new_token(int ty, Range range);
 static Token *token_clone(Token *token);
 static Token *new_token_num(Number val, Range range);
@@ -114,8 +114,37 @@ Token *token_peek(Tokenizer *tokenizer) {
 
 Token *token_peek_ahead(Tokenizer *tokenizer, int n) {
   while (vec_len(tokenizer->tokens) <= n) {
-    if (!read_token(tokenizer)) {
-      return NULL;
+    while (true) {
+      Vector *tokens = new_vector();
+      if (!read_token(tokenizer, tokens)) {
+        return NULL;
+      }
+
+      // concatenate adjacent string literal
+      Token *last = NULL;
+      while (vec_len(tokens) > 0) {
+        Token *next = vec_remove(tokens, 0);
+        if (vec_len(tokenizer->tokens) > 0) {
+          last = vec_last(tokenizer->tokens);
+        }
+        if (last == NULL || last->ty != TK_STR || next->ty != TK_STR) {
+          vec_push(tokenizer->tokens, next);
+          last = next;
+          continue;
+        }
+
+        size_t size = strlen(last->str) + 1;
+        size_t extra_size = strlen(next->str);
+        if (extra_size > 0) {
+          last->str = realloc(last->str, size + extra_size);
+          strncat(last->str, next->str, extra_size + 1);
+        }
+        last->range = range_join(last->range, next->range);
+      }
+
+      if (last == NULL || last->ty != TK_STR) {
+        break;
+      }
     }
   }
   return vec_get(tokenizer->tokens, n);
@@ -322,7 +351,7 @@ static inline int dec2num(int c) {
   return c - '0';
 }
 
-static bool read_token(Tokenizer *tokenizer) {
+static bool read_token(Tokenizer *tokenizer, Vector *tokens) {
   char ch;
   while ((ch = reader_peek(tokenizer->reader)) != '\0') {
     if (skip_space_or_comment(tokenizer->reader)) {
@@ -338,11 +367,10 @@ static bool read_token(Tokenizer *tokenizer) {
       continue;
     }
 
-    Vector *tokens = pp_cond_fullfilled(tokenizer->pp_cond_stack)
-                         ? tokenizer->tokens
-                         : new_vector();
-
-    if (!read_normal_token(tokenizer->reader, tokenizer->define_map, tokens)) {
+    if (!read_normal_token(tokenizer->reader, tokenizer->define_map,
+                           pp_cond_fullfilled(tokenizer->pp_cond_stack)
+                               ? tokens
+                               : new_vector())) {
       reader_error_here(tokenizer->reader, "トークナイズできません: `%c`",
                         reader_peek(tokenizer->reader));
     }
@@ -356,7 +384,7 @@ static bool read_token(Tokenizer *tokenizer) {
     int end = reader_get_offset(tokenizer->reader);
     Token *token =
         new_token(TK_EOF, range_from_reader(tokenizer->reader, start, end));
-    vec_push(tokenizer->tokens, token);
+    vec_push(tokens, token);
     return true;
   }
 

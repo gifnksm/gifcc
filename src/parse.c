@@ -1420,18 +1420,7 @@ static Expr *primary_expression(Tokenizer *tokenizer, Scope *scope) {
     return new_expr_ident(scope, token->name, token->range);
   }
   if ((token = token_consume(tokenizer, TK_STR)) != NULL) {
-    char *val = strdup(token->str);
-    size_t len = strlen(val);
-    Range range = token->range;
-    Token *t;
-    while ((t = token_consume(tokenizer, TK_STR)) != NULL) {
-      size_t extra_len = strlen(t->str);
-      val = realloc(val, len + extra_len + 1);
-      memcpy(&val[len], t->str, extra_len + 1);
-      len += extra_len;
-      range = range_join(range, t->range);
-    }
-    return new_expr_str(scope, val, range);
+    return new_expr_str(scope, token->str, token->range);
   }
   if (token_consume(tokenizer, '(')) {
     Expr *expr = expression(tokenizer, scope);

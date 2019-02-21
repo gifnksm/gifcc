@@ -2143,6 +2143,16 @@ static void test64(void) {
   check_int(strlen("local static str") + 1, sizeof(local_static));
 }
 
+static void test65(void) {
+  const char *s = "ABC"
+                  "DEF";
+  const char a[] = "GHI"
+                   "JKL";
+  check_int(0, strcmp(s, "ABCDEF"));
+  check_int(0, strcmp(a, "GHIJKL"));
+  check_int(7, sizeof(a) / sizeof(a[0]));
+}
+
 static int num_check = 0;
 static void check_int(int a, int b) {
   if (a != b) {
@@ -2175,7 +2185,8 @@ int main(void) {
       {"test54", test54}, {"test55", test55}, {"test56", test56},
       {"test57", test57}, {"test58", test58}, {"test59", test59},
       {"test60", test60}, {"test61", test61}, {"test62", test62},
-      {"test63", test63}, {"test64", test64}, {NULL, NULL},
+      {"test63", test63}, {"test64", test64}, {"test65", test65},
+      {NULL, NULL},
   };
   int i = 0;
   for (i = 0; test_list[i].name != NULL; i++) {
