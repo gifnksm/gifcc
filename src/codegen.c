@@ -770,6 +770,11 @@ static void gen_func(Function *func) {
 
   gen_stmt(func->body);
 
+  // main関数の場合、returnなしに関数末尾まで到達した場合、戻り値は0にする
+  if (strcmp(func->name, "main") == 0) {
+    printf("mov eax, 0\n");
+  }
+
   // エピローグ
   // 最後の式の結果がRAXに残っているのでそれが返り値になる
   printf("%s:\n", epilogue_label);
