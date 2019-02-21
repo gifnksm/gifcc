@@ -797,6 +797,17 @@ static bool pp_read_if_cond(Reader *reader, Map *define_map) {
   Token *eof_token = new_token(TK_EOF, here);
   vec_push(tokens, eof_token);
 
+  for (int i = 0; i < vec_len(tokens); i++) {
+    // replace all ident tokens (including keyword ident) into '0'
+    Token *tk = vec_get(tokens, i);
+    if (tk->name != NULL) {
+      // Assume Only idents and keywords have name
+      tk->name = NULL;
+      tk->ty = TK_NUM;
+      tk->num_val = new_number_int(0);
+    }
+  }
+
   Scope *scope = new_pp_scope();
   Tokenizer *tokenizer = tokenizer_from_tokens(tokens);
   Expr *expr = constant_expression(tokenizer, scope);
