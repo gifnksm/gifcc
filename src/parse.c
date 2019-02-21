@@ -2168,6 +2168,29 @@ static void array_initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
     *init = new_initializer(type);
   }
 
+  Token *str;
+  if ((str = token_consume(tokenizer, TK_STR)) != NULL) {
+    if (type->ptrof->ty != TY_CHAR && type->ptrof->ty != TY_S_CHAR &&
+        type->ptrof->ty != TY_U_CHAR) {
+      range_error(str->range,
+                  "文字型以外の配列を文字列リテラルで初期化できません");
+    }
+    if (type->array_len < 0) {
+      type->array_len = strlen(str->str) + 1;
+      vec_extend((*init)->elements, type->array_len);
+    }
+    for (int i = 0; i < type->array_len; i++) {
+      Initializer *eleminit = new_initializer(type->ptrof);
+      eleminit->expr =
+          new_expr_num(new_number(type->ptrof->ty, str->str[i]), str->range);
+      vec_set((*init)->elements, i, eleminit);
+      if (str->str[i] == '\0') {
+        break;
+      }
+    }
+    return;
+  }
+
   if (token_peek(tokenizer)->ty == '}') {
     if (type->array_len < 0) {
       type->array_len = vec_len((*init)->elements);

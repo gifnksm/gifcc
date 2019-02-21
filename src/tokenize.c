@@ -321,6 +321,7 @@ static inline int dec2num(int c) {
   assert(is_dec_digit(c));
   return c - '0';
 }
+
 static bool read_token(Tokenizer *tokenizer) {
   char ch;
   while ((ch = reader_peek(tokenizer->reader)) != '\0') {
