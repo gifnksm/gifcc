@@ -1298,6 +1298,8 @@ static Expr *new_expr_dot(Scope *scope, Expr *operand, char *name,
 
 static Expr *new_expr_arrow(Scope *scope, Expr *operand, char *name,
                             Range range) {
+  operand = coerce_array2ptr(scope, operand);
+  operand = coerce_func2ptr(scope, operand);
   if (operand->val_type->ty != TY_PTR ||
       (operand->val_type->ptrof->ty != TY_STRUCT &&
        operand->val_type->ptrof->ty != TY_UNION)) {
