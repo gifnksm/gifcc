@@ -11,7 +11,6 @@
 struct Tokenizer {
   Reader *reader;
   Vector *tokens;
-  bool read_eof;
   Map *define_map;
   Vector *pp_cond_stack;
 };
@@ -54,7 +53,7 @@ static const LongToken LONG_PUNCT_TOKENS[] = {
 };
 static const char *SHORT_PUNCT_TOKENS = "=!<>&|^+-*/%();?:~{}[],.#";
 
-static bool read_token(Tokenizer *tokenizer, Vector *tokens);
+static bool read_token(Tokenizer *tokenizer, Vector *tokens, bool skip_eol);
 static Token *new_token(int ty, Range range);
 static Token *token_clone(Token *token);
 static Token *new_token_num(Number num, Range range);
@@ -62,10 +61,9 @@ static Token *new_token_int_from_str(const char *str, const char *suffix,
                                      int base, Range range);
 static Token *new_token_ident(char *ident, Range range);
 static Token *new_token_str(char *str, Range range);
-static bool pp_directive(Reader *reader, Map *define_map,
-                         Vector *pp_cond_stack);
+static bool pp_directive(Tokenizer *tokenizer);
 static bool pp_cond_fullfilled(Vector *pp_cond_stack);
-static bool pp_read_if_cond(Reader *reader, Map *define_map);
+static bool pp_read_if_cond(Tokenizer *tokenizer);
 static void pp_if(Vector *pp_cond_stack, bool fullfilled);
 static void pp_elif(Vector *pp_cond_stack, bool fullfilled, Range range);
 static void pp_else(Vector *pp_cond_stack, Range range);
@@ -74,10 +72,9 @@ static void do_include(Reader *reader, int offset, const char *path,
                        Range range, bool include_sourcedir);
 static bool try_include(Reader *reader, const char *base_path,
                         const char *rel_path);
-static bool read_normal_token(Reader *reader, Map *define_map, Vector *tokens);
+static bool read_normal_token(Reader *reader, Vector *tokens);
 static bool punctuator(Reader *reader, Vector *tokens);
-static bool identifier_or_keyword(Reader *reader, Map *define_map,
-                                  Vector *tokens);
+static bool identifier_or_keyword(Reader *reader, Vector *tokens);
 static bool constant(Reader *reader, Vector *tokens);
 static bool integer_constant(Reader *reader, Vector *tokens);
 static bool hexadecimal_constant(Reader *reader, Vector *tokens);
@@ -90,7 +87,6 @@ static char c_char(Reader *reader);
 Tokenizer *new_tokenizer(Reader *reader) {
   Tokenizer *tokenizer = NEW(Tokenizer);
   tokenizer->reader = reader;
-  tokenizer->read_eof = false;
   tokenizer->define_map = new_map();
   tokenizer->tokens = new_vector();
   tokenizer->pp_cond_stack = new_vector();
@@ -116,9 +112,30 @@ Token *token_peek_ahead(Tokenizer *tokenizer, int n) {
   while (vec_len(tokenizer->tokens) <= n) {
     while (true) {
       Vector *tokens = new_vector();
-      if (!read_token(tokenizer, tokens)) {
+      if (!read_token(tokenizer, tokens, true)) {
         return NULL;
       }
+
+      // TODO 共通化する
+      Vector *expanded = new_vector();
+      while (vec_len(tokens) > 0) {
+        Token *token = vec_remove(tokens, 0);
+        Vector *defined = token->ident != NULL
+                              ? map_get(tokenizer->define_map, token->ident)
+                              : NULL;
+        if (defined != NULL) {
+          for (int i = 0; i < vec_len(defined); i++) {
+            Token *pptoken = vec_get(defined, i);
+            Token *ex_token = token_clone(pptoken);
+            ex_token->range.expanded_from = NEW(Range);
+            *ex_token->range.expanded_from = token->range;
+            vec_push(expanded, ex_token);
+          }
+        } else {
+          vec_push(expanded, token);
+        }
+      }
+      tokens = expanded;
 
       // concatenate adjacent string literal
       Token *last = NULL;
@@ -351,23 +368,22 @@ static inline int dec2num(int c) {
   return c - '0';
 }
 
-static bool read_token(Tokenizer *tokenizer, Vector *tokens) {
+static bool read_token(Tokenizer *tokenizer, Vector *tokens, bool skip_eol) {
   char ch;
   while ((ch = reader_peek(tokenizer->reader)) != '\0') {
     if (skip_space_or_comment(tokenizer->reader)) {
       continue;
     }
-    if (ch == '\n') {
+    if (skip_eol && ch == '\n') {
       reader_succ(tokenizer->reader);
       continue;
     }
 
-    if (pp_directive(tokenizer->reader, tokenizer->define_map,
-                     tokenizer->pp_cond_stack)) {
+    if (pp_directive(tokenizer)) {
       continue;
     }
 
-    if (!read_normal_token(tokenizer->reader, tokenizer->define_map,
+    if (!read_normal_token(tokenizer->reader,
                            pp_cond_fullfilled(tokenizer->pp_cond_stack)
                                ? tokens
                                : new_vector())) {
@@ -378,17 +394,12 @@ static bool read_token(Tokenizer *tokenizer, Vector *tokens) {
     return true;
   }
 
-  if (!tokenizer->read_eof) {
-    tokenizer->read_eof = true;
-    int start = reader_get_offset(tokenizer->reader);
-    int end = reader_get_offset(tokenizer->reader);
-    Token *token =
-        new_token(TK_EOF, range_from_reader(tokenizer->reader, start, end));
-    vec_push(tokens, token);
-    return true;
-  }
-
-  return false;
+  int start = reader_get_offset(tokenizer->reader);
+  int end = reader_get_offset(tokenizer->reader);
+  Token *token =
+      new_token(TK_EOF, range_from_reader(tokenizer->reader, start, end));
+  vec_push(tokens, token);
+  return true;
 }
 
 static Token *new_token(int ty, Range range) {
@@ -505,189 +516,197 @@ static Token *new_token_str(char *str, Range range) {
   return token;
 }
 
-static bool pp_directive(Reader *reader, Map *define_map,
-                         Vector *pp_cond_stack) {
-  int start = reader_get_offset(reader);
-  if (!reader_consume(reader, '#')) {
+static bool pp_directive(Tokenizer *tokenizer) {
+  int start = reader_get_offset(tokenizer->reader);
+  if (!reader_consume(tokenizer->reader, '#')) {
     return false;
   }
-  skip_space_or_comment(reader);
+  skip_space_or_comment(tokenizer->reader);
 
-  String *directive = read_identifier(reader);
+  String *directive = read_identifier(tokenizer->reader);
   if (directive == NULL) {
-    skip_to_eol(reader);
-    int end = reader_get_offset(reader);
-    reader_expect(reader, '\n');
-    range_warn(range_from_reader(reader, start, end),
+    skip_to_eol(tokenizer->reader);
+    int end = reader_get_offset(tokenizer->reader);
+    reader_expect(tokenizer->reader, '\n');
+    range_warn(range_from_reader(tokenizer->reader, start, end),
                "不明なディレクティブです");
   }
   const char *directive_raw = str_get_raw(directive);
 
   if (strcmp(directive_raw, "if") == 0) {
-    bool fullfilled = pp_read_if_cond(reader, define_map);
-    reader_expect(reader, '\n');
-    pp_if(pp_cond_stack, fullfilled);
+    bool fullfilled = pp_read_if_cond(tokenizer);
+    reader_expect(tokenizer->reader, '\n');
+    pp_if(tokenizer->pp_cond_stack, fullfilled);
     return true;
   }
 
   if (strcmp(directive_raw, "elif") == 0) {
-    bool fullfilled = pp_read_if_cond(reader, define_map);
-    int end = reader_get_offset(reader);
-    reader_expect(reader, '\n');
-    pp_elif(pp_cond_stack, fullfilled, range_from_reader(reader, start, end));
+    bool fullfilled = pp_read_if_cond(tokenizer);
+    int end = reader_get_offset(tokenizer->reader);
+    reader_expect(tokenizer->reader, '\n');
+    pp_elif(tokenizer->pp_cond_stack, fullfilled,
+            range_from_reader(tokenizer->reader, start, end));
     return true;
   }
 
   if (strcmp(directive_raw, "ifdef") == 0) {
-    skip_space_or_comment(reader);
-    String *ident = read_identifier(reader);
+    skip_space_or_comment(tokenizer->reader);
+    String *ident = read_identifier(tokenizer->reader);
     if (ident == NULL) {
-      reader_error_here(reader, "識別子がありません");
+      reader_error_here(tokenizer->reader, "識別子がありません");
     }
-    skip_space_or_comment(reader);
-    reader_expect(reader, '\n');
+    skip_space_or_comment(tokenizer->reader);
+    reader_expect(tokenizer->reader, '\n');
 
-    bool defined = map_get(define_map, str_get_raw(ident)) != NULL;
-    pp_if(pp_cond_stack, defined);
+    bool defined = map_get(tokenizer->define_map, str_get_raw(ident)) != NULL;
+    pp_if(tokenizer->pp_cond_stack, defined);
     return true;
   }
 
   if (strcmp(directive_raw, "ifndef") == 0) {
-    skip_space_or_comment(reader);
-    String *ident = read_identifier(reader);
+    skip_space_or_comment(tokenizer->reader);
+    String *ident = read_identifier(tokenizer->reader);
     if (ident == NULL) {
-      reader_error_here(reader, "識別子がありません");
+      reader_error_here(tokenizer->reader, "識別子がありません");
     }
-    skip_space_or_comment(reader);
-    reader_expect(reader, '\n');
+    skip_space_or_comment(tokenizer->reader);
+    reader_expect(tokenizer->reader, '\n');
 
-    bool defined = map_get(define_map, str_get_raw(ident)) != NULL;
-    pp_if(pp_cond_stack, !defined);
+    bool defined = map_get(tokenizer->define_map, str_get_raw(ident)) != NULL;
+    pp_if(tokenizer->pp_cond_stack, !defined);
     return true;
   }
 
   if (strcmp(directive_raw, "else") == 0) {
-    int end = reader_get_offset(reader);
-    skip_space_or_comment(reader);
-    reader_expect(reader, '\n');
+    int end = reader_get_offset(tokenizer->reader);
+    skip_space_or_comment(tokenizer->reader);
+    reader_expect(tokenizer->reader, '\n');
 
-    pp_else(pp_cond_stack, range_from_reader(reader, start, end));
+    pp_else(tokenizer->pp_cond_stack,
+            range_from_reader(tokenizer->reader, start, end));
     return true;
   }
 
   if (strcmp(directive_raw, "endif") == 0) {
-    int end = reader_get_offset(reader);
-    skip_space_or_comment(reader);
-    reader_expect(reader, '\n');
+    int end = reader_get_offset(tokenizer->reader);
+    skip_space_or_comment(tokenizer->reader);
+    reader_expect(tokenizer->reader, '\n');
 
-    pp_endif(pp_cond_stack, range_from_reader(reader, start, end));
+    pp_endif(tokenizer->pp_cond_stack,
+             range_from_reader(tokenizer->reader, start, end));
     return true;
   }
 
-  if (!pp_cond_fullfilled(pp_cond_stack)) {
-    skip_to_eol(reader);
+  if (!pp_cond_fullfilled(tokenizer->pp_cond_stack)) {
+    skip_to_eol(tokenizer->reader);
     return true;
   }
 
   if (strcmp(directive_raw, "include") == 0) {
-    skip_space_or_comment(reader);
+    skip_space_or_comment(tokenizer->reader);
 
-    if (reader_consume(reader, '<')) {
+    if (reader_consume(tokenizer->reader, '<')) {
       String *str = new_string();
-      while ((reader_peek(reader) != '>') && (reader_peek(reader) != '\0')) {
-        char ch = reader_pop(reader);
+      while ((reader_peek(tokenizer->reader) != '>') &&
+             (reader_peek(tokenizer->reader) != '\0')) {
+        char ch = reader_pop(tokenizer->reader);
         str_push(str, ch);
       }
       str_push(str, '\0');
-      reader_expect(reader, '>');
-      int end = reader_get_offset(reader);
+      reader_expect(tokenizer->reader, '>');
+      int end = reader_get_offset(tokenizer->reader);
 
-      skip_space_or_comment(reader);
-      reader_expect(reader, '\n');
+      skip_space_or_comment(tokenizer->reader);
+      reader_expect(tokenizer->reader, '\n');
 
-      do_include(reader, start, str_get_raw(str),
-                 range_from_reader(reader, start, end), false);
+      do_include(tokenizer->reader, start, str_get_raw(str),
+                 range_from_reader(tokenizer->reader, start, end), false);
 
       return true;
     }
 
-    if (reader_consume(reader, '"')) {
+    if (reader_consume(tokenizer->reader, '"')) {
       String *str = new_string();
-      while ((reader_peek(reader) != '"') && (reader_peek(reader) != '\0')) {
-        char ch = reader_pop(reader);
+      while ((reader_peek(tokenizer->reader) != '"') &&
+             (reader_peek(tokenizer->reader) != '\0')) {
+        char ch = reader_pop(tokenizer->reader);
         str_push(str, ch);
       }
       str_push(str, '\0');
-      reader_expect(reader, '"');
-      int end = reader_get_offset(reader);
+      reader_expect(tokenizer->reader, '"');
+      int end = reader_get_offset(tokenizer->reader);
 
-      skip_space_or_comment(reader);
-      reader_expect(reader, '\n');
+      skip_space_or_comment(tokenizer->reader);
+      reader_expect(tokenizer->reader, '\n');
 
-      do_include(reader, start, str_get_raw(str),
-                 range_from_reader(reader, start, end), true);
+      do_include(tokenizer->reader, start, str_get_raw(str),
+                 range_from_reader(tokenizer->reader, start, end), true);
       return true;
     }
 
-    reader_error_here(reader, "\"FILENAME\" または <FILENAME> がありません");
+    reader_error_here(tokenizer->reader,
+                      "\"FILENAME\" または <FILENAME> がありません");
   }
 
   if (strcmp(directive_raw, "define") == 0) {
-    skip_space_or_comment(reader);
-    String *ident = read_identifier(reader);
+    skip_space_or_comment(tokenizer->reader);
+    String *ident = read_identifier(tokenizer->reader);
     if (ident == NULL) {
-      reader_error_here(reader, "識別子がありません");
+      reader_error_here(tokenizer->reader, "識別子がありません");
     }
-    if (reader_peek(reader) == '(') {
-      reader_error_here(reader, "関数マクロは未サポートです");
+    if (reader_peek(tokenizer->reader) == '(') {
+      reader_error_here(tokenizer->reader, "関数マクロは未サポートです");
     }
-    skip_space_or_comment(reader);
+    skip_space_or_comment(tokenizer->reader);
     Vector *tokens = new_vector();
-    while (reader_peek(reader) != '\n' && reader_peek(reader) != '\0') {
-      if (!read_normal_token(reader, define_map, tokens)) {
-        reader_error_here(reader, "トークナイズできません: `%c`",
-                          reader_peek(reader));
+    while (reader_peek(tokenizer->reader) != '\n' &&
+           reader_peek(tokenizer->reader) != '\0') {
+      if (!read_normal_token(tokenizer->reader, tokens)) {
+        reader_error_here(tokenizer->reader, "トークナイズできません: `%c`",
+                          reader_peek(tokenizer->reader));
       }
-      skip_space_or_comment(reader);
+      skip_space_or_comment(tokenizer->reader);
     }
-    reader_expect(reader, '\n');
+    reader_expect(tokenizer->reader, '\n');
 
-    map_put(define_map, str_get_raw(ident), tokens);
+    map_put(tokenizer->define_map, str_get_raw(ident), tokens);
 
     return true;
   }
 
   if (strcmp(directive_raw, "undef") == 0) {
-    skip_space_or_comment(reader);
-    String *ident = read_identifier(reader);
+    skip_space_or_comment(tokenizer->reader);
+    String *ident = read_identifier(tokenizer->reader);
     if (ident == NULL) {
-      reader_error_here(reader, "識別子がありません");
+      reader_error_here(tokenizer->reader, "識別子がありません");
     }
-    skip_space_or_comment(reader);
-    reader_expect(reader, '\n');
-    map_remove(define_map, str_get_raw(ident));
+    skip_space_or_comment(tokenizer->reader);
+    reader_expect(tokenizer->reader, '\n');
+    map_remove(tokenizer->define_map, str_get_raw(ident));
     return true;
   }
 
   if (strcmp(directive_raw, "error") == 0) {
-    skip_space_or_comment(reader);
+    skip_space_or_comment(tokenizer->reader);
 
     String *str = new_string();
-    while ((reader_peek(reader) != '\n') && (reader_peek(reader) != '\0')) {
-      str_push(str, reader_peek(reader));
-      reader_succ(reader);
+    while ((reader_peek(tokenizer->reader) != '\n') &&
+           (reader_peek(tokenizer->reader) != '\0')) {
+      str_push(str, reader_peek(tokenizer->reader));
+      reader_succ(tokenizer->reader);
     }
     str_push(str, '\0');
-    int end = reader_get_offset(reader);
-    reader_expect(reader, '\n');
-    range_error(range_from_reader(reader, start, end), "#error %s",
+    int end = reader_get_offset(tokenizer->reader);
+    reader_expect(tokenizer->reader, '\n');
+    range_error(range_from_reader(tokenizer->reader, start, end), "#error %s",
                 str_get_raw(str));
   }
 
-  skip_to_eol(reader);
-  int end = reader_get_offset(reader);
-  reader_expect(reader, '\n');
-  range_warn(range_from_reader(reader, start, end), "不明なディレクティブです");
+  skip_to_eol(tokenizer->reader);
+  int end = reader_get_offset(tokenizer->reader);
+  reader_expect(tokenizer->reader, '\n');
+  range_warn(range_from_reader(tokenizer->reader, start, end),
+             "不明なディレクティブです");
 
   return true;
 }
@@ -700,7 +719,7 @@ static bool pp_cond_fullfilled(Vector *pp_cond_stack) {
   return true;
 }
 
-static bool pp_read_if_cond(Reader *reader, Map *define_map) {
+static bool pp_read_if_cond(Tokenizer *tokenizer) {
   Vector *tokens = new_vector();
 
   enum { NORMAL, DEFINE, OPEN_PAREN, IDENT_IN_PAREN } state = NORMAL;
@@ -708,11 +727,12 @@ static bool pp_read_if_cond(Reader *reader, Map *define_map) {
 
   // read (normal) tokens until next line break
   while (true) {
-    skip_space_or_comment(reader);
-    char ch = reader_peek(reader);
+    skip_space_or_comment(tokenizer->reader);
+    char ch = reader_peek(tokenizer->reader);
     if (ch == '\n' || ch == '\0') {
-      int here_offset = reader_get_offset(reader);
-      Range here = range_from_reader(reader, here_offset, here_offset);
+      int here_offset = reader_get_offset(tokenizer->reader);
+      Range here =
+          range_from_reader(tokenizer->reader, here_offset, here_offset);
       switch (state) {
       case NORMAL:
         break;
@@ -725,11 +745,9 @@ static bool pp_read_if_cond(Reader *reader, Map *define_map) {
       break;
     }
 
-    // passing NULL prevents macro expansion
-    if (!read_normal_token(reader, state == NORMAL ? define_map : NULL,
-                           tokens)) {
-      reader_error_here(reader, "トークナイズできません: `%c`",
-                        reader_peek(reader));
+    if (!read_normal_token(tokenizer->reader, tokens)) {
+      reader_error_here(tokenizer->reader, "トークナイズできません: `%c`",
+                        reader_peek(tokenizer->reader));
     }
     if (vec_len(tokens) == 0) {
       continue;
@@ -753,7 +771,7 @@ static bool pp_read_if_cond(Reader *reader, Map *define_map) {
         if (token->ident == NULL) {
           range_error(token->range, "識別子がありません");
         }
-        bool defined = map_get(define_map, token->ident);
+        bool defined = map_get(tokenizer->define_map, token->ident);
         Token *num_token = new_token_num(new_number_int(defined),
                                          range_join(def_start, token->range));
         vec_pop(tokens);
@@ -767,7 +785,7 @@ static bool pp_read_if_cond(Reader *reader, Map *define_map) {
       if (token->ident == NULL) {
         range_error(token->range, "識別子がありません");
       }
-      bool defined = map_get(define_map, token->ident);
+      bool defined = map_get(tokenizer->define_map, token->ident);
       Token *num_token = new_token_num(new_number_int(defined),
                                        range_join(def_start, token->range));
       vec_pop(tokens);
@@ -786,8 +804,29 @@ static bool pp_read_if_cond(Reader *reader, Map *define_map) {
     }
   }
 
-  int here_offset = reader_get_offset(reader);
-  Range here = range_from_reader(reader, here_offset, here_offset);
+  // TODO 共通化する
+  Vector *expanded = new_vector();
+  while (vec_len(tokens) > 0) {
+    Token *token = vec_remove(tokens, 0);
+    Vector *defined = token->ident != NULL
+                          ? map_get(tokenizer->define_map, token->ident)
+                          : NULL;
+    if (defined != NULL) {
+      for (int i = 0; i < vec_len(defined); i++) {
+        Token *pptoken = vec_get(defined, i);
+        Token *ex_token = token_clone(pptoken);
+        ex_token->range.expanded_from = NEW(Range);
+        *ex_token->range.expanded_from = token->range;
+        vec_push(expanded, ex_token);
+      }
+    } else {
+      vec_push(expanded, token);
+    }
+  }
+  tokens = expanded;
+
+  int here_offset = reader_get_offset(tokenizer->reader);
+  Range here = range_from_reader(tokenizer->reader, here_offset, here_offset);
 
   Token *eof_token = new_token(TK_EOF, here);
   vec_push(tokens, eof_token);
@@ -804,10 +843,10 @@ static bool pp_read_if_cond(Reader *reader, Map *define_map) {
   }
 
   Scope *scope = new_pp_scope();
-  Tokenizer *tokenizer = tokenizer_from_tokens(tokens);
-  Expr *expr = constant_expression(tokenizer, scope);
-  if (token_peek(tokenizer)->ty != TK_EOF) {
-    range_error(token_peek(tokenizer)->range, "改行がありません");
+  Tokenizer *sub_tokenizer = tokenizer_from_tokens(tokens);
+  Expr *expr = constant_expression(sub_tokenizer, scope);
+  if (token_peek(sub_tokenizer)->ty != TK_EOF) {
+    range_error(token_peek(sub_tokenizer)->range, "改行がありません");
   }
 
   assert(expr->ty == EX_NUM);
@@ -910,10 +949,10 @@ static bool try_include(Reader *reader, const char *base_path,
   return false;
 }
 
-static bool read_normal_token(Reader *reader, Map *define_map, Vector *tokens) {
+static bool read_normal_token(Reader *reader, Vector *tokens) {
   return punctuator(reader, tokens) || constant(reader, tokens) ||
          string_literal(reader, tokens) ||
-         identifier_or_keyword(reader, define_map, tokens);
+         identifier_or_keyword(reader, tokens);
 }
 
 static bool punctuator(Reader *reader, Vector *tokens) {
@@ -944,8 +983,7 @@ Hit:;
   return true;
 }
 
-static bool identifier_or_keyword(Reader *reader, Map *define_map,
-                                  Vector *tokens) {
+static bool identifier_or_keyword(Reader *reader, Vector *tokens) {
   int start = reader_get_offset(reader);
   String *str = read_identifier(reader);
   if (str == NULL) {
@@ -953,20 +991,7 @@ static bool identifier_or_keyword(Reader *reader, Map *define_map,
   }
   int end = reader_get_offset(reader);
   Range range = range_from_reader(reader, start, end);
-  char *raw_str = str_get_raw(str);
-
-  Vector *defined = define_map != NULL ? map_get(define_map, raw_str) : NULL;
-  if (defined != NULL) {
-    for (int i = 0; i < vec_len(defined); i++) {
-      Token *pptoken = vec_get(defined, i);
-      Token *token = token_clone(pptoken);
-      token->range.expanded_from = NEW(Range);
-      *token->range.expanded_from = range;
-      vec_push(tokens, token);
-    }
-  } else {
-    vec_push(tokens, new_token_ident(str_get_raw(str), range));
-  }
+  vec_push(tokens, new_token_ident(str_get_raw(str), range));
 
   return true;
 }
