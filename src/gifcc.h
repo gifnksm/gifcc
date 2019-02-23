@@ -42,6 +42,7 @@ enum {
   TK_OR_ASSIGN,     // `|=`
   TK_ARROW,         // `->`
   TK_ELIPSIS,       // `...`
+  TK_HASH_HASH,     // `##`
   TK_VOID,          // `void`
   TK_INT,           // `int`
   TK_SHORT,         // `short`
