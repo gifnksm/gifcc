@@ -183,6 +183,7 @@ typedef struct Number {
 typedef struct {
   int ty;
   Range range;
+  Map *pp_hideset;
   Number num;
   char *ident;
   char *str;
@@ -425,6 +426,7 @@ static inline int align(int n, int s) {
 // util.c
 // Vector
 Vector *new_vector(void);
+Vector *vec_clone(Vector *vec);
 int vec_len(const Vector *vec);
 void *vec_first(Vector *vec);
 void *vec_last(Vector *vec);
@@ -435,6 +437,7 @@ void vec_push(Vector *vec, void *elem);
 void *vec_pop(Vector *vec);
 void vec_insert(Vector *vec, int n, void *elem);
 void *vec_remove(Vector *vec, int n);
+void vec_append(Vector *dst, Vector *src);
 void vec_extend(Vector *vec, int len);
 void vec_reserve(Vector *vec, int len);
 // Map

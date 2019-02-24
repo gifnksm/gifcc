@@ -36,6 +36,15 @@ Vector *new_vector(void) {
   return vec;
 }
 
+Vector *vec_clone(Vector *vec) {
+  Vector *cloned = NEW(Vector);
+  vec_reserve(cloned, vec->capacity);
+  for (int i = 0; i < vec_len(vec); i++) {
+    vec_push(cloned, vec_get(vec, i));
+  }
+  return cloned;
+}
+
 int vec_len(const Vector *vec) { return vec->len; }
 
 void *vec_first(Vector *vec) {
@@ -83,6 +92,11 @@ void *vec_remove(Vector *vec, int n) {
           (vec->len - n - 1) * sizeof(void *));
   vec->len--;
   return ret;
+}
+void vec_append(Vector *dst, Vector *src) {
+  for (int i = 0; i < vec_len(src); i++) {
+    vec_push(dst, vec_get(src, i));
+  }
 }
 void vec_reserve(Vector *vec, int len) {
   int cap = vec->capacity;
