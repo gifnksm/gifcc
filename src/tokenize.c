@@ -721,6 +721,7 @@ static bool pp_directive(Tokenizer *tokenizer) {
         skip_space_or_comment(tokenizer->reader);
         if (reader_consume_str(tokenizer->reader, "...")) {
           has_varargs = true;
+          vec_push(params, "__VA_ARGS__");
           break;
         }
         String *ident = read_identifier(tokenizer->reader);
@@ -949,17 +950,19 @@ static Vector *pp_read_macro_func_arg(Macro *macro, Vector *tokens,
         break;
       }
     }
+
     assert(nest > 0);
-    if (nest == 1) {
-      if (token->ty == ',') {
-        if (current_arg == NULL) {
-          current_arg = new_vector();
-        }
-        vec_push(arguments, current_arg);
+    if (nest == 1 && token->ty == ',' &&
+        (!macro->has_varargs ||
+         vec_len(arguments) < vec_len(macro->params) - 1)) {
+      if (current_arg == NULL) {
         current_arg = new_vector();
-        continue;
       }
+      vec_push(arguments, current_arg);
+      current_arg = new_vector();
+      continue;
     }
+
     if (current_arg == NULL) {
       current_arg = new_vector();
     }
@@ -969,9 +972,11 @@ static Vector *pp_read_macro_func_arg(Macro *macro, Vector *tokens,
   if (current_arg != NULL) {
     vec_push(arguments, current_arg);
   }
+  if (macro->has_varargs && vec_len(arguments) == vec_len(macro->params) - 1) {
+    vec_push(arguments, new_vector());
+  }
 
-  if (macro->has_varargs ? vec_len(macro->params) > vec_len(arguments)
-                         : vec_len(macro->params) != vec_len(arguments)) {
+  if (vec_len(macro->params) != vec_len(arguments)) {
     range_error(range,
                 "関数マクロの引数の個数が一致しません, 仮引数: %d, 引数: %d",
                 vec_len(macro->params), vec_len(arguments));
