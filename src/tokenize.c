@@ -401,8 +401,12 @@ static bool read_token(Tokenizer *tokenizer, Token **token, bool skip_eol,
                        bool check_pp_cond) {
   char ch;
   while ((ch = reader_peek(tokenizer->reader)) != '\0') {
+    bool is_sol = reader_is_sol(tokenizer->reader);
     if (skip_space_or_comment(tokenizer->reader)) {
-      continue;
+      ch = reader_peek(tokenizer->reader);
+      if (ch == '\0') {
+        break;
+      }
     }
     if (ch == '\n') {
       if (skip_eol) {
@@ -413,7 +417,7 @@ static bool read_token(Tokenizer *tokenizer, Token **token, bool skip_eol,
       return false;
     }
 
-    if (pp_directive(tokenizer)) {
+    if (is_sol && pp_directive(tokenizer)) {
       continue;
     }
 

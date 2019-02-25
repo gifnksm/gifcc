@@ -474,6 +474,7 @@ char reader_pop(Reader *Reader);
 bool reader_consume(Reader *reader, char ch);
 bool reader_consume_str(Reader *reader, const char *str);
 void reader_expect(Reader *reader, char ch);
+bool reader_is_sol(const Reader *reader);
 int reader_get_offset(const Reader *reader);
 void reader_get_position(const Reader *reader, int offset,
                          const char **filename, int *line, int *column);

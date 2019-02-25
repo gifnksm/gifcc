@@ -22,6 +22,7 @@ typedef struct FileOffset {
 
 struct Reader {
   int offset;
+  bool is_sol;
   Vector *file_stack;
   Vector *file_offset;
 };
@@ -52,6 +53,7 @@ Reader *new_reader(void) {
   Reader *reader = NEW(Reader);
   reader->file_stack = new_vector();
   reader->file_offset = new_vector();
+  reader->is_sol = true;
   return reader;
 }
 
@@ -68,6 +70,7 @@ static void switch_file(Reader *reader, File *file) {
   fo->file_offset = file != NULL ? file->offset : 0;
   fo->file = file;
   vec_push(reader->file_offset, fo);
+  reader->is_sol = true;
 }
 
 static File *peek_file(const Reader *reader) { return peek_file_n(reader, 0); }
@@ -109,6 +112,7 @@ void reader_succ(Reader *reader) {
   File *file = peek_file(reader);
   assert(file != NULL);
   while (true) {
+    reader->is_sol = file->source[file->offset] == '\n';
     reader->offset++;
     file->offset++;
     if (file->offset >= file->size) {
@@ -164,6 +168,7 @@ void reader_expect(Reader *reader, char ch) {
   }
 }
 
+bool reader_is_sol(const Reader *reader) { return reader->is_sol; }
 int reader_get_offset(const Reader *reader) { return reader->offset; }
 
 static FileOffset *get_file_offset(const Reader *reader, int offset) {
