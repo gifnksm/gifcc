@@ -61,6 +61,9 @@ static int n5 = 6\
 00;
 // clang-format on
 
+#define DEFVAR(var, val, type) type var = val;
+DEFVAR(n6, 700, int)
+
 static void check_int(int a, int b) {
   if (a != b) {
     printf("FAILED %d != %d\n", a, b);
@@ -75,6 +78,7 @@ int main(void) {
   check_int(400, n3);
   check_int(500, n4);
   check_int(600, n5);
+  check_int(700, n6);
 
   puts("OK");
   return 0;
