@@ -1102,9 +1102,10 @@ static Vector *pp_expand_macros(Map *define_map, Vector *tokens) {
       *expanded_from = ident->range;
       Map *hideset = new_map();
       map_put(hideset, ident->ident, ident->ident);
-      Vector *exp_tokens = pp_subst_macros(define_map, expanded_from,
-                                           vec_clone(macro->replacement), NULL,
-                                           NULL, hideset, new_vector());
+      Vector *exp_tokens = pp_expand_macros(
+          define_map, pp_subst_macros(define_map, expanded_from,
+                                      vec_clone(macro->replacement), NULL, NULL,
+                                      hideset, new_vector()));
       vec_append(expanded, exp_tokens);
       continue;
     }
