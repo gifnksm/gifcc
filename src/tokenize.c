@@ -102,12 +102,21 @@ static Token *character_constant(Reader *reader);
 static Token *string_literal(Reader *reader);
 static char c_char(Reader *reader);
 
+void set_predefined_macro(Map *map, char *name, int i) {
+  Vector *replacement = new_vector();
+  vec_push(replacement, new_token_num(new_number_int(i), (Range){}));
+  map_put(map, name, new_obj_macro(replacement));
+}
 Tokenizer *new_tokenizer(Reader *reader) {
   Tokenizer *tokenizer = NEW(Tokenizer);
   tokenizer->reader = reader;
   tokenizer->define_map = new_map();
   tokenizer->tokens = new_vector();
   tokenizer->pp_cond_stack = new_vector();
+
+  set_predefined_macro(tokenizer->define_map, "__LP64__", 1);
+  set_predefined_macro(tokenizer->define_map, "__x86_64__", 1);
+
   return tokenizer;
 }
 
