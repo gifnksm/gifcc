@@ -1014,29 +1014,61 @@ static Vector *pp_hsadd(Range *expanded_from, Map *hideset, Vector *output) {
   return output;
 }
 
+static Vector *pp_get_func_arg(Vector *params, Vector *arguments,
+                               Token *token) {
+  if (token->ident == NULL || params == NULL) {
+    return NULL;
+  }
+  int i;
+  for (i = 0; i < vec_len(params); i++) {
+    char *key = vec_get(params, i);
+    if (strcmp(key, token->ident) == 0) {
+      Vector *arg = vec_get(arguments, i);
+      assert(arg != NULL);
+      return arg;
+    }
+  }
+  return NULL;
+}
+
+static Token *pp_stringize(Vector *arg, Range range) {
+  String *str = new_string();
+  for (int i = 0; i < vec_len(arg); i++) {
+    Token *token = vec_get(arg, i);
+    if (i == 0) {
+      range = token->range;
+    } else {
+      str_push(str, ' ');
+      range = range_join(range, token->range);
+    }
+    str_append(str, reader_get_source(token->range));
+  }
+  str_push(str, '\0');
+  return new_token_str(str_get_raw(str), range);
+}
+
 static Vector *pp_subst_macros(Map *define_map, Range *expanded_from,
                                Vector *input, Vector *params, Vector *arguments,
                                Map *hideset, Vector *output) {
   while (vec_len(input) > 0) {
     Token *token = vec_remove(input, 0);
-    if (token->ident != NULL && params != NULL) {
-      assert(arguments != NULL);
-      int i;
-      for (i = 0; i < vec_len(params); i++) {
-        char *key = vec_get(params, i);
-        if (strcmp(key, token->ident) == 0) {
-          vec_append(output,
-                     pp_expand_macros(define_map, vec_get(arguments, i)));
-          break;
-        }
+    if (token->ty == '#') {
+      Token *ident = vec_remove(input, 0);
+      Vector *arg = pp_get_func_arg(params, arguments, ident);
+      if (arg == NULL) {
+        range_error(ident->range,
+                    "`#` の後がマクロのパラメーターではありません");
       }
-      if (i < vec_len(params)) {
-        continue;
-      }
-      vec_push(output, token);
-    } else {
-      vec_push(output, token);
+      vec_push(output, pp_stringize(arg, ident->range));
+      continue;
     }
+
+    Vector *arg = pp_get_func_arg(params, arguments, token);
+    if (arg != NULL) {
+      vec_append(output, pp_expand_macros(define_map, vec_clone(arg)));
+      continue;
+    }
+    vec_push(output, token);
   }
 
   return pp_hsadd(expanded_from, hideset, output);

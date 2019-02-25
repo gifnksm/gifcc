@@ -209,6 +209,14 @@ void reader_get_position(const Reader *reader, int offset,
   assert(false);
 }
 
+char *reader_get_source(Range range) {
+  int offset = range.start;
+  FileOffset *fo = get_file_offset(range.reader, offset);
+  const char *source =
+      &fo->file->source[offset - fo->global_offset + fo->file_offset];
+  return strndup(source, range.len);
+}
+
 noreturn __attribute__((format(printf, 5, 6))) void
 reader_error_offset_raw(const Reader *reader, int offset, const char *dbg_file,
                         int dbg_line, const char *fmt, ...) {

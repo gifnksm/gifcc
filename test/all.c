@@ -2168,31 +2168,29 @@ static void check_int(int a, int b) {
   num_check++;
 }
 
+#define TEST(name)                                                             \
+  { #name, name }
+
 int main(void) {
   typedef struct Test {
     const char *name;
     void (*func)(void);
   } Test;
   Test test_list[] = {
-      {"test01", test01}, {"test02", test02}, {"test03", test03},
-      {"test04", test04}, {"test05", test05}, {"test06", test06},
-      {"test07", test07}, {"test08", test08}, {"test09", test09},
-      {"test10", test10}, {"test11", test11}, {"test12", test12},
-      {"test13", test13}, {"test14", test14}, {"test15", test15},
-      {"test16", test16}, {"test17", test17}, {"test18", test18},
-      {"test19", test19}, {"test20", test20}, {"test31", test31},
-      {"test32", test32}, {"test33", test33}, {"test34", test34},
-      {"test35", test35}, {"test36", test36}, {"test37", test37},
-      {"test38", test38}, {"test39", test39}, {"test40", test40},
-      {"test41", test41}, {"test42", test42}, {"test43", test43},
-      {"test44", test44}, {"test45", test45}, {"test46", test46},
-      {"test47", test47}, {"test48", test48}, {"test49", test49},
-      {"test51", test51}, {"test52", test52}, {"test53", test53},
-      {"test54", test54}, {"test55", test55}, {"test56", test56},
-      {"test57", test57}, {"test58", test58}, {"test59", test59},
-      {"test60", test60}, {"test61", test61}, {"test62", test62},
-      {"test63", test63}, {"test64", test64}, {"test65", test65},
-      {"test66", test66}, {NULL, NULL},
+      TEST(test01), TEST(test02), TEST(test03), TEST(test04), TEST(test05),
+      TEST(test06), TEST(test07), TEST(test08), TEST(test09), TEST(test10),
+      TEST(test11), TEST(test12), TEST(test13), TEST(test14), TEST(test15),
+      TEST(test16), TEST(test17), TEST(test18), TEST(test19), TEST(test20),
+      TEST(test21), TEST(test22), TEST(test23), TEST(test24), TEST(test25),
+      TEST(test26), TEST(test27), TEST(test28), TEST(test29), TEST(test30),
+      TEST(test31), TEST(test32), TEST(test33), TEST(test34), TEST(test35),
+      TEST(test36), TEST(test37), TEST(test38), TEST(test39), TEST(test40),
+      TEST(test41), TEST(test42), TEST(test43), TEST(test44), TEST(test45),
+      TEST(test46), TEST(test47), TEST(test48), TEST(test49), TEST(test50),
+      TEST(test51), TEST(test52), TEST(test53), TEST(test54), TEST(test55),
+      TEST(test56), TEST(test57), TEST(test58), TEST(test59), TEST(test60),
+      TEST(test61), TEST(test62), TEST(test63), TEST(test64), TEST(test65),
+      TEST(test66), {NULL, NULL},
   };
   int i = 0;
   for (i = 0; test_list[i].name != NULL; i++) {

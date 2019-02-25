@@ -187,6 +187,11 @@ void str_push(String *str, char elem) {
   }
   str->data[str->len++] = elem;
 }
+void str_append(String *str, const char *elems) {
+  for (int i = 0; elems[i] != '\0'; i++) {
+    str_push(str, elems[i]);
+  }
+}
 char *str_get_raw(String *str) { return str->data; }
 
 IntVector *new_int_vector(void) {

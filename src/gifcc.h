@@ -451,6 +451,7 @@ bool map_remove(Map *map, char *key);
 // String
 String *new_string(void);
 void str_push(String *str, char elem);
+void str_append(String *str, const char *elems);
 char *str_get_raw(String *str);
 // IntVector
 IntVector *new_int_vector(void);
@@ -478,6 +479,7 @@ bool reader_is_sol(const Reader *reader);
 int reader_get_offset(const Reader *reader);
 void reader_get_position(const Reader *reader, int offset,
                          const char **filename, int *line, int *column);
+char *reader_get_source(Range range);
 #define reader_error_here(reader, fmt, ...)                                    \
   reader_error_offset_raw(reader, reader_get_offset(reader), __FILE__,         \
                           __LINE__, (fmt), ##__VA_ARGS__)
