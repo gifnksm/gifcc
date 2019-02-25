@@ -979,6 +979,9 @@ static Vector *pp_read_macro_func_arg(Macro *macro, Vector *tokens,
   if (macro->has_varargs && vec_len(arguments) == vec_len(macro->params) - 1) {
     vec_push(arguments, new_vector());
   }
+  if (vec_len(arguments) == 0 && vec_len(macro->params) == 1) {
+    vec_push(arguments, new_vector());
+  }
 
   if (vec_len(macro->params) != vec_len(arguments)) {
     range_error(range,
