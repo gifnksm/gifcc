@@ -87,7 +87,10 @@ static void output_token(Reader *reader) {
            token_kind_to_str(token->ty));
     switch (token->ty) {
     case TK_NUM:
-      dump_number(token->num);
+      printf("%s", token->num);
+      break;
+    case TK_CHARCONST:
+      dump_number(token->char_val);
       break;
     case TK_IDENT:
       printf("%s", token->ident);

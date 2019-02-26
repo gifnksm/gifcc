@@ -69,9 +69,8 @@ static bool read_token(Tokenizer *tokenizer, Token **token, bool skip_eol,
                        bool check_pp_cond);
 static Token *new_token(int ty, Range range);
 static Token *token_clone(Token *token);
-static Token *new_token_num(Number num, Range range);
-static Token *new_token_int_from_str(const char *str, const char *suffix,
-                                     int base, Range range);
+static Token *new_token_num(char *num, Range range);
+static Token *new_token_char(Number val, Range range);
 static Token *new_token_ident(char *ident, Range range);
 static Token *new_token_str(char *str, Range range);
 static Macro *new_obj_macro(Vector *replacement);
@@ -95,16 +94,15 @@ static Token *punctuator(Reader *reader);
 static Token *identifier_or_keyword(Reader *reader);
 static Token *constant(Reader *reader);
 static Token *integer_constant(Reader *reader);
-static Token *hexadecimal_constant(Reader *reader);
-static Token *octal_constant(Reader *reader);
-static Token *decimal_constant(Reader *reader);
 static Token *character_constant(Reader *reader);
 static Token *string_literal(Reader *reader);
 static char c_char(Reader *reader);
 
 void set_predefined_macro(Map *map, char *name, int i) {
   Vector *replacement = new_vector();
-  vec_push(replacement, new_token_num(new_number_int(i), (Range){}));
+  char *num;
+  alloc_printf(&num, "%d", i);
+  vec_push(replacement, new_token_num(num, (Range){}));
   map_put(map, name, new_obj_macro(replacement));
 }
 Tokenizer *new_tokenizer(Reader *reader) {
@@ -256,6 +254,8 @@ const char *token_kind_to_str(int kind) {
     return "IDENT";
   case TK_NUM:
     return "NUM";
+  case TK_CHARCONST:
+    return "CHARCONST";
   case TK_STR:
     return "STR";
   case TK_EOF:
@@ -470,85 +470,16 @@ static Token *token_clone(Token *token) {
   return cloned;
 }
 
-static Token *new_token_num(Number num, Range range) {
+static Token *new_token_num(char *num, Range range) {
   Token *token = new_token(TK_NUM, range);
   token->num = num;
   return token;
 }
 
-static Token *new_token_int_from_str(const char *str, const char *suffix,
-                                     int base, Range range) {
-  typedef struct Suffix {
-    const char *suffix;
-    type_t type;
-  } Suffix;
-  Suffix SUFFIX[] = {
-      // unsigned long long int
-      {"ull", TY_U_LLONG},
-      {"llu", TY_U_LLONG},
-      {"uLL", TY_U_LLONG},
-      {"LLu", TY_U_LLONG},
-      {"Ull", TY_U_LLONG},
-      {"llU", TY_U_LLONG},
-      {"ULL", TY_U_LLONG},
-      {"LLU", TY_U_LLONG},
-      // unsigned long int
-      {"ul", TY_U_LONG},
-      {"lu", TY_U_LONG},
-      {"uL", TY_U_LONG},
-      {"Lu", TY_U_LONG},
-      {"Ul", TY_U_LONG},
-      {"lU", TY_U_LONG},
-      {"UL", TY_U_LONG},
-      {"LU", TY_U_LONG},
-      // unsigned int
-      {"u", TY_U_INT},
-      {"U", TY_U_INT},
-      // signed long long int
-      {"ll", TY_S_LLONG},
-      {"LL", TY_S_LLONG},
-      // signed long int
-      {"l", TY_S_LONG},
-      {"L", TY_S_LONG},
-      // stub
-      {NULL, TY_VOID},
-  };
-
-  char *endptr = NULL;
-  unsigned long long val = strtoull(str, &endptr, base);
-  if (*endptr != '\0') {
-    range_warn(range, "オーバーフローしました");
-  }
-  type_t ty = TY_VOID;
-  if (strcmp(suffix, "") == 0) {
-    // no suffix
-    if (val <= INT_MAX) {
-      ty = TY_S_INT;
-    } else if (base != 10 && val <= UINT_MAX) {
-      ty = TY_U_INT;
-    } else if (val <= LONG_MAX) {
-      ty = TY_S_LONG;
-    } else if (base != 10 && val <= ULONG_MAX) {
-      ty = TY_U_LONG;
-    } else if (val <= LLONG_MAX) {
-      ty = TY_S_LLONG;
-    } else {
-      assert(val <= ULLONG_MAX);
-      ty = TY_U_LLONG;
-    }
-  } else {
-    for (int i = 0; SUFFIX[i].suffix != NULL; i++) {
-      if (strcmp(SUFFIX[i].suffix, suffix) == 0) {
-        ty = SUFFIX[i].type;
-        break;
-      }
-    }
-    if (ty == TY_VOID) {
-      range_error(range, "不正な整数のサフィックスです");
-    }
-  }
-
-  return new_token_num(new_number(ty, val), range);
+static Token *new_token_char(Number val, Range range) {
+  Token *token = new_token(TK_CHARCONST, range);
+  token->char_val = val;
+  return token;
 }
 
 static Token *new_token_ident(char *ident, Range range) {
@@ -858,7 +789,7 @@ static bool pp_read_if_cond(Tokenizer *tokenizer) {
       // Assume Only idents and keywords have non-null `ident`
       tk->ident = NULL;
       tk->ty = TK_NUM;
-      tk->num = new_number_int(0);
+      tk->num = strdup("0");
     }
   }
 
@@ -897,8 +828,9 @@ static Vector *pp_convert_defined(Map *define_map, Vector *tokens) {
       range_error(token->range, "識別子がありません");
     }
     bool defined = map_get(define_map, token->ident) != NULL;
-    Token *num_token = new_token_num(new_number_int(defined),
-                                     range_join(def_start, token->range));
+    char *num;
+    alloc_printf(&num, "%d", defined);
+    Token *num_token = new_token_num(num, range_join(def_start, token->range));
     if (has_paren) {
       token = vec_remove(tokens, 0);
       if (token->ty != ')') {
@@ -1050,7 +982,34 @@ static Token *pp_stringize(Vector *arg, Range range) {
       str_push(str, ' ');
       range = range_join(range, token->range);
     }
-    str_append(str, reader_get_source(token->range));
+    if (token->ty < 256) {
+      str_push(str, token->ty);
+      continue;
+    }
+    switch (token->ty) {
+    case TK_NUM:
+      str_append(str, token->num);
+      break;
+    case TK_IDENT:
+      str_append(str, token->ident);
+      break;
+    case TK_STR:
+    case TK_CHARCONST:
+      str_append(str, reader_get_source(token->range));
+      break;
+    default:
+      if (token->ident != NULL) {
+        str_append(str, token->ident);
+        break;
+      }
+      for (int i = 0; LONG_PUNCT_TOKENS[i].str != NULL; i++) {
+        if (LONG_PUNCT_TOKENS[i].kind == token->ty) {
+          str_append(str, LONG_PUNCT_TOKENS[i].str);
+          break;
+        }
+      }
+      break;
+    }
   }
   str_push(str, '\0');
   return new_token_str(str_get_raw(str), range);
@@ -1285,106 +1244,29 @@ static Token *constant(Reader *reader) {
 }
 
 static Token *integer_constant(Reader *reader) {
-  Token *token;
-  if ((token = hexadecimal_constant(reader)) != NULL ||
-      (token = octal_constant(reader)) != NULL ||
-      (token = decimal_constant(reader)) != NULL) {
-    return token;
-  }
-  return NULL;
-}
-
-static String *read_string_suffix(Reader *reader) {
-  String *str = new_string();
-  while (true) {
-    char ch = reader_peek(reader);
-    if ((ch < 'a' || 'z' < ch) && (ch < 'A' || 'Z' < ch)) {
-      break;
-    }
-    str_push(str, ch);
-    reader_succ(reader);
-  }
-  str_push(str, '\0');
-  return str;
-}
-
-static Token *hexadecimal_constant(Reader *reader) {
-  int start = reader_get_offset(reader);
-
-  if (!reader_consume_str(reader, "0x") && !reader_consume_str(reader, "0X")) {
-    return NULL;
-  }
-
-  if (!is_hex_digit(reader_peek(reader))) {
-    reader_error_offset(reader, start, "空の16進文字リテラルです");
-  }
-
-  String *str = new_string();
-  while (true) {
-    char ch = reader_peek(reader);
-    if (!is_hex_digit(ch)) {
-      break;
-    }
-    str_push(str, ch);
-    reader_succ(reader);
-  }
-  str_push(str, '\0');
-
-  String *suffix = read_string_suffix(reader);
-
-  int end = reader_get_offset(reader);
-  return new_token_int_from_str(str_get_raw(str), str_get_raw(suffix), 16,
-                                range_from_reader(reader, start, end));
-}
-
-static Token *octal_constant(Reader *reader) {
-  int start = reader_get_offset(reader);
-
-  if (!reader_consume(reader, '0')) {
-    return NULL;
-  }
-
-  String *str = new_string();
-  while (true) {
-    char ch = reader_peek(reader);
-    if (!is_oct_digit(ch)) {
-      break;
-    }
-    str_push(str, ch);
-    reader_succ(reader);
-  }
-  str_push(str, '\0');
-
-  String *suffix = read_string_suffix(reader);
-
-  int end = reader_get_offset(reader);
-  return new_token_int_from_str(str_get_raw(str), str_get_raw(suffix), 8,
-                                range_from_reader(reader, start, end));
-}
-
-static Token *decimal_constant(Reader *reader) {
-  int start = reader_get_offset(reader);
-
   if (!isdigit(reader_peek(reader))) {
     return NULL;
   }
 
+  int start = reader_get_offset(reader);
+
   String *str = new_string();
+  char ch = reader_pop(reader);
+  str_push(str, ch);
+
   while (true) {
-    char ch = reader_peek(reader);
-    if (!is_dec_digit(ch)) {
+    ch = reader_peek(reader);
+    if (!isdigit(ch) && !is_ident_head(ch)) {
       break;
     }
     str_push(str, ch);
     reader_succ(reader);
   }
-  str_push(str, '\0');
-
-  String *suffix = read_string_suffix(reader);
 
   int end = reader_get_offset(reader);
-  return new_token_int_from_str(str_get_raw(str), str_get_raw(suffix), 10,
-                                range_from_reader(reader, start, end));
+
+  str_push(str, '\0');
+  return new_token_num(str_get_raw(str), range_from_reader(reader, start, end));
 }
 
 static Token *character_constant(Reader *reader) {
@@ -1407,11 +1289,11 @@ static Token *character_constant(Reader *reader) {
 
   int end = reader_get_offset(reader);
   if (is_wide) {
-    return new_token_num(new_number_wchar_t(ch),
-                         range_from_reader(reader, start, end));
+    return new_token_char(new_number_wchar_t(ch),
+                          range_from_reader(reader, start, end));
   }
-  return new_token_num(new_number_int(ch),
-                       range_from_reader(reader, start, end));
+  return new_token_char(new_number_int(ch),
+                        range_from_reader(reader, start, end));
 }
 
 static Token *string_literal(Reader *reader) {

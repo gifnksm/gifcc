@@ -18,6 +18,7 @@ typedef struct IntVector IntVector;
 // トークンの型を表す値
 enum {
   TK_NUM = 256,     // 整数トークン
+  TK_CHARCONST,     // 文字定数
   TK_IDENT,         // 識別子
   TK_STR,           // 文字列リテラル
   TK_EQEQ,          // `==`
@@ -184,9 +185,10 @@ typedef struct {
   int ty;
   Range range;
   Map *pp_hideset;
-  Number num;
+  char *num;
   char *ident;
   char *str;
+  Number char_val;
 } Token;
 
 typedef enum {
