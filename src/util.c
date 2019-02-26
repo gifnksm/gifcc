@@ -76,7 +76,7 @@ void vec_push(Vector *vec, void *elem) {
 
 void *vec_pop(Vector *vec) {
   assert(vec->len > 0);
-  return vec->data[vec->len--];
+  return vec->data[--vec->len];
 }
 void vec_insert(Vector *vec, int n, void *elem) {
   assert(n <= vec->len);

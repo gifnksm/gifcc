@@ -150,7 +150,7 @@ Token *token_peek_ahead(Tokenizer *tokenizer, int n) {
       if (token->ident != NULL) {
         // read function macro arguments
         Macro *def = map_get(tokenizer->define_map, token->ident);
-        if (def != NULL && def->kind == MACRO_FUNC) {
+        if (def != NULL) {
           int nest = 0;
           do {
             if (!read_token(tokenizer, &token, true, true)) {
@@ -274,6 +274,26 @@ const char *token_kind_to_str(int kind) {
     abort();
   }
   }
+}
+
+char *pp_token_to_str(const Token *token) {
+  if (token->ty <= 255) {
+    char *name;
+    alloc_printf(&name, "%c", token->ty);
+    return name;
+  }
+  if (token->ident != NULL) {
+    return token->ident;
+  }
+  if (token->ty == TK_NUM) {
+    return token->str;
+  }
+  for (int i = 0; LONG_PUNCT_TOKENS[i].str != NULL; i++) {
+    if (LONG_PUNCT_TOKENS[i].kind == token->ty) {
+      return LONG_PUNCT_TOKENS[i].str;
+    }
+  }
+  range_error(token->range, "結合できないトークンです");
 }
 
 const Reader *token_get_reader(const Tokenizer *tokenizer) {
@@ -1015,6 +1035,38 @@ static Token *pp_stringize(Vector *arg, Range range) {
   return new_token_str(str_get_raw(str), range);
 }
 
+static void pp_glue(Vector *ls, Vector *rs) {
+  Token *l = vec_pop(ls);
+  Token *r = vec_remove(rs, 0);
+
+  String *str = new_string();
+  str_append(str, pp_token_to_str(l));
+  str_append(str, pp_token_to_str(r));
+  str_push(str, '\0');
+
+  Range range = range_join(l->range, r->range);
+  Token *token = NULL;
+  char *str_raw = str_get_raw(str);
+  if (isdigit(str_raw[0])) {
+    token = new_token_num(str_raw, range);
+  } else if (is_ident_head(str_raw[0])) {
+    token = new_token_ident(str_raw, range);
+  } else {
+    for (int i = 0; LONG_PUNCT_TOKENS[i].str != NULL; i++) {
+      if (strcmp(LONG_PUNCT_TOKENS[i].str, str_raw) == 0) {
+        token = new_token(LONG_PUNCT_TOKENS[i].kind, range);
+        break;
+      }
+    }
+  }
+  if (token == NULL) {
+    range_error(range, "結合できないトークンです: %s", str_raw);
+  }
+
+  vec_push(ls, token);
+  vec_append(ls, rs);
+}
+
 static Vector *pp_subst_macros(Map *define_map, Range *expanded_from,
                                Vector *input, Vector *params, Vector *arguments,
                                Map *hideset, Vector *output) {
@@ -1031,8 +1083,40 @@ static Vector *pp_subst_macros(Map *define_map, Range *expanded_from,
       continue;
     }
 
+    if (token->ty == TK_HASH_HASH) {
+      Token *ident = vec_remove(input, 0);
+      Vector *arg = pp_get_func_arg(params, arguments, ident);
+      if (arg != NULL) {
+        if (vec_len(arg) == 0) {
+          continue;
+        }
+        pp_glue(output, vec_clone(arg));
+        continue;
+      }
+
+      Vector *is = new_vector();
+      vec_push(is, ident);
+      pp_glue(output, is);
+      continue;
+    }
+
     Vector *arg = pp_get_func_arg(params, arguments, token);
     if (arg != NULL) {
+      Token *hash_hash = vec_len(input) > 1 ? vec_get(input, 0) : NULL;
+      if (hash_hash != NULL && hash_hash->ty == TK_HASH_HASH) {
+        if (vec_len(arg) == 0) {
+          Token *next = vec_get(input, 0);
+          Vector *arg2 = pp_get_func_arg(params, arguments, next);
+          if (arg2 != NULL) {
+            vec_remove(input, 0);
+            vec_append(output, vec_clone(arg2));
+            continue;
+          }
+          continue;
+        }
+        vec_append(output, vec_clone(arg));
+        continue;
+      }
       vec_append(output, pp_expand_macros(define_map, vec_clone(arg)));
       continue;
     }
