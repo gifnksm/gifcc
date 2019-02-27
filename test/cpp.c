@@ -61,14 +61,22 @@ static int n5 = 6\
 00;
 // clang-format on
 
-#define DEFVAR(var, val, type) type var = val;
-DEFVAR(n6, 700, int)
+#define DEFVAR(var, val, type) type var = val
+DEFVAR(n6, 700, int);
 
 static void check_int(int a, int b) {
   if (a != b) {
     printf("FAILED %d != %d\n", a, b);
     abort();
   }
+}
+
+#define CAT2(a, b) a##b
+#define CAT(a, b) CAT2(a, b)
+#define AB(x) CAT(x, y)
+static void run01(void) {
+  static int xy = 800;
+  check_int(800, CAT(A, B)(x));
 }
 
 int main(void) {
@@ -79,6 +87,7 @@ int main(void) {
   check_int(500, n4);
   check_int(600, n5);
   check_int(700, n6);
+  run01();
 
   puts("OK");
   return 0;

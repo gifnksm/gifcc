@@ -65,8 +65,8 @@ static const LongToken LONG_PUNCT_TOKENS[] = {
 };
 static const char *SHORT_PUNCT_TOKENS = "=!<>&|^+-*/%();?:~{}[],.#";
 
-static bool read_token(Tokenizer *tokenizer, Token **token, bool skip_eol,
-                       bool check_pp_cond);
+static bool do_read_token(Tokenizer *tokenizer, Token **token, bool skip_eol,
+                          bool check_pp_cond);
 static Token *new_token(int ty, Range range);
 static Token *token_clone(Token *token);
 static Token *new_token_num(char *num, Range range);
@@ -80,7 +80,8 @@ static bool pp_directive(Tokenizer *tokenizer);
 static bool pp_cond_fullfilled(Vector *pp_cond_stack);
 static bool pp_read_if_cond(Tokenizer *tokenizer);
 static Vector *pp_convert_defined(Map *define_map, Vector *tokens);
-static Vector *pp_expand_macros(Map *define_map, Vector *tokens);
+static Vector *pp_expand_macros(Tokenizer *tokenizer, Vector *tokens,
+                                bool (*reader)(Tokenizer *, Token **));
 static void pp_if(Vector *pp_cond_stack, bool fullfilled);
 static void pp_elif(Vector *pp_cond_stack, bool fullfilled, Range range);
 static void pp_else(Vector *pp_cond_stack, Range range);
@@ -134,44 +135,25 @@ Token *token_peek(Tokenizer *tokenizer) {
   return token_peek_ahead(tokenizer, 0);
 }
 
+static bool read_token(Tokenizer *tokenizer, Token **token) {
+  return do_read_token(tokenizer, token, true, true);
+}
+
 Token *token_peek_ahead(Tokenizer *tokenizer, int n) {
   while (vec_len(tokenizer->tokens) <= n) {
     while (true) {
       Token *token = NULL;
-      if (!read_token(tokenizer, &token, true, true)) {
+      if (!read_token(tokenizer, &token)) {
         return NULL;
       }
       if (token == NULL) {
         continue;
       }
 
+      // expand macros
       Vector *tokens = new_vector();
       vec_push(tokens, token);
-      if (token->ident != NULL) {
-        // read function macro arguments
-        Macro *def = map_get(tokenizer->define_map, token->ident);
-        if (def != NULL) {
-          int nest = 0;
-          do {
-            if (!read_token(tokenizer, &token, true, true)) {
-              break;
-            }
-            if (token->ty == TK_EOF) {
-              range_error(token->range, "`)` がありません");
-            }
-            if (token->ty == '(') {
-              nest++;
-            }
-            if (token->ty == ')') {
-              nest--;
-            }
-            vec_push(tokens, token);
-          } while (nest > 0);
-        }
-      }
-
-      // expand macros
-      tokens = pp_expand_macros(tokenizer->define_map, tokens);
+      tokens = pp_expand_macros(tokenizer, tokens, read_token);
 
       // concatenate adjacent string literal
       Token *last = NULL;
@@ -426,8 +408,8 @@ static inline int dec2num(int c) {
   return c - '0';
 }
 
-static bool read_token(Tokenizer *tokenizer, Token **token, bool skip_eol,
-                       bool check_pp_cond) {
+static bool do_read_token(Tokenizer *tokenizer, Token **token, bool skip_eol,
+                          bool check_pp_cond) {
   char ch;
   while ((ch = reader_peek(tokenizer->reader)) != '\0') {
     bool is_sol = reader_is_sol(tokenizer->reader);
@@ -705,7 +687,7 @@ static bool pp_directive(Tokenizer *tokenizer) {
     Vector *tokens = new_vector();
     while (true) {
       Token *token = NULL;
-      if (!read_token(tokenizer, &token, false, true)) {
+      if (!do_read_token(tokenizer, &token, false, true)) {
         char ch = reader_peek(tokenizer->reader);
         if (ch == '\n' || ch == '\0') {
           break;
@@ -779,7 +761,7 @@ static bool pp_read_if_cond(Tokenizer *tokenizer) {
   // read tokens until next line break
   while (true) {
     Token *token = NULL;
-    if (!read_token(tokenizer, &token, false, false)) {
+    if (!do_read_token(tokenizer, &token, false, false)) {
       char ch = reader_peek(tokenizer->reader);
       if (ch == '\n' || ch == '\0') {
         break;
@@ -800,7 +782,7 @@ static bool pp_read_if_cond(Tokenizer *tokenizer) {
   tokens = pp_convert_defined(tokenizer->define_map, tokens);
 
   // expand macros
-  tokens = pp_expand_macros(tokenizer->define_map, tokens);
+  tokens = pp_expand_macros(tokenizer, tokens, NULL);
 
   for (int i = 0; i < vec_len(tokens); i++) {
     // replace all ident tokens (including keyword ident) into '0'
@@ -886,8 +868,9 @@ static Map *pp_hideset_intersection(Token *a, Token *b) {
   return map;
 }
 
-static Vector *pp_read_macro_func_arg(Macro *macro, Vector *tokens,
-                                      Token **rparen) {
+static Vector *pp_read_macro_func_arg(Tokenizer *tokenizer, Macro *macro,
+                                      Vector *tokens, Token **rparen,
+                                      bool (*reader)(Tokenizer *, Token **)) {
   assert(macro->kind == MACRO_FUNC);
   assert(((Token *)vec_first(tokens))->ty == '(');
 
@@ -897,7 +880,12 @@ static Vector *pp_read_macro_func_arg(Macro *macro, Vector *tokens,
   Vector *current_arg = NULL;
   int nest = 0;
   do {
-    Token *token = vec_remove(tokens, 0);
+    Token *token;
+    if (vec_len(tokens) == 0 && reader != NULL) {
+      reader(tokenizer, &token);
+    } else {
+      token = vec_remove(tokens, 0);
+    }
     range = range_join(range, token->range);
     if (token->ty == TK_EOF) {
       range_error(token->range, "`)` がありません");
@@ -1067,7 +1055,7 @@ static void pp_glue(Vector *ls, Vector *rs) {
   vec_append(ls, rs);
 }
 
-static Vector *pp_subst_macros(Map *define_map, Range *expanded_from,
+static Vector *pp_subst_macros(Tokenizer *tokenizer, Range *expanded_from,
                                Vector *input, Vector *params, Vector *arguments,
                                Map *hideset, Vector *output) {
   while (vec_len(input) > 0) {
@@ -1117,7 +1105,7 @@ static Vector *pp_subst_macros(Map *define_map, Range *expanded_from,
         vec_append(output, vec_clone(arg));
         continue;
       }
-      vec_append(output, pp_expand_macros(define_map, vec_clone(arg)));
+      vec_append(output, pp_expand_macros(tokenizer, vec_clone(arg), NULL));
       continue;
     }
     vec_push(output, token);
@@ -1126,7 +1114,8 @@ static Vector *pp_subst_macros(Map *define_map, Range *expanded_from,
   return pp_hsadd(expanded_from, hideset, output);
 }
 
-static Vector *pp_expand_macros(Map *define_map, Vector *tokens) {
+static Vector *pp_expand_macros(Tokenizer *tokenizer, Vector *tokens,
+                                bool (*reader)(Tokenizer *, Token **)) {
   Vector *expanded = new_vector();
   while (vec_len(tokens) > 0) {
     Token *ident = vec_remove(tokens, 0);
@@ -1134,7 +1123,7 @@ static Vector *pp_expand_macros(Map *define_map, Vector *tokens) {
       vec_push(expanded, ident);
       continue;
     }
-    Macro *macro = map_get(define_map, ident->ident);
+    Macro *macro = map_get(tokenizer->define_map, ident->ident);
     if (macro == NULL) {
       vec_push(expanded, ident);
       continue;
@@ -1145,31 +1134,39 @@ static Vector *pp_expand_macros(Map *define_map, Vector *tokens) {
       *expanded_from = ident->range;
       Map *hideset = new_map();
       map_put(hideset, ident->ident, ident->ident);
-      Vector *exp_tokens = pp_expand_macros(
-          define_map, pp_subst_macros(define_map, expanded_from,
-                                      vec_clone(macro->replacement), NULL, NULL,
-                                      hideset, new_vector()));
+      Vector *exp_tokens =
+          pp_expand_macros(tokenizer,
+                           pp_subst_macros(tokenizer, expanded_from,
+                                           vec_clone(macro->replacement), NULL,
+                                           NULL, hideset, new_vector()),
+                           reader);
       vec_append(expanded, exp_tokens);
       continue;
     }
 
     assert(macro->kind == MACRO_FUNC);
+    if (vec_len(tokens) == 0 && reader != NULL) {
+      Token *token = NULL;
+      reader(tokenizer, &token);
+      vec_push(tokens, token);
+    }
     if (vec_len(tokens) == 0 || ((Token *)vec_first(tokens))->ty != '(') {
       vec_push(expanded, ident);
       continue;
     }
 
     Token *rparen = NULL;
-    Vector *arguments = pp_read_macro_func_arg(macro, tokens, &rparen);
+    Vector *arguments =
+        pp_read_macro_func_arg(tokenizer, macro, tokens, &rparen, reader);
     Map *hideset = pp_hideset_intersection(ident, rparen);
     map_put(hideset, ident->ident, ident->ident);
     Range *expanded_from = NEW(Range);
     *expanded_from = range_join(ident->range, rparen->range);
     Vector *exp_tokens = pp_expand_macros(
-        define_map,
-        pp_subst_macros(define_map, expanded_from,
-                        vec_clone(macro->replacement), macro->params, arguments,
-                        hideset, new_vector()));
+        tokenizer,
+        pp_subst_macros(tokenizer, expanded_from, vec_clone(macro->replacement),
+                        macro->params, arguments, hideset, new_vector()),
+        reader);
     vec_append(expanded, exp_tokens);
   }
   return expanded;
