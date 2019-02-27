@@ -1237,6 +1237,8 @@ static void do_include(Reader *reader, int offset, const char *path,
       GIFCC_INCLUDE,
       "/usr/local/include",
       "/usr/include",
+      "/usr/include/linux",
+      "/usr/include/x86_64-linux-gnu",
       NULL,
   };
 
