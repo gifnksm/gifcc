@@ -1,3 +1,6 @@
+#ifndef _STDIO_H
+#define _STDIO_H
+
 #include <stddef.h>
 
 // TODO: remove
@@ -91,3 +94,5 @@ void perror(const char *s);
 
 // TODO: remove
 #undef restrict
+
+#endif // _STDIO_H
