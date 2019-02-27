@@ -38,19 +38,15 @@ typedef struct Macro {
 } Macro;
 
 static const LongToken LONG_IDENT_TOKENS[] = {
-    {"void", TK_VOID},         {"int", TK_INT},
-    {"short", TK_SHORT},       {"long", TK_LONG},
-    {"char", TK_CHAR},         {"signed", TK_SIGNED},
-    {"unsigned", TK_UNSIGNED}, {"if", TK_IF},
-    {"else", TK_ELSE},         {"switch", TK_SWITCH},
-    {"case", TK_CASE},         {"default", TK_DEFAULT},
-    {"while", TK_WHILE},       {"do", TK_DO},
-    {"for", TK_FOR},           {"goto", TK_GOTO},
-    {"break", TK_BREAK},       {"continue", TK_CONTINUE},
-    {"return", TK_RETURN},     {"struct", TK_STRUCT},
-    {"union", TK_UNION},       {"enum", TK_ENUM},
-    {"sizeof", TK_SIZEOF},     {"typedef", TK_TYPEDEF},
-    {"extern", TK_EXTERN},     {"static", TK_STATIC},
+    {"void", TK_VOID},         {"int", TK_INT},       {"short", TK_SHORT},
+    {"long", TK_LONG},         {"char", TK_CHAR},     {"signed", TK_SIGNED},
+    {"unsigned", TK_UNSIGNED}, {"_Bool", TK_BOOL},    {"if", TK_IF},
+    {"else", TK_ELSE},         {"switch", TK_SWITCH}, {"case", TK_CASE},
+    {"default", TK_DEFAULT},   {"while", TK_WHILE},   {"do", TK_DO},
+    {"for", TK_FOR},           {"goto", TK_GOTO},     {"break", TK_BREAK},
+    {"continue", TK_CONTINUE}, {"return", TK_RETURN}, {"struct", TK_STRUCT},
+    {"union", TK_UNION},       {"enum", TK_ENUM},     {"sizeof", TK_SIZEOF},
+    {"typedef", TK_TYPEDEF},   {"extern", TK_EXTERN}, {"static", TK_STATIC},
     {"const", TK_CONST},       {NULL, '\0'},
 };
 static const LongToken LONG_PUNCT_TOKENS[] = {

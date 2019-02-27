@@ -115,6 +115,9 @@ static void gen_lval(Expr *expr) {
 static char *num2str(Number num, Range range) {
   char buf[1024];
   switch (num.type) {
+  case TY_BOOL:
+    sprintf(buf, "%d", num.bool_val);
+    break;
   case TY_CHAR:
     sprintf(buf, "%hhd", num.char_val);
     break;
@@ -788,6 +791,9 @@ static void gen_gvar_init(Initializer *init, Range range) {
     Expr *expr = init->expr;
     if (expr->ty == EX_NUM) {
       switch (expr->val_type->ty) {
+      case TY_BOOL:
+        printf("  .byte %d\n", expr->num.bool_val);
+        break;
       case TY_CHAR:
         printf("  .byte %hhd\n", expr->num.char_val);
         break;

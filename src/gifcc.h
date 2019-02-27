@@ -51,6 +51,7 @@ enum {
   TK_CHAR,          // `char`
   TK_SIGNED,        // `signed`
   TK_UNSIGNED,      // `unsigned`
+  TK_BOOL,          // `_Bool`
   TK_IF,            // `if`
   TK_ELSE,          // `else`
   TK_SWITCH,        // `switch`
@@ -88,6 +89,9 @@ typedef struct Range {
 #define SET_NUMBER_VAL(dest, num)                                              \
   do {                                                                         \
     switch ((num)->type) {                                                     \
+    case TY_BOOL:                                                              \
+      (dest) = (num)->bool_val;                                                \
+      break;                                                                   \
     case TY_CHAR:                                                              \
       (dest) = (num)->char_val;                                                \
       break;                                                                   \
@@ -138,6 +142,7 @@ typedef struct Range {
 
 typedef enum {
   TY_VOID,
+  TY_BOOL,
   TY_CHAR,
   TY_S_CHAR,
   TY_S_SHORT,
@@ -164,6 +169,7 @@ typedef enum {
 typedef struct Number {
   type_t type;
   union {
+    bool bool_val;
     char char_val;
     signed char s_char_val;
     signed short s_short_val;

@@ -25,6 +25,9 @@ noreturn void error_raw_v(const char *dbg_file, int dbg_line, const char *fmt,
 
 static void dump_number(Number num) {
   switch (num.type) {
+  case TY_BOOL:
+    printf("%d", num.bool_val);
+    break;
   case TY_CHAR:
     printf("%hhd", num.char_val);
     break;
@@ -127,6 +130,9 @@ static void dump_type_inner(Type *ty) {
   switch (ty->ty) {
   case TY_VOID:
     printf("void");
+    return;
+  case TY_BOOL:
+    printf("_Bool");
     return;
   case TY_CHAR:
     printf("char");

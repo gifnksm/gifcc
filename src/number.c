@@ -3,6 +3,9 @@
 Number new_number(type_t ty, unsigned long long val) {
   Number num = {.type = ty};
   switch (ty) {
+  case TY_BOOL:
+    num.bool_val = val;
+    return num;
   case TY_CHAR:
     num.char_val = val;
     return num;

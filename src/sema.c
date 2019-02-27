@@ -70,6 +70,7 @@ static void eval_unop(Expr *expr) {
   }
 
   case TY_VOID:
+  case TY_BOOL:
   case TY_CHAR:
   case TY_S_CHAR:
   case TY_S_SHORT:
@@ -104,6 +105,9 @@ static void eval_cast(Expr *expr) {
   const Number *opnum = &operand->num;
   switch (expr->val_type->ty) {
   case TY_VOID:
+    return;
+  case TY_BOOL:
+    SET_NUMBER_VAL(exnum->bool_val, opnum);
     return;
   case TY_CHAR:
     SET_NUMBER_VAL(exnum->char_val, opnum);
@@ -253,6 +257,7 @@ static void eval_binop(Expr *expr) {
   }
 
   case TY_VOID:
+  case TY_BOOL:
   case TY_CHAR:
   case TY_S_CHAR:
   case TY_S_SHORT:
@@ -364,6 +369,7 @@ static void eval_binop_comp(Expr *expr) {
   }
 
   case TY_VOID:
+  case TY_BOOL:
   case TY_CHAR:
   case TY_S_CHAR:
   case TY_S_SHORT:
@@ -455,6 +461,7 @@ static void eval_binop_shift(Expr *expr) {
   }
 
   case TY_VOID:
+  case TY_BOOL:
   case TY_CHAR:
   case TY_S_CHAR:
   case TY_S_SHORT:
