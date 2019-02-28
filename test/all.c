@@ -2172,6 +2172,11 @@ static void test67(void) {
   check_int(0, b);
 }
 
+static void test68(void) {
+  const volatile int *restrict const *const volatile s = NULL;
+  (void)s;
+}
+
 static int num_check = 0;
 static void check_int(int a, int b) {
   if (a != b) {
@@ -2203,7 +2208,7 @@ int main(void) {
       TEST(test51), TEST(test52), TEST(test53), TEST(test54), TEST(test55),
       TEST(test56), TEST(test57), TEST(test58), TEST(test59), TEST(test60),
       TEST(test61), TEST(test62), TEST(test63), TEST(test64), TEST(test65),
-      TEST(test66), TEST(test67), {NULL, NULL},
+      TEST(test66), TEST(test67), TEST(test68), {NULL, NULL},
   };
   int i = 0;
   for (i = 0; test_list[i].name != NULL; i++) {

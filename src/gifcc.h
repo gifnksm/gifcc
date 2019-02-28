@@ -72,6 +72,8 @@ enum {
   TK_EXTERN,        // `extern`
   TK_STATIC,        // `static`
   TK_CONST,         // `const`
+  TK_RESTRICT,      // `restrict`
+  TK_VOLATILE,      // `volatile`
   TK_EOF,           // 入力の終わりを表すトークン
 };
 
@@ -264,9 +266,15 @@ typedef enum {
   ST_NULL,
 } stmt_t;
 
+typedef struct TypeQualifier {
+  bool is_const;
+  bool is_restrict;
+  bool is_volatile;
+} TypeQualifier;
+
 typedef struct Type {
   type_t ty;
-  bool is_const;
+  TypeQualifier qualifier;
   struct Type *ptrof;
   int array_len;
   struct Type *func_ret;

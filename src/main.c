@@ -124,8 +124,11 @@ static void dump_range_end(Range range) {
 }
 static void dump_indent(int level) { printf("%*s", 2 * level, ""); }
 static void dump_type_inner(Type *ty) {
-  if (ty->is_const) {
+  if (ty->qualifier.is_const) {
     printf("const ");
+  }
+  if (ty->qualifier.is_restrict) {
+    printf("restrict ");
   }
   switch (ty->ty) {
   case TY_VOID:

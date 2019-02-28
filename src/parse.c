@@ -50,6 +50,9 @@ typedef struct VarDef {
   Function *func;
 } VarDef;
 
+static const TypeQualifier EMPTY_TYPE_QUALIFIER = {};
+static const TypeQualifier CONST_TYPE_QUALIFIER = {.is_const = true};
+
 static Initializer *new_initializer(Type *type);
 static GlobalCtxt *new_global_ctxt(void);
 static FuncCtxt *new_func_ctxt(char *name, Type *type);
@@ -87,15 +90,16 @@ static bool token_is_typename(Scope *scope, Token *token);
 static bool token_is_storage_class_specifier(Token *token);
 static noreturn void binop_type_error_raw(int ty, Expr *lhs, Expr *rhs,
                                           const char *dbg_file, int dbg_line);
-static Type *new_type(int ty, bool is_const);
-static Type *new_type_ptr(Type *base_type, bool is_const);
-static Type *new_type_array(Type *base_type, Number len, bool is_const);
-static Type *new_type_unsized_array(Type *base_type, bool is_const);
+static Type *new_type(int ty, TypeQualifier tq);
+static Type *clone_type(Type *type);
+static Type *new_type_ptr(Type *base_type, TypeQualifier tq);
+static Type *new_type_array(Type *base_type, Number len, TypeQualifier tq);
+static Type *new_type_unsized_array(Type *base_type, TypeQualifier tq);
 static Type *new_type_func(Type *ret_type, Vector *func_param, bool has_varargs,
-                           bool is_const);
-static Type *new_type_struct(int tk, char *tag, bool is_const);
-static Type *new_type_anon_struct(int tk, bool is_const);
-static Type *new_type_enum(char *tag, bool is_const);
+                           TypeQualifier tq);
+static Type *new_type_struct(int tk, char *tag, TypeQualifier tq);
+static Type *new_type_anon_struct(int tk, TypeQualifier tq);
+static Type *new_type_enum(char *tag, TypeQualifier tq);
 static Expr *coerce_array2ptr(Scope *scope, Expr *expr);
 static Expr *coerce_func2ptr(Scope *scope, Expr *expr);
 static Expr *new_expr(int ty, Type *val_type, Range range);
@@ -162,11 +166,11 @@ static Vector *declaration(Tokenizer *tokenizer, Scope *scope);
 static Type *type_specifier(Scope *scope, Tokenizer *tokenizer);
 static void struct_declaration(Scope *scope, Tokenizer *tokenizer, Type *type);
 static Type *struct_or_union_specifier(Scope *scope, Tokenizer *tokenizer,
-                                       Token *token, bool is_const);
+                                       Token *token, TypeQualifier tq);
 static void enumerator(Scope *scope, Tokenizer *tokenizer, Type *type,
                        int *val);
 static Type *enum_specifier(Scope *scope, Tokenizer *tokenizer, Token *token,
-                            bool is_const);
+                            TypeQualifier tq);
 static Type *type_name(Scope *scope, Tokenizer *tokenizer);
 static void declarator(Scope *scope, Tokenizer *tokenizer, Type *base_type,
                        Token **name, Type **type, Range *range);
@@ -588,7 +592,8 @@ static Type *integer_promoted(Scope *scope, Expr **e) {
   case TY_S_SHORT:
   case TY_U_SHORT:
   case TY_ENUM:
-    *e = new_expr_cast(scope, new_type(TY_S_INT, false), *e, (*e)->range);
+    *e = new_expr_cast(scope, new_type(TY_S_INT, EMPTY_TYPE_QUALIFIER), *e,
+                       (*e)->range);
     break;
   case TY_S_INT:
   case TY_U_INT:
@@ -653,13 +658,13 @@ static Type *arith_converted(Scope *scope, Expr **e1, Expr **e2) {
   Type *ty;
   switch (ty1->ty) {
   case TY_S_INT:
-    ty = new_type(TY_U_INT, false);
+    ty = new_type(TY_U_INT, EMPTY_TYPE_QUALIFIER);
     break;
   case TY_S_LONG:
-    ty = new_type(TY_U_LONG, false);
+    ty = new_type(TY_U_LONG, EMPTY_TYPE_QUALIFIER);
     break;
   case TY_S_LLONG:
-    ty = new_type(TY_U_LLONG, false);
+    ty = new_type(TY_U_LLONG, EMPTY_TYPE_QUALIFIER);
     break;
   default:
     assert(false);
@@ -705,9 +710,38 @@ static bool token_is_storage_class_specifier(Token *token) {
 static bool token_is_type_qualifier(Token *token) {
   switch (token->ty) {
   case TK_CONST:
+  case TK_RESTRICT:
+  case TK_VOLATILE:
     return true;
   default:
     return false;
+  }
+}
+static void consume_type_qualifier(Tokenizer *tokenizer, TypeQualifier *tq) {
+  while (true) {
+    Token *token;
+    if ((token = token_consume(tokenizer, TK_CONST)) != NULL) {
+      if (tq->is_const) {
+        range_warn(token->range, "`const` が重複しています");
+      }
+      tq->is_const = true;
+      continue;
+    }
+    if ((token = token_consume(tokenizer, TK_RESTRICT)) != NULL) {
+      if (tq->is_restrict) {
+        range_warn(token->range, "`restrict` が重複しています");
+      }
+      tq->is_restrict = true;
+      continue;
+    }
+    if ((token = token_consume(tokenizer, TK_VOLATILE)) != NULL) {
+      if (tq->is_volatile) {
+        range_warn(token->range, "`volatile` が重複しています");
+      }
+      tq->is_volatile = true;
+      continue;
+    }
+    break;
   }
 }
 
@@ -812,48 +846,54 @@ static noreturn void binop_type_error_raw(int ty, Expr *lhs, Expr *rhs,
                   ty, ty, lhs->val_type->ty, rhs->val_type->ty);
 }
 
-static Type *new_type(int ty, bool is_const) {
+static Type *new_type(int ty, TypeQualifier tq) {
   Type *type = NEW(Type);
   type->ty = ty;
-  type->is_const = is_const;
+  type->qualifier = tq;
   return type;
 }
 
-static Type *new_type_ptr(Type *base_type, bool is_const) {
-  Type *ptrtype = new_type(TY_PTR, is_const);
+static Type *clone_type(Type *type) {
+  Type *cloned = NEW(Type);
+  *cloned = *type;
+  return cloned;
+}
+
+static Type *new_type_ptr(Type *base_type, TypeQualifier tq) {
+  Type *ptrtype = new_type(TY_PTR, tq);
   ptrtype->ptrof = base_type;
   return ptrtype;
 }
 
-static Type *new_type_array(Type *base_type, Number len, bool is_const) {
+static Type *new_type_array(Type *base_type, Number len, TypeQualifier tq) {
   int l;
   SET_NUMBER_VAL(l, &len);
-  Type *ptrtype = new_type(TY_ARRAY, is_const);
+  Type *ptrtype = new_type(TY_ARRAY, tq);
   ptrtype->ty = TY_ARRAY;
   ptrtype->ptrof = base_type;
   ptrtype->array_len = l;
   return ptrtype;
 }
 
-static Type *new_type_unsized_array(Type *base_type, bool is_const) {
-  Type *ptrtype = new_type(TY_ARRAY, is_const);
+static Type *new_type_unsized_array(Type *base_type, TypeQualifier tq) {
+  Type *ptrtype = new_type(TY_ARRAY, tq);
   ptrtype->ptrof = base_type;
   ptrtype->array_len = -1;
   return ptrtype;
 }
 
 static Type *new_type_func(Type *ret_type, Vector *func_param, bool has_varargs,
-                           bool is_const) {
-  Type *funtype = new_type(TY_FUNC, is_const);
+                           TypeQualifier tq) {
+  Type *funtype = new_type(TY_FUNC, tq);
   funtype->func_ret = ret_type;
   funtype->func_param = func_param;
   funtype->func_has_varargs = has_varargs;
   return funtype;
 }
 
-static Type *new_type_struct(int tk, char *tag, bool is_const) {
+static Type *new_type_struct(int tk, char *tag, TypeQualifier tq) {
   assert(tk == TK_STRUCT || tk == TK_UNION);
-  Type *type = new_type(tk == TK_STRUCT ? TY_STRUCT : TY_UNION, is_const);
+  Type *type = new_type(tk == TK_STRUCT ? TY_STRUCT : TY_UNION, tq);
   type->tag = tag;
   type->member_name_map = new_map();
   type->member_list = new_vector();
@@ -862,16 +902,16 @@ static Type *new_type_struct(int tk, char *tag, bool is_const) {
   return type;
 }
 
-static Type *new_type_anon_struct(int tk, bool is_const) {
+static Type *new_type_anon_struct(int tk, TypeQualifier tq) {
   assert(tk == TK_STRUCT || tk == TK_UNION);
-  Type *type = new_type(tk == TK_STRUCT ? TY_STRUCT : TY_UNION, is_const);
+  Type *type = new_type(tk == TK_STRUCT ? TY_STRUCT : TY_UNION, tq);
   type->member_name_map = NULL;
   type->member_list = NULL;
   return type;
 }
 
-static Type *new_type_enum(char *tag, bool is_const) {
-  Type *type = new_type(TY_ENUM, is_const);
+static Type *new_type_enum(char *tag, TypeQualifier tq) {
+  Type *type = new_type(TY_ENUM, tq);
   type->tag = tag;
   return type;
 }
@@ -898,7 +938,8 @@ static Expr *new_expr(int ty, Type *val_type, Range range) {
 }
 
 static Expr *new_expr_num(Number val, Range range) {
-  Expr *expr = new_expr(EX_NUM, new_type(val.type, false), range);
+  Expr *expr =
+      new_expr(EX_NUM, new_type(val.type, EMPTY_TYPE_QUALIFIER), range);
   expr->num = val;
   return expr;
 }
@@ -933,7 +974,7 @@ static Expr *new_expr_ident(Scope *scope, char *name, Range range) {
   } else {
     range_warn(range, "未定義の識別子です: %s", name);
     ty = EX_GLOBAL_VAR;
-    type = new_type(TY_S_INT, false);
+    type = new_type(TY_S_INT, EMPTY_TYPE_QUALIFIER);
     gvar = new_global_variable(type, name, range, false);
   }
 
@@ -952,7 +993,8 @@ static Expr *new_expr_ident(Scope *scope, char *name, Range range) {
 }
 
 static Expr *new_expr_str(Scope *scope, const char *val, Range range) {
-  Type *type = new_type_ptr(new_type(TY_CHAR, true), false);
+  Type *type = new_type_ptr(new_type(TY_CHAR, CONST_TYPE_QUALIFIER),
+                            EMPTY_TYPE_QUALIFIER);
   Expr *expr = new_expr(EX_STR, type, range);
 
   expr->str = make_label("str");
@@ -976,7 +1018,8 @@ static Expr *new_expr_call(Scope *scope, Expr *callee, Vector *argument,
     func_type = callee->val_type->ptrof;
   } else {
     range_warn(range, "未知の関数です");
-    func_type = new_type_func(new_type(TY_S_INT, false), NULL, false, false);
+    func_type = new_type_func(new_type(TY_S_INT, EMPTY_TYPE_QUALIFIER), NULL,
+                              false, EMPTY_TYPE_QUALIFIER);
   }
   ret_type = func_type->func_ret;
 
@@ -1064,9 +1107,9 @@ static Expr *new_expr_unary(Scope *scope, int op, Expr *operand, Range range) {
     break;
   case EX_ADDRESS: {
     if (is_array_type(operand->val_type)) {
-      val_type = new_type_ptr(operand->val_type->ptrof, false);
+      val_type = new_type_ptr(operand->val_type->ptrof, EMPTY_TYPE_QUALIFIER);
     } else {
-      val_type = new_type_ptr(operand->val_type, false);
+      val_type = new_type_ptr(operand->val_type, EMPTY_TYPE_QUALIFIER);
     }
     break;
   }
@@ -1177,7 +1220,8 @@ static Expr *new_expr_binop(Scope *scope, int op, Expr *lhs, Expr *rhs,
         }
 
         // ptr - ptr
-        Expr *sub = new_expr(EX_SUB, new_type(TY_S_LONG, false), range);
+        Expr *sub =
+            new_expr(EX_SUB, new_type(TY_S_LONG, EMPTY_TYPE_QUALIFIER), range);
         sub->binop.lhs = lhs;
         sub->binop.rhs = rhs;
         Expr *size = new_expr_num(new_number_ptrdiff_t(get_val_size(
@@ -1226,7 +1270,7 @@ static Expr *new_expr_binop(Scope *scope, int op, Expr *lhs, Expr *rhs,
   case EX_EQEQ:
   case EX_NOTEQ:
     arith_converted(scope, &lhs, &rhs);
-    val_type = new_type(TY_S_INT, false);
+    val_type = new_type(TY_S_INT, EMPTY_TYPE_QUALIFIER);
     break;
   // and
   case EX_AND:
@@ -1241,18 +1285,19 @@ static Expr *new_expr_binop(Scope *scope, int op, Expr *lhs, Expr *rhs,
     }
     break;
   case EX_LOG_AND: {
-    val_type = new_type(TY_S_INT, false);
+    val_type = new_type(TY_S_INT, EMPTY_TYPE_QUALIFIER);
     break;
   }
   case EX_LOG_OR:
-    val_type = new_type(TY_S_INT, false);
+    val_type = new_type(TY_S_INT, EMPTY_TYPE_QUALIFIER);
     break;
   case EX_ASSIGN:
     rhs = new_expr_cast(scope, lhs->val_type, rhs, rhs->range);
     val_type = lhs->val_type;
     break;
   case EX_COMMA:
-    lhs = new_expr_cast(scope, new_type(TY_VOID, false), lhs, lhs->range);
+    lhs = new_expr_cast(scope, new_type(TY_VOID, EMPTY_TYPE_QUALIFIER), lhs,
+                        lhs->range);
     val_type = rhs->val_type;
     break;
   default:
@@ -1330,7 +1375,8 @@ static Expr *new_expr_arrow(Scope *scope, Expr *operand, char *name,
   if (member == NULL) {
     range_error(range, "存在しないメンバへのアクセスです: %s", name);
   }
-  Expr *expr = new_expr(EX_ADD, new_type_ptr(member->type, false), range);
+  Expr *expr =
+      new_expr(EX_ADD, new_type_ptr(member->type, EMPTY_TYPE_QUALIFIER), range);
   expr->binop.lhs = operand;
   expr->binop.rhs = new_expr_num(new_number_size_t(member->offset), range);
   return new_expr_unary(scope, EX_INDIRECT, expr, range);
@@ -1835,87 +1881,84 @@ static Vector *declaration(Tokenizer *tokenizer, Scope *scope) {
 }
 
 static Type *type_specifier(Scope *scope, Tokenizer *tokenizer) {
-  bool is_const = token_consume(tokenizer, TK_CONST);
+  TypeQualifier tq = EMPTY_TYPE_QUALIFIER;
+  consume_type_qualifier(tokenizer, &tq);
   Token *token = token_pop(tokenizer);
   switch (token->ty) {
   case TK_VOID:
-    return new_type(TY_VOID, is_const);
+    return new_type(TY_VOID, tq);
 
   case TK_BOOL:
-    return new_type(TY_BOOL, is_const);
+    return new_type(TY_BOOL, tq);
   case TK_CHAR:
-    return new_type(TY_CHAR, is_const);
+    return new_type(TY_CHAR, tq);
   case TK_INT:
-    return new_type(TY_S_INT, is_const);
+    return new_type(TY_S_INT, tq);
   case TK_SHORT:
     (void)token_consume(tokenizer, TK_INT);
-    return new_type(TY_S_SHORT, is_const);
+    return new_type(TY_S_SHORT, tq);
   case TK_LONG:
     if (token_consume(tokenizer, TK_LONG)) {
       (void)token_consume(tokenizer, TK_INT);
-      return new_type(TY_S_LLONG, is_const);
+      return new_type(TY_S_LLONG, tq);
     }
     (void)token_consume(tokenizer, TK_INT);
-    return new_type(TY_S_LONG, is_const);
+    return new_type(TY_S_LONG, tq);
 
   case TK_SIGNED:
     if (token_consume(tokenizer, TK_CHAR)) {
-      return new_type(TY_S_CHAR, is_const);
+      return new_type(TY_S_CHAR, tq);
     }
     if (token_consume(tokenizer, TK_INT)) {
-      return new_type(TY_S_INT, is_const);
+      return new_type(TY_S_INT, tq);
     }
     if (token_consume(tokenizer, TK_SHORT)) {
       (void)token_consume(tokenizer, TK_INT);
-      return new_type(TY_S_SHORT, is_const);
+      return new_type(TY_S_SHORT, tq);
     }
     if (token_consume(tokenizer, TK_LONG)) {
       if (token_consume(tokenizer, TK_LONG)) {
         (void)token_consume(tokenizer, TK_INT);
-        return new_type(TY_S_LLONG, is_const);
+        return new_type(TY_S_LLONG, tq);
       }
       (void)token_consume(tokenizer, TK_INT);
-      return new_type(TY_S_LONG, is_const);
+      return new_type(TY_S_LONG, tq);
     }
-    return new_type(TY_S_INT, is_const);
+    return new_type(TY_S_INT, tq);
 
   case TK_UNSIGNED:
     if (token_consume(tokenizer, TK_CHAR)) {
-      return new_type(TY_U_CHAR, is_const);
+      return new_type(TY_U_CHAR, tq);
     }
     if (token_consume(tokenizer, TK_INT)) {
-      return new_type(TY_U_INT, is_const);
+      return new_type(TY_U_INT, tq);
     }
     if (token_consume(tokenizer, TK_SHORT)) {
       (void)token_consume(tokenizer, TK_INT);
-      return new_type(TY_U_SHORT, is_const);
+      return new_type(TY_U_SHORT, tq);
     }
     if (token_consume(tokenizer, TK_LONG)) {
       if (token_consume(tokenizer, TK_LONG)) {
         (void)token_consume(tokenizer, TK_INT);
-        return new_type(TY_U_LLONG, is_const);
+        return new_type(TY_U_LLONG, tq);
       }
       (void)token_consume(tokenizer, TK_INT);
-      return new_type(TY_U_LONG, is_const);
+      return new_type(TY_U_LONG, tq);
     }
-    return new_type(TY_U_INT, is_const);
+    return new_type(TY_U_INT, tq);
 
   case TK_STRUCT:
   case TK_UNION:
-    return struct_or_union_specifier(scope, tokenizer, token, is_const);
+    return struct_or_union_specifier(scope, tokenizer, token, tq);
   case TK_ENUM:
-    return enum_specifier(scope, tokenizer, token, is_const);
+    return enum_specifier(scope, tokenizer, token, tq);
   case TK_IDENT: {
     Type *type = get_typedef(scope, token->ident);
     if (type != NULL) {
-      if (is_const) {
-        Type *copy_type = NEW(Type);
-        *copy_type = *type;
-        type = copy_type;
-        type->is_const = true;
-      }
-      return type;
+      type = clone_type(type);
+      type->qualifier = tq;
     }
+    return type;
   }
     // fallthrough
   default:
@@ -1942,7 +1985,7 @@ static void struct_declaration(Scope *scope, Tokenizer *tokenizer, Type *type) {
 }
 
 static Type *struct_or_union_specifier(Scope *scope, Tokenizer *tokenizer,
-                                       Token *token, bool is_const) {
+                                       Token *token, TypeQualifier tq) {
   assert(token->ty == TK_STRUCT || token->ty == TK_UNION);
   Token *tag = token_consume(tokenizer, TK_IDENT);
   if (tag == NULL && token_peek(tokenizer)->ty != '{') {
@@ -1951,7 +1994,7 @@ static Type *struct_or_union_specifier(Scope *scope, Tokenizer *tokenizer,
   }
 
   if (token_consume(tokenizer, '{')) {
-    Type *type = new_type_struct(token->ty, tag ? tag->ident : NULL, is_const);
+    Type *type = new_type_struct(token->ty, tag ? tag->ident : NULL, tq);
     if (tag != NULL) {
       if (!register_tag(scope, tag->ident, type)) {
         range_error(tag->range,
@@ -1971,7 +2014,7 @@ static Type *struct_or_union_specifier(Scope *scope, Tokenizer *tokenizer,
     return type;
   }
 
-  return new_type_anon_struct(token->ty, is_const);
+  return new_type_anon_struct(token->ty, tq);
 }
 
 static void enumerator(Scope *scope, Tokenizer *tokenizer, Type *type,
@@ -1998,7 +2041,7 @@ static void enumerator(Scope *scope, Tokenizer *tokenizer, Type *type,
 }
 
 static Type *enum_specifier(Scope *scope, Tokenizer *tokenizer, Token *token,
-                            bool is_const) {
+                            TypeQualifier tq) {
   Token *tag_ident = token_consume(tokenizer, TK_IDENT);
   if (tag_ident == NULL && token_peek(tokenizer)->ty != '{') {
     range_error(token->range, "列挙型のタグまたは `{` がありません");
@@ -2007,7 +2050,7 @@ static Type *enum_specifier(Scope *scope, Tokenizer *tokenizer, Token *token,
   char *tag = tag_ident != NULL ? tag_ident->ident : NULL;
 
   if (token_consume(tokenizer, '{')) {
-    Type *type = new_type_enum(tag != NULL ? tag : NULL, is_const);
+    Type *type = new_type_enum(tag != NULL ? tag : NULL, tq);
     if (tag != NULL) {
       if (!register_tag(scope, tag, type)) {
         range_error(tag_ident->range, "同じタグ名の列挙型の多重定義です: %s",
@@ -2027,21 +2070,21 @@ static Type *enum_specifier(Scope *scope, Tokenizer *tokenizer, Token *token,
       return type;
     }
   }
-  return new_type_enum(tag, is_const);
+  return new_type_enum(tag, tq);
 }
 
 static Type *type_name(Scope *scope, Tokenizer *tokenizer) {
   Type *type = type_specifier(scope, tokenizer);
   while (token_consume(tokenizer, '*')) {
-    type = new_type_ptr(type, false);
+    type = new_type_ptr(type, EMPTY_TYPE_QUALIFIER);
   }
   while (token_consume(tokenizer, '[')) {
     if (token_peek(tokenizer)->ty == ']') {
-      type = new_type_unsized_array(type, false);
+      type = new_type_unsized_array(type, EMPTY_TYPE_QUALIFIER);
     } else {
       Expr *len = constant_expression(tokenizer, scope);
       assert(len->ty == EX_NUM);
-      type = new_type_array(type, len->num, false);
+      type = new_type_array(type, len->num, EMPTY_TYPE_QUALIFIER);
     }
     token_expect(tokenizer, ']');
   }
@@ -2052,8 +2095,9 @@ static void declarator(Scope *scope, Tokenizer *tokenizer, Type *base_type,
                        Token **name, Type **type, Range *range) {
   Range start = token_peek(tokenizer)->range;
   while (token_consume(tokenizer, '*')) {
-    bool is_const = token_consume(tokenizer, TK_CONST);
-    base_type = new_type_ptr(base_type, is_const);
+    TypeQualifier tq = EMPTY_TYPE_QUALIFIER;
+    consume_type_qualifier(tokenizer, &tq);
+    base_type = new_type_ptr(base_type, tq);
   }
   Range end;
   direct_declarator(scope, tokenizer, base_type, name, type, &end);
@@ -2088,11 +2132,11 @@ static void direct_declarator(Scope *scope, Tokenizer *tokenizer,
     if (token_consume(tokenizer, '[')) {
       Type *inner = NEW(Type);
       if (token_peek(tokenizer)->ty == ']') {
-        *placeholder = *new_type_unsized_array(inner, false);
+        *placeholder = *new_type_unsized_array(inner, EMPTY_TYPE_QUALIFIER);
       } else {
         Expr *len = constant_expression(tokenizer, scope);
         assert(len->ty == EX_NUM);
-        *placeholder = *new_type_array(inner, len->num, false);
+        *placeholder = *new_type_array(inner, len->num, EMPTY_TYPE_QUALIFIER);
       }
       placeholder = inner;
       Token *end = token_expect(tokenizer, ']');
@@ -2138,7 +2182,8 @@ static void direct_declarator(Scope *scope, Tokenizer *tokenizer,
       *range = range_join(*range, end->range);
 
       Type *inner = NEW(Type);
-      *placeholder = *new_type_func(inner, params, has_varargs, false);
+      *placeholder =
+          *new_type_func(inner, params, has_varargs, EMPTY_TYPE_QUALIFIER);
       placeholder = inner;
       continue;
     }
