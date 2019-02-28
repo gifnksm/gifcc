@@ -1,5 +1,8 @@
 #include "cpp.h"
 
+#define CHECK_INT(a, b) check_int(__FILE__, __LINE__, (a), (b))
+static void check_int(const char *file, int line, int a, int b);
+
 #ifdef FOO
 #error "FOO must not be defined"
 #endif
@@ -64,19 +67,12 @@ static int n5 = 6\
 #define DEFVAR(var, val, type) type var = val
 DEFVAR(n6, 700, int);
 
-static void check_int(int a, int b) {
-  if (a != b) {
-    printf("FAILED %d != %d\n", a, b);
-    abort();
-  }
-}
-
 #define CAT2(a, b) a##b
 #define CAT(a, b) CAT2(a, b)
 #define AB(x) CAT(x, y)
 static void run01(void) {
   static int xy = 800;
-  check_int(800, CAT(A, B)(x));
+  CHECK_INT(800, CAT(A, B)(x));
 }
 
 static void run02(void) {
@@ -86,14 +82,21 @@ static void run02(void) {
   printf("__LINE__ = %d\n", __LINE__);
 }
 
+static void check_int(const char *file, int line, int a, int b) {
+  if (a != b) {
+    printf("%s:%d:FAILED %d != %d\n", file, line, a, b);
+    abort();
+  }
+}
+
 int main(void) {
-  check_int(100, n0);
-  check_int(200, n1);
-  check_int(300, n2);
-  check_int(400, n3);
-  check_int(500, n4);
-  check_int(600, n5);
-  check_int(700, n6);
+  CHECK_INT(100, n0);
+  CHECK_INT(200, n1);
+  CHECK_INT(300, n2);
+  CHECK_INT(400, n3);
+  CHECK_INT(500, n4);
+  CHECK_INT(600, n5);
+  CHECK_INT(700, n6);
   run01();
   run02();
 
