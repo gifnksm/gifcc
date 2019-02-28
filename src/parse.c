@@ -717,7 +717,8 @@ static bool token_is_type_qualifier(Token *token) {
     return false;
   }
 }
-static void consume_type_qualifier(Tokenizer *tokenizer, TypeQualifier *tq) {
+static bool consume_type_qualifier(Tokenizer *tokenizer, TypeQualifier *tq) {
+  bool consumed = false;
   while (true) {
     Token *token;
     if ((token = token_consume(tokenizer, TK_CONST)) != NULL) {
@@ -725,6 +726,7 @@ static void consume_type_qualifier(Tokenizer *tokenizer, TypeQualifier *tq) {
         range_warn(token->range, "`const` が重複しています");
       }
       tq->is_const = true;
+      consumed = true;
       continue;
     }
     if ((token = token_consume(tokenizer, TK_RESTRICT)) != NULL) {
@@ -732,6 +734,7 @@ static void consume_type_qualifier(Tokenizer *tokenizer, TypeQualifier *tq) {
         range_warn(token->range, "`restrict` が重複しています");
       }
       tq->is_restrict = true;
+      consumed = true;
       continue;
     }
     if ((token = token_consume(tokenizer, TK_VOLATILE)) != NULL) {
@@ -739,10 +742,12 @@ static void consume_type_qualifier(Tokenizer *tokenizer, TypeQualifier *tq) {
         range_warn(token->range, "`volatile` が重複しています");
       }
       tq->is_volatile = true;
+      consumed = true;
       continue;
     }
     break;
   }
+  return consumed;
 }
 
 int get_val_size(Type *ty, Range range) {
@@ -2131,12 +2136,24 @@ static void direct_declarator(Scope *scope, Tokenizer *tokenizer,
   while (true) {
     if (token_consume(tokenizer, '[')) {
       Type *inner = NEW(Type);
-      if (token_peek(tokenizer)->ty == ']') {
-        *placeholder = *new_type_unsized_array(inner, EMPTY_TYPE_QUALIFIER);
+      TypeQualifier tq = EMPTY_TYPE_QUALIFIER;
+      while (true) {
+        if (consume_type_qualifier(tokenizer, &tq)) {
+          continue;
+        }
+        if (token_consume(tokenizer, TK_STATIC)) {
+          continue;
+        }
+        break;
+      }
+      if (token_consume(tokenizer, '*')) {
+        *placeholder = *new_type_unsized_array(inner, tq);
+      } else if (token_peek(tokenizer)->ty == ']') {
+        *placeholder = *new_type_unsized_array(inner, tq);
       } else {
         Expr *len = constant_expression(tokenizer, scope);
         assert(len->ty == EX_NUM);
-        *placeholder = *new_type_array(inner, len->num, EMPTY_TYPE_QUALIFIER);
+        *placeholder = *new_type_array(inner, len->num, tq);
       }
       placeholder = inner;
       Token *end = token_expect(tokenizer, ']');
