@@ -1978,10 +1978,11 @@ static Type *type_specifier(Scope *scope, Tokenizer *tokenizer) {
     return enum_specifier(scope, tokenizer, token, tq);
   case TK_IDENT: {
     Type *type = get_typedef(scope, token->ident);
-    if (type != NULL) {
-      type = clone_type(type);
-      type->qualifier = tq;
+    if (type == NULL) {
+      range_error(token->range, "型名がありません");
     }
+    type = clone_type(type);
+    type->qualifier = tq;
     return type;
   }
     // fallthrough
