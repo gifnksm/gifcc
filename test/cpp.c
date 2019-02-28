@@ -79,6 +79,13 @@ static void run01(void) {
   check_int(800, CAT(A, B)(x));
 }
 
+static void run02(void) {
+  printf("__DATE__ = %s\n", __DATE__);
+  printf("__TIME__ = %s\n", __TIME__);
+  printf("__FILE__ = %s\n", __FILE__);
+  printf("__LINE__ = %d\n", __LINE__);
+}
+
 int main(void) {
   check_int(100, n0);
   check_int(200, n1);
@@ -88,6 +95,7 @@ int main(void) {
   check_int(600, n5);
   check_int(700, n6);
   run01();
+  run02();
 
   puts("OK");
   return 0;

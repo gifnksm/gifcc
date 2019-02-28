@@ -7,6 +7,7 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 struct Tokenizer {
   Reader *reader;
@@ -28,6 +29,7 @@ typedef struct Cond {
 typedef enum {
   MACRO_OBJ,
   MACRO_FUNC,
+  MACRO_OBJ_SPECIAL,
 } macro_t;
 
 typedef struct Macro {
@@ -35,6 +37,7 @@ typedef struct Macro {
   Vector *params;
   bool has_varargs;
   Vector *replacement;
+  Vector *(*replacement_func)(Tokenizer *);
 } Macro;
 
 static const LongToken LONG_IDENT_TOKENS[] = {
@@ -65,11 +68,12 @@ static bool do_read_token(Tokenizer *tokenizer, Token **token, bool skip_eol,
                           bool check_pp_cond);
 static Token *new_token(int ty, Range range);
 static Token *token_clone(Token *token);
-static Token *new_token_num(char *num, Range range);
+static Token *new_token_num(const char *num, Range range);
 static Token *new_token_char(Number val, Range range);
 static Token *new_token_ident(char *ident, Range range);
-static Token *new_token_str(char *str, Range range);
+static Token *new_token_str(const char *str, Range range);
 static Macro *new_obj_macro(Vector *replacement);
+static Macro *new_obj_special_macro(Vector *(*replacement_func)(Tokenizer *));
 static Macro *new_func_macro(Vector *params, bool has_varargs,
                              Vector *replacement);
 static bool pp_directive(Tokenizer *tokenizer);
@@ -95,13 +99,79 @@ static Token *character_constant(Reader *reader);
 static Token *string_literal(Reader *reader);
 static char c_char(Reader *reader);
 
-void set_predefined_macro(Map *map, char *name, int i) {
+static void set_predefined_num_macro(const Reader *reader, Map *map, char *name,
+                                     const char *num) {
   Vector *replacement = new_vector();
-  char *num;
-  alloc_printf(&num, "%d", i);
-  vec_push(replacement, new_token_num(num, (Range){}));
+  vec_push(replacement, new_token_num(num, range_builtin(reader)));
   map_put(map, name, new_obj_macro(replacement));
 }
+
+static void
+set_predefined_special_macro(Map *map, char *name,
+                             Vector *(*replacement_func)(Tokenizer *)) {
+  map_put(map, name, new_obj_special_macro(replacement_func));
+}
+
+static Vector *macro_date(Tokenizer *tokenizer __attribute__((unused))) {
+  time_t now = time(NULL);
+  struct tm now_tm;
+  char buf[30];
+  localtime_r(&now, &now_tm);
+  strftime(buf, sizeof(buf), "%b %e %Y", &now_tm);
+
+  Vector *rep = new_vector();
+  vec_push(rep, new_token_str(strdup(buf), range_builtin(tokenizer->reader)));
+  return rep;
+}
+
+static Vector *macro_time(Tokenizer *tokenizer __attribute__((unused))) {
+  time_t now = time(NULL);
+  struct tm now_tm;
+  char buf[30];
+  localtime_r(&now, &now_tm);
+  strftime(buf, sizeof(buf), "%T", &now_tm);
+
+  Vector *rep = new_vector();
+  vec_push(rep, new_token_str(strdup(buf), range_builtin(tokenizer->reader)));
+  return rep;
+}
+
+static Vector *macro_file(Tokenizer *tokenizer) {
+  const char *filename;
+  int offset = reader_get_offset(tokenizer->reader);
+  reader_get_position(tokenizer->reader, offset, &filename, NULL, NULL);
+
+  Vector *rep = new_vector();
+  vec_push(rep, new_token_str(filename, range_builtin(tokenizer->reader)));
+  return rep;
+}
+
+static Vector *macro_line(Tokenizer *tokenizer) {
+  int line;
+  int offset = reader_get_offset(tokenizer->reader);
+  reader_get_position(tokenizer->reader, offset, NULL, &line, NULL);
+
+  char *buf;
+  alloc_printf(&buf, "%d", line);
+
+  Vector *rep = new_vector();
+  vec_push(rep, new_token_num(buf, range_builtin(tokenizer->reader)));
+  return rep;
+}
+
+static void initialize_predefined_macro(const Reader *reader, Map *map) {
+  set_predefined_special_macro(map, "__DATE__", macro_date);
+  set_predefined_special_macro(map, "__TIME__", macro_time);
+  set_predefined_special_macro(map, "__FILE__", macro_file);
+  set_predefined_special_macro(map, "__LINE__", macro_line);
+
+  set_predefined_num_macro(reader, map, "__STDC__", "1");
+  set_predefined_num_macro(reader, map, "__STDC_HOSTED__", "1");
+  // set_predefined_num_macro(reader, map, "__STDC_VERSION__", "201112L");
+  set_predefined_num_macro(reader, map, "__LP64__", "1");
+  set_predefined_num_macro(reader, map, "__x86_64__", "1");
+}
+
 Tokenizer *new_tokenizer(Reader *reader) {
   Tokenizer *tokenizer = NEW(Tokenizer);
   tokenizer->reader = reader;
@@ -109,8 +179,7 @@ Tokenizer *new_tokenizer(Reader *reader) {
   tokenizer->tokens = new_vector();
   tokenizer->pp_cond_stack = new_vector();
 
-  set_predefined_macro(tokenizer->define_map, "__LP64__", 1);
-  set_predefined_macro(tokenizer->define_map, "__x86_64__", 1);
+  initialize_predefined_macro(reader, tokenizer->define_map);
 
   return tokenizer;
 }
@@ -164,12 +233,9 @@ Token *token_peek_ahead(Tokenizer *tokenizer, int n) {
           continue;
         }
 
-        size_t size = strlen(last->str) + 1;
-        size_t extra_size = strlen(next->str);
-        if (extra_size > 0) {
-          last->str = realloc(last->str, size + extra_size);
-          strncat(last->str, next->str, extra_size + 1);
-        }
+        char *buf;
+        alloc_printf(&buf, "%s%s", last->str, next->str);
+        last->str = buf;
         last->range = range_join(last->range, next->range);
       }
 
@@ -254,7 +320,7 @@ const char *token_kind_to_str(int kind) {
   }
 }
 
-char *pp_token_to_str(const Token *token) {
+static const char *pp_token_to_str(const Token *token) {
   if (token->ty <= 255) {
     char *name;
     alloc_printf(&name, "%c", token->ty);
@@ -468,7 +534,7 @@ static Token *token_clone(Token *token) {
   return cloned;
 }
 
-static Token *new_token_num(char *num, Range range) {
+static Token *new_token_num(const char *num, Range range) {
   Token *token = new_token(TK_NUM, range);
   token->num = num;
   return token;
@@ -494,7 +560,7 @@ static Token *new_token_ident(char *ident, Range range) {
   return token;
 }
 
-static Token *new_token_str(char *str, Range range) {
+static Token *new_token_str(const char *str, Range range) {
   Token *token = new_token(TK_STR, range);
   token->str = str;
   return token;
@@ -504,6 +570,13 @@ static Macro *new_obj_macro(Vector *replacement) {
   Macro *macro = NEW(Macro);
   macro->kind = MACRO_OBJ;
   macro->replacement = replacement;
+  return macro;
+}
+
+static Macro *new_obj_special_macro(Vector *(*replacement_func)(Tokenizer *)) {
+  Macro *macro = NEW(Macro);
+  macro->kind = MACRO_OBJ_SPECIAL;
+  macro->replacement_func = replacement_func;
   return macro;
 }
 
@@ -1125,17 +1198,19 @@ static Vector *pp_expand_macros(Tokenizer *tokenizer, Vector *tokens,
       continue;
     }
 
-    if (macro->kind == MACRO_OBJ) {
+    if (macro->kind == MACRO_OBJ || macro->kind == MACRO_OBJ_SPECIAL) {
       Range *expanded_from = NEW(Range);
       *expanded_from = ident->range;
       Map *hideset = new_map();
       map_put(hideset, ident->ident, ident->ident);
-      Vector *exp_tokens =
-          pp_expand_macros(tokenizer,
-                           pp_subst_macros(tokenizer, expanded_from,
-                                           vec_clone(macro->replacement), NULL,
-                                           NULL, hideset, new_vector()),
-                           reader);
+      Vector *replacement = macro->kind == MACRO_OBJ
+                                ? vec_clone(macro->replacement)
+                                : macro->replacement_func(tokenizer);
+      Vector *exp_tokens = pp_expand_macros(
+          tokenizer,
+          pp_subst_macros(tokenizer, expanded_from, replacement, NULL, NULL,
+                          hideset, new_vector()),
+          reader);
       vec_append(expanded, exp_tokens);
       continue;
     }

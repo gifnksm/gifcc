@@ -191,9 +191,9 @@ typedef struct {
   int ty;
   Range range;
   Map *pp_hideset;
-  char *num;
+  const char *num;
   char *ident;
-  char *str;
+  const char *str;
   Number char_val;
 } Token;
 
@@ -569,6 +569,10 @@ static inline Range range_from_reader(const Reader *reader, int start,
       .start = start,
       .len = (end - start),
   };
+}
+
+static inline Range range_builtin(const Reader *reader) {
+  return range_from_reader(reader, 0, 0);
 }
 
 static inline Range range_join(Range a, Range b) {
