@@ -205,39 +205,51 @@ static void dump_type_inner(Type *ty) {
     printf(")->");
     dump_type_inner(ty->func_ret);
     return;
-  case TY_STRUCT:
+  case TY_STRUCT: {
+    StructBody *body = ty->struct_body;
     printf("STRUCT %s", ty->tag);
-    printf("(");
-    for (int i = 0; i < vec_len(ty->member_list); i++) {
-      if (i > 0) {
-        printf(", ");
+    if (body->member_list != NULL) {
+      printf("(");
+      for (int i = 0; i < vec_len(body->member_list); i++) {
+        if (i > 0) {
+          printf(", ");
+        }
+        Member *member = vec_get(body->member_list, i);
+        dump_type_inner(member->type);
+        printf(" %s", member->name);
       }
-      Member *member = vec_get(ty->member_list, i);
-      dump_type_inner(member->type);
-      printf(" %s", member->name);
+      printf(")");
+    } else {
+      printf("<anon>");
     }
-    printf(")");
     return;
-  case TY_UNION:
+  }
+  case TY_UNION: {
+    StructBody *body = ty->struct_body;
     printf("UNION %s", ty->tag);
-    printf("(");
-    for (int i = 0; i < vec_len(ty->member_list); i++) {
-      if (i > 0) {
-        printf(", ");
+    if (body->member_list != NULL) {
+      printf("(");
+      for (int i = 0; i < vec_len(body->member_list); i++) {
+        if (i > 0) {
+          printf(", ");
+        }
+        Member *member = vec_get(body->member_list, i);
+        dump_type_inner(member->type);
+        printf(" %s", member->name);
       }
-      Member *member = vec_get(ty->member_list, i);
-      dump_type_inner(member->type);
-      printf(" %s", member->name);
+      printf(")");
+    } else {
+      printf("<anon>");
     }
-    printf(")");
     return;
+  }
   case TY_ENUM:
     printf("enum %s", ty->tag);
     return;
   }
   error("未知の型です: %d\n", ty->ty);
 }
-static void dump_type(Type *ty) {
+void dump_type(Type *ty) {
   printf("<");
   dump_type_inner(ty);
   printf(">");

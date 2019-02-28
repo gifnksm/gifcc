@@ -855,6 +855,7 @@ static void gen_gvar_init(Initializer *init, Range range) {
   if (init->members != NULL) {
     assert(init->type->ty == TY_STRUCT || init->type->ty == TY_UNION);
     assert(map_size(init->members) <= 1 || init->type->ty == TY_STRUCT);
+    StructBody *body = init->type->struct_body;
     int offset = 0;
     for (int i = 0; i < map_size(init->members); i++) {
       Initializer *meminit = map_get_by_index(init->members, i, NULL);
@@ -862,7 +863,7 @@ static void gen_gvar_init(Initializer *init, Range range) {
         continue;
       }
       if (i > 0) {
-        Member *member = vec_get(init->type->member_list, i);
+        Member *member = vec_get(body->member_list, i);
         if (offset < member->offset) {
           printf("  .zero %d\n", member->offset - offset);
           offset = member->offset;

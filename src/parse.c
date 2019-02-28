@@ -97,8 +97,9 @@ static Type *new_type_array(Type *base_type, Number len, TypeQualifier tq);
 static Type *new_type_unsized_array(Type *base_type, TypeQualifier tq);
 static Type *new_type_func(Type *ret_type, Vector *func_param, bool has_varargs,
                            TypeQualifier tq);
-static Type *new_type_struct(int tk, char *tag, TypeQualifier tq);
-static Type *new_type_anon_struct(int tk, TypeQualifier tq);
+static Type *new_type_struct(type_t ty, const char *tag, TypeQualifier tq);
+static Type *new_type_opaque_struct(type_t ty, const char *tag,
+                                    TypeQualifier tq);
 static Type *new_type_enum(char *tag, TypeQualifier tq);
 static Expr *coerce_array2ptr(Scope *scope, Expr *expr);
 static Expr *coerce_func2ptr(Scope *scope, Expr *expr);
@@ -205,19 +206,23 @@ static Initializer *new_initializer(Type *type) {
   init->members = NULL;
   init->elements = NULL;
   switch (type->ty) {
-  case TY_STRUCT:
+  case TY_STRUCT: {
     init->members = new_map();
-    for (int i = 0; i < vec_len(type->member_list); i++) {
-      Member *member = vec_get(type->member_list, i);
+    StructBody *body = type->struct_body;
+    for (int i = 0; i < vec_len(body->member_list); i++) {
+      Member *member = vec_get(body->member_list, i);
       map_put(init->members, member->name, NULL);
     }
     break;
-  case TY_UNION:
+  }
+  case TY_UNION: {
     init->members = new_map();
-    if (vec_len(type->member_list) > 0) {
+    StructBody *body = type->struct_body;
+    if (vec_len(body->member_list) > 0) {
       map_put(init->members, NULL, NULL);
     }
     break;
+  }
   case TY_ARRAY:
     init->elements = new_vector();
     vec_extend(init->elements, type->array_len);
@@ -374,44 +379,47 @@ static void register_member(Type *type, char *member_name, Type *member_type,
                             Range range) {
   assert(type->ty == TY_STRUCT || type->ty == TY_UNION);
 
+  StructBody *body = type->struct_body;
+
   int offset;
   if (type->ty == TY_STRUCT) {
-    type->member_size =
-        align(type->member_size, get_val_align(member_type, range));
-    offset = type->member_size;
-    type->member_size += get_val_size(member_type, range);
+    body->member_size =
+        align(body->member_size, get_val_align(member_type, range));
+    offset = body->member_size;
+    body->member_size += get_val_size(member_type, range);
   } else {
-    if (get_val_size(member_type, range) > type->member_size) {
-      type->member_size = get_val_size(member_type, range);
+    if (get_val_size(member_type, range) > body->member_size) {
+      body->member_size = get_val_size(member_type, range);
     }
     offset = 0;
   }
 
-  if (type->member_align < get_val_align(member_type, range)) {
-    type->member_align = get_val_align(member_type, range);
+  if (body->member_align < get_val_align(member_type, range)) {
+    body->member_align = get_val_align(member_type, range);
   }
 
   Member *member = new_member(member_name, member_type, offset, range);
-  vec_push(type->member_list, member);
+  vec_push(body->member_list, member);
   if (member_name == NULL) {
     assert(member_type->ty == TY_STRUCT || member_type->ty == TY_UNION);
-    Map *inner_members = member_type->member_name_map;
+    StructBody *member_body = member_type->struct_body;
+    Map *inner_members = member_body->member_name_map;
     for (int i = 0; i < map_size(inner_members); i++) {
       Member *inner = map_get_by_index(inner_members, i, NULL);
       Member *inner_member =
           new_member(inner->name, inner->type, offset + inner->offset, range);
-      if (map_get(type->member_name_map, inner_member->name)) {
+      if (map_get(body->member_name_map, inner_member->name)) {
         range_error(range, "同じ名前のメンバ変数が複数あります: %s",
                     inner_member->name);
       }
-      map_put(type->member_name_map, inner_member->name, inner_member);
+      map_put(body->member_name_map, inner_member->name, inner_member);
     }
   } else {
-    if (map_get(type->member_name_map, member->name)) {
+    if (map_get(body->member_name_map, member->name)) {
       range_error(range, "同じ名前のメンバ変数が複数あります: %s",
                   member->name);
     }
-    map_put(type->member_name_map, member->name, member);
+    map_put(body->member_name_map, member->name, member);
   }
 }
 
@@ -789,10 +797,10 @@ int get_val_size(Type *ty, Range range) {
     range_error(range, "関数型の値サイズを取得しようとしました");
   case TY_STRUCT:
   case TY_UNION:
-    if (ty->member_list == NULL) {
+    if (ty->struct_body->member_list == NULL) {
       range_error(range, "不完全型の値のサイズを取得しようとしました");
     }
-    return align(ty->member_size, ty->member_align);
+    return align(ty->struct_body->member_size, ty->struct_body->member_align);
   case TY_ENUM:
     return sizeof(int);
   }
@@ -835,7 +843,10 @@ int get_val_align(Type *ty, Range range) {
     range_error(range, "関数型の値アラインメントを取得しようとしました");
   case TY_STRUCT:
   case TY_UNION:
-    return ty->member_align;
+    if (ty->struct_body->member_list == NULL) {
+      range_error(range, "不完全型の値のアラインメントを取得しようとしました");
+    }
+    return ty->struct_body->member_align;
   case TY_ENUM:
     return alignof(int);
   }
@@ -896,22 +907,30 @@ static Type *new_type_func(Type *ret_type, Vector *func_param, bool has_varargs,
   return funtype;
 }
 
-static Type *new_type_struct(int tk, char *tag, TypeQualifier tq) {
-  assert(tk == TK_STRUCT || tk == TK_UNION);
-  Type *type = new_type(tk == TK_STRUCT ? TY_STRUCT : TY_UNION, tq);
+static void init_struct_body(StructBody *body) {
+  body->member_name_map = new_map();
+  body->member_list = new_vector();
+  body->member_size = 0;
+  body->member_align = 0;
+}
+
+static Type *new_type_struct(type_t ty, const char *tag, TypeQualifier tq) {
+  assert(ty == TY_STRUCT || ty == TY_UNION);
+
+  Type *type = new_type(ty, tq);
   type->tag = tag;
-  type->member_name_map = new_map();
-  type->member_list = new_vector();
-  type->member_size = 0;
-  type->member_align = 0;
+  type->struct_body = NEW(StructBody);
+  init_struct_body(type->struct_body);
+
   return type;
 }
 
-static Type *new_type_anon_struct(int tk, TypeQualifier tq) {
-  assert(tk == TK_STRUCT || tk == TK_UNION);
-  Type *type = new_type(tk == TK_STRUCT ? TY_STRUCT : TY_UNION, tq);
-  type->member_name_map = NULL;
-  type->member_list = NULL;
+static Type *new_type_opaque_struct(type_t ty, const char *tag,
+                                    TypeQualifier tq) {
+  assert(ty == TY_STRUCT || ty == TY_UNION);
+  Type *type = new_type(ty, tq);
+  type->tag = tag;
+  type->struct_body = NEW(StructBody);
   return type;
 }
 
@@ -1373,10 +1392,10 @@ static Expr *new_expr_arrow(Scope *scope, Expr *operand, char *name,
        operand->val_type->ptrof->ty != TY_UNION)) {
     range_error(range, "構造体または共用体以外のメンバへのアクセスです");
   }
+
+  StructBody *body = operand->val_type->ptrof->struct_body;
   Member *member =
-      operand->val_type->ptrof->member_name_map
-          ? map_get(operand->val_type->ptrof->member_name_map, name)
-          : NULL;
+      body->member_name_map ? map_get(body->member_name_map, name) : NULL;
   if (member == NULL) {
     range_error(range, "存在しないメンバへのアクセスです: %s", name);
   }
@@ -1998,14 +2017,29 @@ static Type *struct_or_union_specifier(Scope *scope, Tokenizer *tokenizer,
                 "構造体または共用体のタグまたは `{` がありません");
   }
 
+  type_t ty = token->ty == TK_STRUCT ? TY_STRUCT : TY_UNION;
+
   if (token_consume(tokenizer, '{')) {
-    Type *type = new_type_struct(token->ty, tag ? tag->ident : NULL, tq);
+    Type *type;
     if (tag != NULL) {
+      type = new_type_struct(ty, tag ? tag->ident : NULL, tq);
       if (!register_tag(scope, tag->ident, type)) {
-        range_error(tag->range,
-                    "同じタグ名の構造体または共用体の多重定義です: %s",
-                    tag->ident);
+        Type *predef_type = get_tag(scope, tag->ident);
+        assert(predef_type != NULL);
+        if (predef_type->ty != ty) {
+          range_error(tag->range, "タグの種別が違います: 前回の定義: %d",
+                      predef_type->ty);
+        }
+        StructBody *body = predef_type->struct_body;
+        if (body->member_list != NULL) {
+          range_error(tag->range, "構造体の多重定義です");
+        }
+        init_struct_body(body);
+
+        type = predef_type;
       }
+    } else {
+      type = new_type_struct(ty, tag ? tag->ident : NULL, tq);
     }
     while (token_peek(tokenizer)->ty != '}') {
       struct_declaration(scope, tokenizer, type);
@@ -2018,8 +2052,9 @@ static Type *struct_or_union_specifier(Scope *scope, Tokenizer *tokenizer,
   if (type != NULL) {
     return type;
   }
-
-  return new_type_anon_struct(token->ty, tq);
+  type = new_type_opaque_struct(ty, tag->ident, tq);
+  register_tag(scope, tag->ident, type);
+  return type;
 }
 
 static void enumerator(Scope *scope, Tokenizer *tokenizer, Type *type,
@@ -2214,6 +2249,8 @@ static void direct_declarator(Scope *scope, Tokenizer *tokenizer,
 static void struct_initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
                                bool brace_root, Initializer **init) {
   assert(type->ty == TY_STRUCT);
+  StructBody *body = type->struct_body;
+
   if (*init == NULL) {
     *init = new_initializer(type);
   }
@@ -2225,8 +2262,8 @@ static void struct_initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
     if (token_peek(tokenizer)->ty == '.' &&
         token_peek_ahead(tokenizer, 1)->ty == TK_IDENT) {
       Token *ident = token_peek_ahead(tokenizer, 1);
-      for (int i = 0; i < vec_len(type->member_list); i++) {
-        Member *member = vec_get(type->member_list, i);
+      for (int i = 0; i < vec_len(body->member_list); i++) {
+        Member *member = vec_get(body->member_list, i);
         if (member->name == NULL || strcmp(member->name, ident->ident) == 0) {
           if (member->name != NULL) {
             token_expect(tokenizer, '.');
@@ -2253,12 +2290,12 @@ static void struct_initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
 
     // initializers without designator.
     if (token_peek(tokenizer)->ty != '.' && token_peek(tokenizer)->ty != '}') {
-      for (int i = idx; i < vec_len(type->member_list); i++) {
+      for (int i = idx; i < vec_len(body->member_list); i++) {
         Initializer *meminit = map_get_by_index((*init)->members, i, NULL);
-        Member *member = vec_get(type->member_list, i);
+        Member *member = vec_get(body->member_list, i);
         initializer(tokenizer, scope, member->type, &meminit);
         map_set_by_index((*init)->members, i, member->name, meminit);
-        if ((i < vec_len(type->member_list) - 1 &&
+        if ((i < vec_len(body->member_list) - 1 &&
              token_consume(tokenizer, ',') == NULL) ||
             (token_peek(tokenizer)->ty == '.')) {
           break;
@@ -2275,6 +2312,8 @@ static void struct_initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
 static void union_initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
                               bool brace_root, Initializer **init) {
   assert(type->ty == TY_UNION);
+  StructBody *body = type->struct_body;
+
   if (*init == NULL) {
     *init = new_initializer(type);
   }
@@ -2283,8 +2322,8 @@ static void union_initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
     if (token_peek(tokenizer)->ty == '.' &&
         token_peek_ahead(tokenizer, 1)->ty == TK_IDENT) {
       Token *ident = token_peek_ahead(tokenizer, 1);
-      for (int i = 0; i < vec_len(type->member_list); i++) {
-        Member *member = vec_get(type->member_list, i);
+      for (int i = 0; i < vec_len(body->member_list); i++) {
+        Member *member = vec_get(body->member_list, i);
         if (member->name == NULL || strcmp(member->name, ident->ident) == 0) {
           if (member->name != NULL) {
             token_expect(tokenizer, '.');
@@ -2308,7 +2347,7 @@ static void union_initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
       }
     } else {
       Initializer *meminit = map_get_by_index((*init)->members, 0, NULL);
-      Member *member = vec_get(type->member_list, 0);
+      Member *member = vec_get(body->member_list, 0);
       initializer(tokenizer, scope, member->type, &meminit);
       map_set_by_index((*init)->members, 0, member->name, meminit);
       break;

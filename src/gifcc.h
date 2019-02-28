@@ -272,6 +272,13 @@ typedef struct TypeQualifier {
   bool is_volatile;
 } TypeQualifier;
 
+typedef struct StructBody {
+  Map *member_name_map;
+  Vector *member_list;
+  int member_size;
+  int member_align;
+} StructBody;
+
 typedef struct Type {
   type_t ty;
   TypeQualifier qualifier;
@@ -280,11 +287,8 @@ typedef struct Type {
   struct Type *func_ret;
   Vector *func_param;
   bool func_has_varargs;
-  char *tag;
-  Map *member_name_map;
-  Vector *member_list;
-  int member_size;
-  int member_align;
+  const char *tag;
+  StructBody *struct_body;
 } Type;
 
 typedef struct Member Member;
