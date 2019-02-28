@@ -100,7 +100,7 @@ static Type *new_type_func(Type *ret_type, Vector *func_param, bool has_varargs,
 static Type *new_type_struct(type_t ty, const char *tag, TypeQualifier tq);
 static Type *new_type_opaque_struct(type_t ty, const char *tag,
                                     TypeQualifier tq);
-static Type *new_type_enum(char *tag, TypeQualifier tq);
+static Type *new_type_enum(const char *tag, TypeQualifier tq);
 static Expr *coerce_array2ptr(Scope *scope, Expr *expr);
 static Expr *coerce_func2ptr(Scope *scope, Expr *expr);
 static Expr *new_expr(int ty, Type *val_type, Range range);
@@ -934,7 +934,7 @@ static Type *new_type_opaque_struct(type_t ty, const char *tag,
   return type;
 }
 
-static Type *new_type_enum(char *tag, TypeQualifier tq) {
+static Type *new_type_enum(const char *tag, TypeQualifier tq) {
   Type *type = new_type(TY_ENUM, tq);
   type->tag = tag;
   return type;
