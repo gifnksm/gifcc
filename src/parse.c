@@ -221,7 +221,7 @@ static void struct_initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
 static void union_initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
                               bool brace_root, Initializer **init);
 static void array_initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
-                              Initializer **init);
+                              bool brace_root, Initializer **init);
 static void initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
                         Initializer **init);
 
@@ -2731,7 +2731,7 @@ static void union_initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
 }
 
 static void array_initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
-                              Initializer **init) {
+                              bool brace_root, Initializer **init) {
   assert(type->ty == TY_ARRAY);
   if (*init == NULL) {
     *init = new_initializer(type);
@@ -2792,7 +2792,7 @@ static void array_initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
       idx = i + 1;
     }
 
-    if (token_peek(tokenizer)->ty != '[') {
+    if (token_peek(tokenizer)->ty != '[' && token_peek(tokenizer)->ty != '}') {
       int max_len = type->array_len < 0 ? INT_MAX : type->array_len;
       for (int i = idx; i < max_len; i++) {
         vec_extend((*init)->elements, i + 1);
@@ -2810,6 +2810,10 @@ static void array_initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
       if (token_peek(tokenizer)->ty != '[') {
         break;
       }
+    }
+
+    if (!brace_root || token_peek(tokenizer)->ty != '[') {
+      break;
     }
   }
 
@@ -2846,7 +2850,7 @@ static void initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
       union_initializer(tokenizer, scope, type, true, init);
       break;
     case TY_ARRAY:
-      array_initializer(tokenizer, scope, type, init);
+      array_initializer(tokenizer, scope, type, true, init);
       break;
     case TY_VOID:
     case TY_FUNC:
@@ -2866,7 +2870,7 @@ static void initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
     return;
   }
   if (type->ty == TY_ARRAY) {
-    array_initializer(tokenizer, scope, type, init);
+    array_initializer(tokenizer, scope, type, false, init);
     return;
   }
 
