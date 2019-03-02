@@ -11,6 +11,7 @@
 #define NEW(type) ((type *)calloc(1, sizeof(type)))
 
 typedef struct Vector Vector;
+typedef struct Set Set;
 typedef struct Map Map;
 typedef struct String String;
 typedef struct IntVector IntVector;
@@ -469,13 +470,13 @@ static inline int align(int n, int s) {
 
 // vector.c
 Vector *new_vector(void);
-Vector *vec_clone(Vector *vec);
+Vector *vec_clone(const Vector *vec);
 int vec_len(const Vector *vec);
-void *vec_first(Vector *vec);
-void *vec_last(Vector *vec);
-void *vec_get(Vector *vec, int n);
+void *vec_first(const Vector *vec);
+void *vec_last(const Vector *vec);
+void *vec_get(const Vector *vec, int n);
 void vec_set(Vector *vec, int n, void *val);
-void *vec_rget(Vector *vec, int n);
+void *vec_rget(const Vector *vec, int n);
 void vec_push(Vector *vec, void *elem);
 void *vec_pop(Vector *vec);
 void vec_insert(Vector *vec, int n, void *elem);
@@ -495,6 +496,15 @@ String *new_string(void);
 void str_push(String *str, char elem);
 void str_append(String *str, const char *elems);
 char *str_get_raw(String *str);
+
+// set.c
+Set *new_set(void);
+Set *set_clone(const Set *set);
+int set_size(const Set *set);
+const char *set_get_by_index(Set *set, int n);
+void set_insert(Set *set, const char *key);
+bool set_contains(const Set *set, const char *key);
+Set *set_intersection(const Set *a, const Set *b);
 
 // map.c
 Map *new_map(void);

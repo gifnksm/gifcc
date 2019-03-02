@@ -15,7 +15,7 @@ Vector *new_vector(void) {
   return vec;
 }
 
-Vector *vec_clone(Vector *vec) {
+Vector *vec_clone(const Vector *vec) {
   Vector *cloned = NEW(Vector);
   vec_reserve(cloned, vec->capacity);
   for (int i = 0; i < vec_len(vec); i++) {
@@ -26,14 +26,14 @@ Vector *vec_clone(Vector *vec) {
 
 int vec_len(const Vector *vec) { return vec->len; }
 
-void *vec_first(Vector *vec) {
+void *vec_first(const Vector *vec) {
   assert(vec->len > 0);
   return vec_get(vec, 0);
 }
 
-void *vec_last(Vector *vec) { return vec_rget(vec, 0); }
+void *vec_last(const Vector *vec) { return vec_rget(vec, 0); }
 
-void *vec_get(Vector *vec, int n) {
+void *vec_get(const Vector *vec, int n) {
   assert(vec->len > n);
   return vec->data[n];
 }
@@ -43,7 +43,7 @@ void vec_set(Vector *vec, int n, void *val) {
   vec->data[n] = val;
 }
 
-void *vec_rget(Vector *vec, int n) {
+void *vec_rget(const Vector *vec, int n) {
   assert(vec->len > n);
   return vec->data[vec->len - 1 - n];
 }
