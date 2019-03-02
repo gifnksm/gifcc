@@ -623,6 +623,18 @@ static void walk_expr(Expr *expr) {
     walk_expr(expr->binop.lhs);
     walk_expr(expr->binop.rhs);
     return;
+  case EX_MUL_ASSIGN:
+  case EX_DIV_ASSIGN:
+  case EX_MOD_ASSIGN:
+  case EX_ADD_ASSIGN:
+  case EX_SUB_ASSIGN:
+  case EX_LSHIFT_ASSIGN:
+  case EX_RSHIFT_ASSIGN:
+  case EX_AND_ASSIGN:
+  case EX_XOR_ASSIGN:
+  case EX_OR_ASSIGN:
+    assert(false);
+    return;
   case EX_COMMA:
     walk_expr(expr->binop.lhs);
     walk_expr(expr->binop.rhs);
