@@ -548,11 +548,7 @@ static Token *token_clone(Token *token) {
   Token *cloned = NEW(Token);
   *cloned = *token;
   if (token->pp_hideset != NULL) {
-    cloned->pp_hideset = new_map();
-    for (int i = 0; i < map_size(token->pp_hideset); i++) {
-      char *key = map_get_by_index(token->pp_hideset, i, NULL);
-      map_put(cloned->pp_hideset, key, key);
-    }
+    cloned->pp_hideset = set_clone(token->pp_hideset);
   }
   return cloned;
 }
@@ -943,21 +939,14 @@ static bool pp_is_token_in_hideset(Token *token) {
   if (token->pp_hideset == NULL) {
     return false;
   }
-  return map_get(token->pp_hideset, token->ident) != NULL;
+  return set_contains(token->pp_hideset, token->ident);
 }
 
-static Map *pp_hideset_intersection(Token *a, Token *b) {
-  Map *map = new_map();
+static Set *pp_hideset_intersection(Token *a, Token *b) {
   if (a->pp_hideset == NULL || b->pp_hideset == NULL) {
-    return map;
+    return new_set();
   }
-  for (int i = 0; i < map_size(a->pp_hideset); i++) {
-    char *key = map_get_by_index(a->pp_hideset, i, NULL);
-    if (map_get(b->pp_hideset, key) != NULL) {
-      map_put(map, key, key);
-    }
-  }
-  return map;
+  return set_intersection(a->pp_hideset, b->pp_hideset);
 }
 
 static Vector *pp_read_macro_func_arg(Tokenizer *tokenizer, Macro *macro,
@@ -1033,7 +1022,7 @@ static Vector *pp_read_macro_func_arg(Tokenizer *tokenizer, Macro *macro,
   return arguments;
 }
 
-static Vector *pp_hsadd(Range *expanded_from, Map *hideset, Vector *output) {
+static Vector *pp_hsadd(Range *expanded_from, Set *hideset, Vector *output) {
   for (int i = 0; i < vec_len(output); i++) {
     Token *token = token_clone(vec_get(output, i));
     vec_set(output, i, token);
@@ -1044,12 +1033,12 @@ static Vector *pp_hsadd(Range *expanded_from, Map *hideset, Vector *output) {
     }
     range->expanded_from = expanded_from;
 
-    for (int j = 0; j < map_size(hideset); j++) {
-      char *key = map_get_by_index(hideset, j, NULL);
+    for (int j = 0; j < set_size(hideset); j++) {
+      const char *key = set_get_by_index(hideset, j);
       if (token->pp_hideset == NULL) {
-        token->pp_hideset = new_map();
+        token->pp_hideset = new_set();
       }
-      map_put(token->pp_hideset, key, key);
+      set_insert(token->pp_hideset, key);
     }
   }
   return output;
@@ -1149,7 +1138,7 @@ static void pp_glue(Vector *ls, Vector *rs) {
 
 static Vector *pp_subst_macros(Tokenizer *tokenizer, Range *expanded_from,
                                Vector *input, Vector *params, Vector *arguments,
-                               Map *hideset, Vector *output) {
+                               Set *hideset, Vector *output) {
   while (vec_len(input) > 0) {
     Token *token = vec_remove(input, 0);
     if (token->ty == '#') {
@@ -1224,8 +1213,8 @@ static Vector *pp_expand_macros(Tokenizer *tokenizer, Vector *tokens,
     if (macro->kind == MACRO_OBJ || macro->kind == MACRO_OBJ_SPECIAL) {
       Range *expanded_from = NEW(Range);
       *expanded_from = ident->range;
-      Map *hideset = new_map();
-      map_put(hideset, ident->ident, ident->ident);
+      Set *hideset = new_set();
+      set_insert(hideset, ident->ident);
       Vector *replacement = macro->kind == MACRO_OBJ
                                 ? vec_clone(macro->replacement)
                                 : macro->replacement_func(tokenizer);
@@ -1252,8 +1241,8 @@ static Vector *pp_expand_macros(Tokenizer *tokenizer, Vector *tokens,
     Token *rparen = NULL;
     Vector *arguments =
         pp_read_macro_func_arg(tokenizer, macro, tokens, &rparen, reader);
-    Map *hideset = pp_hideset_intersection(ident, rparen);
-    map_put(hideset, ident->ident, ident->ident);
+    Set *hideset = pp_hideset_intersection(ident, rparen);
+    set_insert(hideset, ident->ident);
     Range *expanded_from = NEW(Range);
     *expanded_from = range_join(ident->range, rparen->range);
     Vector *exp_tokens = pp_expand_macros(

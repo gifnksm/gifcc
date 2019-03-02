@@ -195,7 +195,7 @@ typedef struct Number {
 typedef struct {
   int ty;
   Range range;
-  Map *pp_hideset;
+  Set *pp_hideset;
   const char *num;
   char *ident;
   const char *str;
