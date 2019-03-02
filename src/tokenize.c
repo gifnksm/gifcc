@@ -101,6 +101,7 @@ static Macro *new_func_macro(Vector *params, bool has_varargs,
                              Vector *replacement);
 static bool pp_directive(Tokenizer *tokenizer);
 static bool pp_cond_fullfilled(Vector *pp_cond_stack);
+static bool pp_outer_cond_fullfilled(Vector *pp_cond_stack);
 static bool pp_read_if_cond(Tokenizer *tokenizer);
 static Vector *pp_convert_defined(Map *define_map, Vector *tokens);
 static Vector *pp_expand_macros(Tokenizer *tokenizer, Vector *tokens,
@@ -627,14 +628,24 @@ static bool pp_directive(Tokenizer *tokenizer) {
   const char *directive_raw = str_get_raw(directive);
 
   if (strcmp(directive_raw, "if") == 0) {
-    bool fullfilled = pp_read_if_cond(tokenizer);
+    bool fullfilled = true;
+    if (pp_cond_fullfilled(tokenizer->pp_cond_stack)) {
+      fullfilled = pp_read_if_cond(tokenizer);
+    } else {
+      skip_to_eol(tokenizer->reader);
+    }
     reader_expect(tokenizer->reader, '\n');
     pp_if(tokenizer->pp_cond_stack, fullfilled);
     return true;
   }
 
   if (strcmp(directive_raw, "elif") == 0) {
-    bool fullfilled = pp_read_if_cond(tokenizer);
+    bool fullfilled = true;
+    if (pp_outer_cond_fullfilled(tokenizer->pp_cond_stack)) {
+      fullfilled = pp_read_if_cond(tokenizer);
+    } else {
+      skip_to_eol(tokenizer->reader);
+    }
     int end = reader_get_offset(tokenizer->reader);
     reader_expect(tokenizer->reader, '\n');
     pp_elif(tokenizer->pp_cond_stack, fullfilled,
@@ -839,6 +850,14 @@ static bool pp_cond_fullfilled(Vector *pp_cond_stack) {
   if (vec_len(pp_cond_stack) > 0) {
     Cond *cond = vec_last(pp_cond_stack);
     return cond->fullfilled;
+  }
+  return true;
+}
+
+static bool pp_outer_cond_fullfilled(Vector *pp_cond_stack) {
+  if (vec_len(pp_cond_stack) > 1) {
+    Cond *outer_cond = vec_rget(pp_cond_stack, 1);
+    return outer_cond->fullfilled;
   }
   return true;
 }
@@ -1256,25 +1275,13 @@ static Vector *pp_expand_macros(Tokenizer *tokenizer, Vector *tokens,
 }
 
 static void pp_if(Vector *pp_cond_stack, bool fullfilled) {
-  bool current_cond_fullfilled = true;
-  if (vec_len(pp_cond_stack) > 0) {
-    Cond *current_cond = vec_last(pp_cond_stack);
-    current_cond_fullfilled = current_cond->fullfilled;
-  }
-
   Cond *cond = NEW(Cond);
-  cond->fullfilled = current_cond_fullfilled && fullfilled;
+  cond->fullfilled = pp_cond_fullfilled(pp_cond_stack) && fullfilled;
   cond->once_fullfilled = fullfilled;
   vec_push(pp_cond_stack, cond);
 }
 
 static void pp_elif(Vector *pp_cond_stack, bool fullfilled, Range range) {
-  bool outer_cond_fullfilled = true;
-  if (vec_len(pp_cond_stack) > 1) {
-    Cond *outer_cond = vec_rget(pp_cond_stack, 1);
-    outer_cond_fullfilled = outer_cond->fullfilled;
-  }
-
   if (vec_len(pp_cond_stack) <= 0) {
     range_error(range, "#if, #ifdef, #ifndefがありません");
   }
@@ -1282,22 +1289,17 @@ static void pp_elif(Vector *pp_cond_stack, bool fullfilled, Range range) {
   if (cond->once_fullfilled) {
     fullfilled = false;
   }
-  cond->fullfilled = outer_cond_fullfilled && fullfilled;
+  cond->fullfilled = pp_outer_cond_fullfilled(pp_cond_stack) && fullfilled;
   cond->once_fullfilled |= fullfilled;
 }
 
 static void pp_else(Vector *pp_cond_stack, Range range) {
-  bool outer_cond_fullfilled = true;
-  if (vec_len(pp_cond_stack) > 1) {
-    Cond *outer_cond = vec_rget(pp_cond_stack, 1);
-    outer_cond_fullfilled = outer_cond->fullfilled;
-  }
   if (vec_len(pp_cond_stack) <= 0) {
     range_error(range, "#if, #ifdef, #ifndefがありません");
   }
   Cond *cond = vec_last(pp_cond_stack);
   bool fullfilled = !cond->once_fullfilled;
-  cond->fullfilled = outer_cond_fullfilled && fullfilled;
+  cond->fullfilled = pp_outer_cond_fullfilled(pp_cond_stack) && fullfilled;
   cond->once_fullfilled |= fullfilled;
 }
 
