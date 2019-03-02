@@ -51,6 +51,7 @@ typedef struct VarDef {
 } VarDef;
 
 static const StorageClassSpecifier EMPTY_STORAGE_CLASS_SPECIFIER = {};
+static const FunctionSpecifier EMPTY_FUNCTION_SPECIFIER = {};
 
 static const TypeQualifier EMPTY_TYPE_QUALIFIER = {};
 static const TypeQualifier CONST_TYPE_QUALIFIER = {.is_const = true};
@@ -192,7 +193,8 @@ static Stmt *compound_statement(Tokenizer *tokenizer, Scope *scope);
 // top-level
 static Function *function_definition(Tokenizer *tokenizer, Scope *global_scope,
                                      Type *type, char *name,
-                                     StorageClassSpecifier scs, Range start);
+                                     StorageClassSpecifier scs,
+                                     FunctionSpecifier fs, Range start);
 static GlobalVar *new_global_variable(Type *type, char *name, Range range,
                                       StorageClassSpecifier scs);
 static TranslationUnit *translation_unit(Tokenizer *tokenizer);
@@ -734,6 +736,36 @@ static bool consume_storage_class_specifier(Tokenizer *tokenizer,
     }
     if ((token = token_consume(tokenizer, TK_STATIC)) != NULL) {
       scs->is_static = true;
+      consumed = true;
+      continue;
+    }
+    break;
+  }
+  return consumed;
+}
+
+static bool token_is_function_specifier(Token *token) {
+  switch (token->ty) {
+  case TK_INLINE:
+  case TK_NORETURN:
+    return true;
+  default:
+    return false;
+  }
+}
+
+static bool consume_function_specifier(Tokenizer *tokenizer,
+                                       FunctionSpecifier *fs) {
+  bool consumed = false;
+  while (true) {
+    Token *token;
+    if ((token = token_consume(tokenizer, TK_INLINE)) != NULL) {
+      fs->is_inline = true;
+      consumed = true;
+      continue;
+    }
+    if ((token = token_consume(tokenizer, TK_NORETURN)) != NULL) {
+      fs->is_noreturn = true;
       consumed = true;
       continue;
     }
@@ -1875,9 +1907,13 @@ Expr *constant_expression(Tokenizer *tokenizer, Scope *scope) {
 static Vector *declaration(Tokenizer *tokenizer, Scope *scope) {
   Vector *def_list = new_vector();
   StorageClassSpecifier scs = EMPTY_STORAGE_CLASS_SPECIFIER;
+  FunctionSpecifier fs = EMPTY_FUNCTION_SPECIFIER;
 
   while (true) {
     if (consume_storage_class_specifier(tokenizer, &scs)) {
+      continue;
+    }
+    if (consume_function_specifier(tokenizer, &fs)) {
       continue;
     }
     break;
@@ -1902,7 +1938,7 @@ static Vector *declaration(Tokenizer *tokenizer, Scope *scope) {
       VarDef *def = register_func(scope, name, type);
       if (token_peek(tokenizer)->ty == '{') {
         def->func = function_definition(tokenizer, scope, type, name->ident,
-                                        scs, range);
+                                        scs, fs, range);
         vec_push(def_list, def);
         return def_list;
       }
@@ -2743,6 +2779,7 @@ static Stmt *compound_statement(Tokenizer *tokenizer, Scope *scope) {
     if ((token->ty != TK_IDENT || token_peek_ahead(tokenizer, 1)->ty != ':') &&
         (token_is_typename(scope, token) ||
          token_is_storage_class_specifier(token) ||
+         token_is_function_specifier(token) ||
          token_is_type_qualifier(token))) {
 
       Vector *def_list = declaration(tokenizer, scope);
@@ -2781,7 +2818,8 @@ static Stmt *compound_statement(Tokenizer *tokenizer, Scope *scope) {
 
 static Function *function_definition(Tokenizer *tokenizer, Scope *global_scope,
                                      Type *type, char *name,
-                                     StorageClassSpecifier scs, Range start) {
+                                     StorageClassSpecifier scs,
+                                     FunctionSpecifier fs, Range start) {
   FuncCtxt *fcx = new_func_ctxt(name, type);
   Scope *scope = new_func_scope(global_scope, fcx);
   if (type->func_param != NULL) {
@@ -2806,6 +2844,7 @@ static Function *function_definition(Tokenizer *tokenizer, Scope *global_scope,
   func->name = name;
   func->type = type;
   func->storage_class = scs;
+  func->func = fs;
   func->range = range_join(start, body->range);
   func->stack_size = stack_size;
   func->label_map = fcx->label_map;

@@ -71,6 +71,8 @@ static const LongToken LONG_IDENT_TOKENS[] = {
     {"const", TK_CONST},
     {"restrict", TK_RESTRICT},
     {"volatile", TK_VOLATILE},
+    {"inline", TK_INLINE},
+    {"_Noreturn", TK_NORETURN},
     {NULL, '\0'},
 };
 static const LongToken LONG_PUNCT_TOKENS[] = {

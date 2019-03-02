@@ -74,6 +74,8 @@ enum {
   TK_CONST,         // `const`
   TK_RESTRICT,      // `restrict`
   TK_VOLATILE,      // `volatile`
+  TK_INLINE,        // `inline`
+  TK_NORETURN,      // `_Noreturn`
   TK_EOF,           // 入力の終わりを表すトークン
 };
 
@@ -278,6 +280,11 @@ typedef struct StorageClassSpecifier {
   bool is_static;
 } StorageClassSpecifier;
 
+typedef struct FunctionSpecifier {
+  bool is_inline;
+  bool is_noreturn;
+} FunctionSpecifier;
+
 typedef struct StructBody {
   Map *member_name_map;
   Vector *member_list;
@@ -426,6 +433,7 @@ typedef struct Function {
   Type *type;
   Range range;
   StorageClassSpecifier storage_class;
+  FunctionSpecifier func;
   int stack_size;
   Map *label_map;
   Stmt *body;
