@@ -7,9 +7,14 @@ OBJS=$(patsubst src/%.c,$(OUTDIR)/%.o,$(SRCS))
 DEPS=$(patsubst src/%.c,$(OUTDIR)/%.d,$(SRCS))
 
 ifdef ASAN
-CFLAGS  += -fsanitize=address
-LDFLAGS += -fsanitize=address
-export ASAN_OPTIONS=detect_leaks=0
+  CFLAGS  += -fsanitize=address
+  LDFLAGS += -fsanitize=address
+  export ASAN_OPTIONS=detect_leaks=0
+endif
+
+ifdef COVERAGE
+  CFLAGS  += --coverage
+  LDFLAGS += --coverage
 endif
 
 all: $(OUTDIR)/gifcc
@@ -50,6 +55,11 @@ format:
 
 clang-tidy:
 	clang-tidy -fix -fix-errors $(SRCS) -- $(CFLAGS)
+.PHONY: clang-tidy
+
+lcov:
+	lcov --capture --directory . --output-file target/coverage.info
+	genhtml target/coverage.info --output-directory target/html
 
 $(OUTDIR)/%.o: src/%.c | $(OUTDIR)/
 	$(CC) $(CFLAGS) -c -o $@ $<
