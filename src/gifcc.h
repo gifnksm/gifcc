@@ -467,8 +467,7 @@ static inline int align(int n, int s) {
   return (s != 0) ? ((n + (s - 1)) / s) * s : 0;
 }
 
-// util.c
-// Vector
+// vector.c
 Vector *new_vector(void);
 Vector *vec_clone(Vector *vec);
 int vec_len(const Vector *vec);
@@ -484,7 +483,20 @@ void *vec_remove(Vector *vec, int n);
 void vec_append(Vector *dst, Vector *src);
 void vec_extend(Vector *vec, int len);
 void vec_reserve(Vector *vec, int len);
-// Map
+
+// int_vector.c
+IntVector *new_int_vector(void);
+int int_vec_len(const IntVector *vec);
+int int_vec_get(const IntVector *vec, int n);
+void int_vec_push(IntVector *vec, int elem);
+
+// string.c
+String *new_string(void);
+void str_push(String *str, char elem);
+void str_append(String *str, const char *elems);
+char *str_get_raw(String *str);
+
+// map.c
 Map *new_map(void);
 int map_size(const Map *map);
 void *map_get_by_index(Map *map, int n, char **key);
@@ -492,17 +504,8 @@ void map_set_by_index(Map *map, int n, char *key, void *val);
 void map_put(Map *map, char *key, void *val);
 void *map_get(Map *map, char *key);
 bool map_remove(Map *map, char *key);
-// String
-String *new_string(void);
-void str_push(String *str, char elem);
-void str_append(String *str, const char *elems);
-char *str_get_raw(String *str);
-// IntVector
-IntVector *new_int_vector(void);
-int int_vec_len(const IntVector *vec);
-int int_vec_get(const IntVector *vec, int n);
-void int_vec_push(IntVector *vec, int elem);
-// Misc
+
+// util.c
 void print_string_literal(const char *str);
 int __attribute__((format(printf, 2, 3)))
 alloc_printf(char **strp, const char *fmt, ...);
