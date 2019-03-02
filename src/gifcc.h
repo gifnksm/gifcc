@@ -272,6 +272,12 @@ typedef struct TypeQualifier {
   bool is_volatile;
 } TypeQualifier;
 
+typedef struct StorageClassSpecifier {
+  bool is_typedef;
+  bool is_extern;
+  bool is_static;
+} StorageClassSpecifier;
+
 typedef struct StructBody {
   Map *member_name_map;
   Vector *member_list;
@@ -311,7 +317,7 @@ typedef struct GlobalVar {
   char *name;
   Type *type;
   Range range;
-  bool is_static;
+  StorageClassSpecifier storage_class;
   Initializer *init;
 } GlobalVar;
 
@@ -419,7 +425,7 @@ typedef struct Function {
   char *name;
   Type *type;
   Range range;
-  bool is_static;
+  StorageClassSpecifier storage_class;
   int stack_size;
   Map *label_map;
   Stmt *body;
