@@ -227,8 +227,7 @@ static void initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
 
 // statement
 static Stmt *statement(Tokenizer *tokenizer, Scope *scope);
-static void gen_init(Scope *scope, Vector *stmts, Initializer *init,
-                     Expr *dest);
+static void gen_init(Scope *scope, Expr **expr, Initializer *init, Expr *dest);
 static Stmt *compound_statement(Tokenizer *tokenizer, Scope *scope);
 
 // top-level
@@ -2957,24 +2956,47 @@ static Stmt *statement(Tokenizer *tokenizer, Scope *scope) {
     return new_stmt_do_while(cond, body, range_join(start->range, end->range));
   }
   case TK_FOR: {
+    Scope *inner = new_inner_scope(scope);
     token_succ(tokenizer);
     Expr *init = NULL;
     Expr *cond = NULL;
     Expr *inc = NULL;
     token_expect(tokenizer, '(');
-    if (token_peek(tokenizer)->ty != ';') {
-      init = expression(tokenizer, scope);
+    if (!token_consume(tokenizer, ';')) {
+      if (token_is_declaration_specifiers(inner, token_peek(tokenizer))) {
+        Vector *def_list = declaration(tokenizer, inner);
+        for (int i = 0; i < vec_len(def_list); i++) {
+          VarDef *def = vec_get(def_list, i);
+          switch (def->type) {
+          case DEF_FUNC:
+            range_error(def->name->range, "関数内で関数は定義できません");
+            break;
+          case DEF_GLOBAL_VAR:
+            range_error(def->name->range, "ローカル変数ではありません");
+          case DEF_STACK_VAR: {
+            if (def->init == NULL) {
+              continue;
+            }
+            Expr *dest =
+                new_expr_ident(inner, def->name->ident, def->name->range);
+            gen_init(inner, &init, def->init, dest);
+          }
+          }
+        }
+      } else {
+        init = expression(tokenizer, inner);
+        token_expect(tokenizer, ';');
+      }
     }
-    token_expect(tokenizer, ';');
-    if (token_peek(tokenizer)->ty != ';') {
-      cond = expression(tokenizer, scope);
+    if (!token_consume(tokenizer, ';')) {
+      cond = expression(tokenizer, inner);
+      token_expect(tokenizer, ';');
     }
-    token_expect(tokenizer, ';');
-    if (token_peek(tokenizer)->ty != ')') {
-      inc = expression(tokenizer, scope);
+    if (!token_consume(tokenizer, ')')) {
+      inc = expression(tokenizer, inner);
+      token_expect(tokenizer, ')');
     }
-    token_expect(tokenizer, ')');
-    Stmt *body = statement(tokenizer, scope);
+    Stmt *body = statement(tokenizer, inner);
     return new_stmt_for(init, cond, inc, body,
                         range_join(start->range, body->range));
   }
@@ -3030,14 +3052,17 @@ static Stmt *statement(Tokenizer *tokenizer, Scope *scope) {
   }
 }
 
-static void gen_init(Scope *scope, Vector *stmts, Initializer *init,
-                     Expr *dest) {
+static void gen_init(Scope *scope, Expr **expr, Initializer *init, Expr *dest) {
   if (init == NULL) {
-    Expr *expr = new_expr_binop(scope, EX_ASSIGN, dest,
-                                new_expr_num(new_number_int(0), dest->range),
-                                dest->range);
-    Stmt *s = new_stmt_expr(expr, expr->range);
-    vec_push(stmts, s);
+    Expr *assign = new_expr_binop(scope, EX_ASSIGN, dest,
+                                  new_expr_num(new_number_int(0), dest->range),
+                                  dest->range);
+    if (*expr != NULL) {
+      *expr = new_expr_binop(scope, EX_COMMA, *expr, assign,
+                             range_join((*expr)->range, assign->range));
+    } else {
+      *expr = assign;
+    }
     return;
   }
 
@@ -3047,7 +3072,7 @@ static void gen_init(Scope *scope, Vector *stmts, Initializer *init,
       Initializer *meminit = map_get_by_index(init->members, i, &name);
       Expr *mem =
           name != NULL ? new_expr_dot(scope, dest, name, dest->range) : dest;
-      gen_init(scope, stmts, meminit, mem);
+      gen_init(scope, expr, meminit, mem);
     }
     return;
   }
@@ -3057,16 +3082,20 @@ static void gen_init(Scope *scope, Vector *stmts, Initializer *init,
       Expr *index = new_expr_num(new_number_int(i), dest->range);
       Initializer *eleminit = vec_get(init->elements, i);
       Expr *mem = new_expr_index(scope, dest, index, dest->range);
-      gen_init(scope, stmts, eleminit, mem);
+      gen_init(scope, expr, eleminit, mem);
     }
     return;
   }
 
   if (init->expr != NULL) {
-    Expr *expr = new_expr_binop(scope, EX_ASSIGN, dest, init->expr,
-                                range_join(dest->range, init->expr->range));
-    Stmt *s = new_stmt_expr(expr, expr->range);
-    vec_push(stmts, s);
+    Expr *assign = new_expr_binop(scope, EX_ASSIGN, dest, init->expr,
+                                  range_join(dest->range, init->expr->range));
+    if (*expr != NULL) {
+      *expr = new_expr_binop(scope, EX_COMMA, *expr, assign,
+                             range_join((*expr)->range, assign->range));
+    } else {
+      *expr = assign;
+    }
     return;
   }
 
@@ -3094,14 +3123,17 @@ static Stmt *compound_statement(Tokenizer *tokenizer, Scope *scope) {
           vec_push(scope->global_ctxt->gvar_list, def->global_var);
           break;
         case DEF_STACK_VAR: {
-          Initializer *init = def->init;
-          if (init == NULL) {
+          if (def->init == NULL) {
             continue;
           }
 
           Expr *dest =
               new_expr_ident(scope, def->name->ident, def->name->range);
-          gen_init(scope, stmts, init, dest);
+          Expr *expr = NULL;
+          gen_init(scope, &expr, def->init, dest);
+          if (expr != NULL) {
+            vec_push(stmts, new_stmt_expr(expr, expr->range));
+          }
           break;
         }
         }

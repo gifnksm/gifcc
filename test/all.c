@@ -532,8 +532,8 @@ static int test09_01(int n) {
   abort();
 }
 static void test09_02(void) {
-  int c = 0, i;
-  for (i = 0; i < 5; i++) {
+  int c = 0;
+  for (int i = 0; i < 5; i++) {
     switch (i) {
     case 3:
       c += 1;
@@ -825,17 +825,17 @@ static void test20(void) {
 }
 
 static void test21(void) {
-  int a[3][5], i, j;
+  int a[3][5];
 
-  for (i = 0; i < 3; i++) {
-    for (j = 0; j < 5; j++) {
+  for (int i = 0; i < 3; i++) {
+    for (int j = 0; j < 5; j++) {
       a[i][j] = i * j;
     }
   }
 
-  for (i = 0; i < 3; i++) {
+  for (int i = 0; i < 3; i++) {
     printf("%d:", i);
-    for (j = 0; j < 5; j++) {
+    for (int j = 0; j < 5; j++) {
       printf(" %d", a[i][j]);
       printf(" %p", &a[i][j]);
       printf(" (%zu)", &a[i][j] - &a[0][0]);
@@ -843,8 +843,8 @@ static void test21(void) {
     printf("\n");
   }
 
-  for (i = 0; i < 3; i++) {
-    for (j = 0; j < 5; j++) {
+  for (int i = 0; i < 3; i++) {
+    for (int j = 0; j < 5; j++) {
       CHECK_INT(10000 * i + 1000 * j + i * j, 10000 * i + 1000 * j + a[i][j]);
     }
   }
@@ -2098,8 +2098,7 @@ static void test60(void) { CHECK_INT(1, 1 ? 1 : 0l); }
 static void test61(void) {
   int a[3 + 5] = {};
   CHECK_INT(8, sizeof(a) / sizeof(a[0]));
-  int i;
-  for (i = 0; i < sizeof(a) / sizeof(a[0]); i++) {
+  for (int i = 0; i < sizeof(a) / sizeof(a[0]); i++) {
     CHECK_INT(0, a[i]);
   }
 }
@@ -2114,8 +2113,7 @@ static void test62(void) {
 static int test63_func(int a[100]) {
   CHECK_INT(8, sizeof(a));
   int s = 0;
-  int i;
-  for (i = 0; i < 100; i++) {
+  for (int i = 0; i < 100; i++) {
     s += a[i];
   }
   return s;
@@ -2123,8 +2121,7 @@ static int test63_func(int a[100]) {
 
 static void test63(void) {
   int a[100];
-  int i;
-  for (i = 0; i < 100; i++) {
+  for (int i = 0; i < 100; i++) {
     a[i] = i;
   }
   CHECK_INT(4950, test63_func(a));
