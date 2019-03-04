@@ -177,12 +177,11 @@ static int get_incdec_size(Expr *expr) {
 }
 
 static void gen_expr(Expr *expr) {
-  const Reg *r = get_int_reg(expr->val_type, expr->range);
-
   if (expr->ty == EX_NUM) {
     if (get_val_size(expr->val_type, expr->range) < 4) {
       printf("  push %s\n", num2str(expr->num, expr->range));
     } else {
+      const Reg *r = get_int_reg(expr->val_type, expr->range);
       printf("  mov %s, %s\n", r->rax, num2str(expr->num, expr->range));
       printf("  push rax\n");
     }
@@ -191,16 +190,77 @@ static void gen_expr(Expr *expr) {
 
   if (expr->ty == EX_STACK_VAR) {
     StackVar *var = expr->stack_var;
-    assert(var != NULL);
-    printf("  mov %s, [rbp - %d]\n", r->rax,
-           align(func_ctxt->stack_size, 16) - var->offset);
-    printf("  push rax\n");
+    int size = get_val_size(expr->val_type, expr->range);
+    printf("  sub rsp, %d\n", align(size, 8));
+
+    int src_offset = align(func_ctxt->stack_size, 16) - var->offset;
+    int copy_size = 0;
+    while (size - copy_size > 0) {
+      switch (size - copy_size) {
+      case 1:
+        printf("  mov %s, [rbp - %d]\n", Reg1.rax, src_offset - copy_size);
+        printf("  mov [rsp + %d], %s\n", copy_size, Reg8.rax);
+        copy_size += 1;
+        break;
+      case 2:
+      case 3:
+        printf("  mov %s, [rbp - %d]\n", Reg2.rax, src_offset - copy_size);
+        printf("  mov [rsp + %d], %s\n", copy_size, Reg8.rax);
+        copy_size += 2;
+        break;
+      case 4:
+      case 5:
+      case 6:
+      case 7:
+        printf("  mov %s, [rbp - %d]\n", Reg4.rax, src_offset - copy_size);
+        printf("  mov [rsp + %d], %s\n", copy_size, Reg8.rax);
+        copy_size += 4;
+        break;
+      default:
+        printf("  mov %s, [rbp - %d]\n", Reg8.rax, src_offset - copy_size);
+        printf("  mov [rsp + %d], %s\n", copy_size, Reg8.rax);
+        copy_size += 8;
+        break;
+      }
+    }
     return;
   }
 
   if (expr->ty == EX_GLOBAL_VAR) {
-    printf("  mov %s, %s[rip]\n", r->rax, expr->global_var.name);
-    printf("  push rax\n");
+    const char *name = expr->global_var.name;
+    int size = get_val_size(expr->val_type, expr->range);
+    printf("  sub rsp, %d\n", align(size, 8));
+
+    int copy_size = 0;
+
+    while (size - copy_size > 0) {
+      switch (size - copy_size) {
+      case 1:
+        printf("  mov %s, %s[rip + %d]\n", Reg1.rax, name, copy_size);
+        printf("  mov [rsp + %d], %s\n", copy_size, Reg8.rax);
+        copy_size += 1;
+        break;
+      case 2:
+      case 3:
+        printf("  mov %s, %s[rip + %d]\n", Reg2.rax, name, copy_size);
+        printf("  mov [rsp + %d], %s\n", copy_size, Reg8.rax);
+        copy_size += 2;
+        break;
+      case 4:
+      case 5:
+      case 6:
+      case 7:
+        printf("  mov %s, %s[rip + %d]\n", Reg4.rax, name, copy_size);
+        printf("  mov [rsp + %d], %s\n", copy_size, Reg8.rax);
+        copy_size += 4;
+        break;
+      default:
+        printf("  mov %s, %s[rip + %d]\n", Reg8.rax, name, copy_size);
+        printf("  mov [rsp + %d], %s\n", copy_size, Reg8.rax);
+        copy_size += 8;
+        break;
+      }
+    }
     return;
   }
 
@@ -280,16 +340,55 @@ static void gen_expr(Expr *expr) {
   }
 
   if (expr->ty == EX_ASSIGN) {
-    gen_lval(expr->binop.lhs);
     gen_expr(expr->binop.rhs);
-    printf("  pop rdi\n");
+    gen_lval(expr->binop.lhs);
     printf("  pop rax\n");
-    printf("  mov [rax], %s\n", r->rdi);
-    printf("  push rdi\n");
+
+    int size = get_val_size(expr->val_type, expr->range);
+    int copy_size = 0;
+    while (size - copy_size > 0) {
+      switch (size - copy_size) {
+      case 1:
+        printf("  mov %s, [rsp + %d]\n", Reg1.rdi, copy_size);
+        printf("  mov [rax + %d], %s\n", copy_size, Reg1.rdi);
+        copy_size += 1;
+        break;
+      case 2:
+      case 3:
+        printf("  mov %s, [rsp + %d]\n", Reg2.rdi, copy_size);
+        printf("  mov [rax + %d], %s\n", copy_size, Reg2.rdi);
+        copy_size += 2;
+        break;
+      case 4:
+      case 5:
+      case 6:
+      case 7:
+        printf("  mov %s, [rsp + %d]\n", Reg4.rdi, copy_size);
+        printf("  mov [rax + %d], %s\n", copy_size, Reg4.rdi);
+        copy_size += 4;
+        break;
+      default:
+        printf("  mov %s, [rsp + %d]\n", Reg8.rdi, copy_size);
+        printf("  mov [rax + %d], %s\n", copy_size, Reg8.rdi);
+        copy_size += 8;
+        break;
+      }
+    }
+    return;
+  }
+
+  if (expr->ty == EX_COMMA) {
+    Expr *lhs = expr->binop.lhs;
+    Expr *rhs = expr->binop.rhs;
+    gen_expr(lhs);
+    int lhs_size = get_val_size(lhs->val_type, lhs->range);
+    printf("  add rsp, %d\n", align(lhs_size, 8));
+    gen_expr(rhs);
     return;
   }
 
   if (expr->ty == EX_LOG_AND) {
+    const Reg *r = get_int_reg(expr->val_type, expr->range);
     char *false_label = make_label("logand.false");
     char *end_label = make_label("logand.end");
     gen_expr(expr->binop.lhs);
@@ -309,6 +408,7 @@ static void gen_expr(Expr *expr) {
   }
 
   if (expr->ty == EX_LOG_OR) {
+    const Reg *r = get_int_reg(expr->val_type, expr->range);
     char *true_label = make_label("logor.true");
     char *end_label = make_label("logor.end");
     gen_expr(expr->binop.lhs);
@@ -328,6 +428,8 @@ static void gen_expr(Expr *expr) {
   }
 
   if (expr->ty == EX_COND) {
+    const Reg *r =
+        get_int_reg(expr->cond.cond->val_type, expr->cond.cond->range);
     char *else_label = make_label("cond.else");
     char *end_label = make_label("cond.end");
     gen_expr(expr->cond.cond);
@@ -349,10 +451,42 @@ static void gen_expr(Expr *expr) {
   }
   if (expr->ty == EX_INDIRECT) {
     // 単項の `*`
-    gen_expr(expr->unop.operand);
+    Expr *operand = expr->unop.operand;
+    gen_expr(operand);
     printf("  pop rax\n");
-    printf("  mov %s, [rax]\n", r->rax);
-    printf("  push rax\n");
+
+    int size = get_val_size(expr->val_type, expr->range);
+    printf("  sub rsp, %d\n", align(size, 8));
+
+    int copy_size = 0;
+    while (size - copy_size > 0) {
+      switch (size - copy_size) {
+      case 1:
+        printf("  mov %s, [rax + %d]\n", Reg1.rdi, copy_size);
+        printf("  mov [rsp + %d], %s\n", copy_size, Reg8.rdi);
+        copy_size += 1;
+        break;
+      case 2:
+      case 3:
+        printf("  mov %s, [rax + %d]\n", Reg2.rdi, copy_size);
+        printf("  mov [rsp + %d], %s\n", copy_size, Reg8.rdi);
+        copy_size += 2;
+        break;
+      case 4:
+      case 5:
+      case 6:
+      case 7:
+        printf("  mov %s, [rax + %d]\n", Reg4.rdi, copy_size);
+        printf("  mov [rsp + %d], %s\n", copy_size, Reg8.rdi);
+        copy_size += 4;
+        break;
+      default:
+        printf("  mov %s, [rax + %d]\n", Reg8.rdi, copy_size);
+        printf("  mov [rsp + %d], %s\n", copy_size, Reg8.rdi);
+        copy_size += 8;
+        break;
+      }
+    }
     return;
   }
   if (expr->ty == EX_PLUS) {
@@ -362,6 +496,7 @@ static void gen_expr(Expr *expr) {
   }
   if (expr->ty == EX_MINUS) {
     // 単項の `-`
+    const Reg *r = get_int_reg(expr->val_type, expr->range);
     gen_expr(expr->unop.operand);
     printf("  pop rax\n");
     printf("  neg %s\n", r->rax);
@@ -370,6 +505,7 @@ static void gen_expr(Expr *expr) {
   }
   if (expr->ty == EX_NOT) {
     // `~`
+    const Reg *r = get_int_reg(expr->val_type, expr->range);
     gen_expr(expr->unop.operand);
     printf("  pop rax\n");
     printf("  not %s\n", r->rax);
@@ -381,6 +517,7 @@ static void gen_expr(Expr *expr) {
   }
 
   if (expr->ty == EX_CAST) {
+    const Reg *r = get_int_reg(expr->val_type, expr->range);
     Expr *operand = expr->unop.operand;
     gen_expr(operand);
     const Reg *from = get_int_reg(operand->val_type, operand->range);
@@ -403,6 +540,7 @@ static void gen_expr(Expr *expr) {
   }
   if (expr->ty == EX_PRE_INC) {
     // 前置の `++`
+    const Reg *r = get_int_reg(expr->val_type, expr->range);
     gen_lval(expr->unop.operand);
     printf("  pop rax\n");
     printf("  mov %s, [rax]\n", r->rdi);
@@ -413,6 +551,7 @@ static void gen_expr(Expr *expr) {
   }
   if (expr->ty == EX_PRE_DEC) {
     // 前置の `--`
+    const Reg *r = get_int_reg(expr->val_type, expr->range);
     gen_lval(expr->unop.operand);
     printf("  pop rax\n");
     printf("  mov %s, [rax]\n", r->rdi);
@@ -423,6 +562,7 @@ static void gen_expr(Expr *expr) {
   }
   if (expr->ty == EX_POST_INC) {
     // 後置の `++`
+    const Reg *r = get_int_reg(expr->val_type, expr->range);
     gen_lval(expr->unop.operand);
     printf("  pop rax\n");
     printf("  mov %s, [rax]\n", r->rdi);
@@ -433,6 +573,7 @@ static void gen_expr(Expr *expr) {
   }
   if (expr->ty == EX_POST_DEC) {
     // 後置の `--`
+    const Reg *r = get_int_reg(expr->val_type, expr->range);
     gen_lval(expr->unop.operand);
     printf("  pop rax\n");
     printf("  mov %s, [rax]\n", r->rdi);
@@ -443,6 +584,7 @@ static void gen_expr(Expr *expr) {
   }
 
   // 二項演算子
+  const Reg *r = get_int_reg(expr->val_type, expr->range);
   gen_expr(expr->binop.lhs);
   gen_expr(expr->binop.rhs);
 
@@ -540,9 +682,6 @@ static void gen_expr(Expr *expr) {
   case EX_OR:
     printf("  or %s, %s\n", r->rax, r->rdi);
     break;
-  case EX_COMMA:
-    printf("  mov %s, %s\n", r->rax, r->rdi);
-    break;
   default:
     assert(false);
   }
@@ -560,7 +699,8 @@ static void gen_stmt(Stmt *stmt) {
 
     // 式の評価結果としてスタックに一つの値が残っている
     // はずなので、スタックが溢れないようにポップしておく
-    printf("  pop rax\n");
+    int size = get_val_size(stmt->expr->val_type, stmt->expr->range);
+    printf("  add rsp, %d\n", align(size, 8));
     return;
   }
   case ST_COMPOUND: {

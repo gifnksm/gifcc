@@ -2193,19 +2193,47 @@ static void test69(void) {
   CHECK_INT(16, sizeof(s2));
 }
 
-static void test70(void) {
-  typedef struct {
-    int a[79];
-    struct X {
-      int x;
-      int y;
-    } x;
-  } S;
+typedef struct Test70_S {
+  int a[79];
+  struct X {
+    int x;
+    int y;
+  } x;
 
+} Test70_S;
+static Test70_S test70_s;
+static void test70(void) {
+  typedef Test70_S S;
   S a = {};
+  S b = {};
   int len = sizeof(a.a) / sizeof(a.a[0]);
   for (int i = 0; i < len; i++) {
     CHECK_INT(0, a.a[i]);
+    a.a[i] = i;
+  }
+  for (int i = 0; i < len; i++) {
+    CHECK_INT(0, test70_s.a[i]);
+    test70_s.a[i] = i * i;
+  }
+  (a, b);
+  b = a;
+  for (int i = 0; i < len; i++) {
+    CHECK_INT(a.a[i], b.a[i]);
+  }
+  b = test70_s;
+  for (int i = 0; i < len; i++) {
+    CHECK_INT(test70_s.a[i], b.a[i]);
+  }
+  b = (test70_s.a[1] < a.a[1]) ? test70_s : a;
+  for (int i = 0; i < len; i++) {
+    CHECK_INT(a.a[i], b.a[i]);
+  }
+
+  S *x = &b;
+  S *y = &test70_s;
+  *x = *y;
+  for (int i = 0; i < len; i++) {
+    CHECK_INT(test70_s.a[i], b.a[i]);
   }
 }
 

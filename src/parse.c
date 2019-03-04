@@ -1676,8 +1676,6 @@ static Expr *new_expr_binop(Scope *scope, int op, Expr *lhs, Expr *rhs,
     return new_expr_binop(scope, EX_ASSIGN, lhs,
                           new_expr_binop(scope, EX_OR, lhs, rhs, range), range);
   case EX_COMMA:
-    lhs = new_expr_cast(scope, new_type(TY_VOID, EMPTY_TYPE_QUALIFIER), lhs,
-                        lhs->range);
     val_type = rhs->val_type;
     break;
   default:

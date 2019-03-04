@@ -320,7 +320,7 @@ static void dump_expr(Expr *expr, int level) {
     dump_unop_expr(expr, "[&]", level);
     return;
   case EX_INDIRECT:
-    dump_unop_expr(expr, "[&]", level);
+    dump_unop_expr(expr, "[*]", level);
     return;
   case EX_PLUS:
     dump_unop_expr(expr, "[+]", level);
