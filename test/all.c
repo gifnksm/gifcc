@@ -2193,6 +2193,22 @@ static void test69(void) {
   CHECK_INT(16, sizeof(s2));
 }
 
+static void test70(void) {
+  typedef struct {
+    int a[79];
+    struct X {
+      int x;
+      int y;
+    } x;
+  } S;
+
+  S a = {};
+  int len = sizeof(a.a) / sizeof(a.a[0]);
+  for (int i = 0; i < len; i++) {
+    CHECK_INT(0, a.a[i]);
+  }
+}
+
 static int num_check = 0;
 static void check_int(const char *file, int line, int a, int b) {
   if (a != b) {
@@ -2224,7 +2240,8 @@ int main(void) {
       TEST(test51), TEST(test52), TEST(test53), TEST(test54), TEST(test55),
       TEST(test56), TEST(test57), TEST(test58), TEST(test59), TEST(test60),
       TEST(test61), TEST(test62), TEST(test63), TEST(test64), TEST(test65),
-      TEST(test66), TEST(test67), TEST(test68), TEST(test69), {NULL, NULL},
+      TEST(test66), TEST(test67), TEST(test68), TEST(test69), TEST(test70),
+      {NULL, NULL},
   };
   int i = 0;
   for (i = 0; test_list[i].name != NULL; i++) {

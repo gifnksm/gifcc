@@ -227,7 +227,8 @@ static void initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
 
 // statement
 static Stmt *statement(Tokenizer *tokenizer, Scope *scope);
-static void gen_init(Scope *scope, Expr **expr, Initializer *init, Expr *dest);
+static void gen_init(Scope *scope, Expr **expr, Initializer *init, Expr *dest,
+                     Type *type);
 static Stmt *compound_statement(Tokenizer *tokenizer, Scope *scope);
 
 // top-level
@@ -2979,7 +2980,7 @@ static Stmt *statement(Tokenizer *tokenizer, Scope *scope) {
             }
             Expr *dest =
                 new_expr_ident(inner, def->name->ident, def->name->range);
-            gen_init(inner, &init, def->init, dest);
+            gen_init(inner, &init, def->init, dest, dest->val_type);
           }
           }
         }
@@ -3052,11 +3053,29 @@ static Stmt *statement(Tokenizer *tokenizer, Scope *scope) {
   }
 }
 
-static void gen_init(Scope *scope, Expr **expr, Initializer *init, Expr *dest) {
-  if (init == NULL) {
-    Expr *assign = new_expr_binop(scope, EX_ASSIGN, dest,
-                                  new_expr_num(new_number_int(0), dest->range),
-                                  dest->range);
+static void gen_init(Scope *scope, Expr **expr, Initializer *init, Expr *dest,
+                     Type *type) {
+  switch (type->ty) {
+  case TY_BOOL:
+  case TY_CHAR:
+  case TY_S_CHAR:
+  case TY_S_SHORT:
+  case TY_S_INT:
+  case TY_S_LONG:
+  case TY_S_LLONG:
+  case TY_U_CHAR:
+  case TY_U_SHORT:
+  case TY_U_INT:
+  case TY_U_LONG:
+  case TY_U_LLONG:
+  case TY_PTR:
+  case TY_ENUM: {
+    Expr *assign = new_expr_binop(
+        scope, EX_ASSIGN, dest,
+        init != NULL ? init->expr
+                     : new_expr_num(new_number_int(0), dest->range),
+        init != NULL ? range_join(init->expr->range, dest->range)
+                     : dest->range);
     if (*expr != NULL) {
       *expr = new_expr_binop(scope, EX_COMMA, *expr, assign,
                              range_join((*expr)->range, assign->range));
@@ -3065,41 +3084,57 @@ static void gen_init(Scope *scope, Expr **expr, Initializer *init, Expr *dest) {
     }
     return;
   }
-
-  if (init->members != NULL) {
-    for (int i = 0; i < map_size(init->members); i++) {
-      char *name;
-      Initializer *meminit = map_get_by_index(init->members, i, &name);
+  case TY_ARRAY: {
+    for (int i = 0; i < type->array_len; i++) {
+      Expr *index = new_expr_num(new_number_int(i), dest->range);
+      Initializer *eleminit = init != NULL ? vec_get(init->elements, i) : NULL;
+      Expr *elem = new_expr_index(scope, dest, index, dest->range);
+      gen_init(scope, expr, eleminit, elem, type->ptrof);
+    }
+    return;
+  }
+  case TY_STRUCT: {
+    StructBody *body = type->struct_body;
+    for (int i = 0; i < vec_len(body->member_list); i++) {
+      Member *member = vec_get(body->member_list, i);
+      char *name = member->name;
+      Initializer *meminit =
+          init != NULL ? map_get_by_index(init->members, i, &name) : NULL;
       Expr *mem =
           name != NULL ? new_expr_dot(scope, dest, name, dest->range) : dest;
-      gen_init(scope, expr, meminit, mem);
+      gen_init(scope, expr, meminit, mem, member->type);
     }
     return;
   }
-
-  if (init->elements != NULL) {
-    for (int i = 0; i < vec_len(init->elements); i++) {
-      Expr *index = new_expr_num(new_number_int(i), dest->range);
-      Initializer *eleminit = vec_get(init->elements, i);
-      Expr *mem = new_expr_index(scope, dest, index, dest->range);
-      gen_init(scope, expr, eleminit, mem);
-    }
-    return;
-  }
-
-  if (init->expr != NULL) {
-    Expr *assign = new_expr_binop(scope, EX_ASSIGN, dest, init->expr,
-                                  range_join(dest->range, init->expr->range));
-    if (*expr != NULL) {
-      *expr = new_expr_binop(scope, EX_COMMA, *expr, assign,
-                             range_join((*expr)->range, assign->range));
+  case TY_UNION: {
+    StructBody *body = type->struct_body;
+    if (init != NULL) {
+      for (int i = 0; i < map_size(init->members); i++) {
+        char *name;
+        Initializer *meminit = map_get_by_index(init->members, i, &name);
+        Expr *mem =
+            name != NULL ? new_expr_dot(scope, dest, name, dest->range) : dest;
+        Type *type = meminit->type;
+        gen_init(scope, expr, meminit, mem, type);
+      }
     } else {
-      *expr = assign;
+      if (vec_len(body->member_list) > 0) {
+        Member *member = vec_get(body->member_list, 0);
+        Expr *mem = member->name != NULL
+                        ? new_expr_dot(scope, dest, member->name, dest->range)
+                        : dest;
+        Type *type = member->type;
+        gen_init(scope, expr, NULL, mem, type);
+      }
     }
     return;
   }
+  case TY_VOID:
+  case TY_FUNC:
+    break;
+  }
 
-  assert(false);
+  range_error(dest->range, "不正な型の初貴化です");
 }
 
 static Stmt *compound_statement(Tokenizer *tokenizer, Scope *scope) {
@@ -3130,7 +3165,7 @@ static Stmt *compound_statement(Tokenizer *tokenizer, Scope *scope) {
           Expr *dest =
               new_expr_ident(scope, def->name->ident, def->name->range);
           Expr *expr = NULL;
-          gen_init(scope, &expr, def->init, dest);
+          gen_init(scope, &expr, def->init, dest, dest->val_type);
           if (expr != NULL) {
             vec_push(stmts, new_stmt_expr(expr, expr->range));
           }
