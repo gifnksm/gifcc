@@ -139,6 +139,8 @@ static Expr *new_expr_call(Scope *scope, Expr *callee, Vector *argument,
 static Expr *new_expr_postfix(Scope *scope, int ty, Expr *operand, Range range);
 static Expr *new_expr_cast(Scope *scope, Type *val_type, Expr *operand,
                            Range range);
+static Expr *new_expr_compound(Scope *scope, Type *val_type, Initializer *init,
+                               Range range);
 static Expr *new_expr_unary(Scope *scope, int op, Expr *operand, Range range);
 static Expr *new_expr_binop(Scope *scope, int op, Expr *lhs, Expr *rhs,
                             Range range);
@@ -223,7 +225,7 @@ static void union_initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
 static void array_initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
                               bool brace_root, Initializer **init);
 static void initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
-                        Initializer **init);
+                        Initializer **init, Range *range);
 
 // statement
 static Stmt *statement(Tokenizer *tokenizer, Scope *scope);
@@ -1433,6 +1435,32 @@ static Expr *new_expr_cast(Scope *scope, Type *val_type, Expr *operand,
   return expr;
 }
 
+static Expr *new_expr_compound(Scope *scope, Type *val_type, Initializer *init,
+                               Range range) {
+  if (scope->func_ctxt != NULL) {
+    FuncCtxt *fcx = scope->func_ctxt;
+    StackVar *var = NEW(StackVar);
+    var->name = ".compound";
+    var->offset = INT_MIN;
+    var->type = val_type;
+    var->range = range;
+    vec_push(fcx->var_list, var);
+
+    Expr *expr = NULL;
+    Expr *dest = new_expr(EX_STACK_VAR, val_type, range);
+    dest->stack_var = var;
+    gen_init(scope, &expr, init, dest, val_type);
+    if (expr != NULL) {
+      expr = new_expr_binop(scope, EX_COMMA, expr, dest, range);
+    } else {
+      expr = dest;
+    }
+    return expr;
+  }
+
+  range_error(range, "関数外のコンパウンドリテラルは対応していません");
+}
+
 static Expr *new_expr_unary(Scope *scope, int op, Expr *operand, Range range) {
   if (op != EX_ADDRESS) {
     // & 以外は array, func は ptr とみなす
@@ -2070,9 +2098,16 @@ static Expr *cast_expression(Tokenizer *tokenizer, Scope *scope) {
     token_succ(tokenizer);
     Type *val_type = type_name(scope, tokenizer);
     token_expect(tokenizer, ')');
-    Expr *operand = cast_expression(tokenizer, scope);
-    return new_expr_cast(scope, val_type, operand,
-                         range_join(start, operand->range));
+    if (token_peek(tokenizer)->ty == '{') {
+      Initializer *init = NULL;
+      Range range = {};
+      initializer(tokenizer, scope, val_type, &init, &range);
+      return new_expr_compound(scope, val_type, init, range);
+    } else {
+      Expr *operand = cast_expression(tokenizer, scope);
+      return new_expr_cast(scope, val_type, operand,
+                           range_join(start, operand->range));
+    }
   }
   return unary_expression(tokenizer, scope);
 }
@@ -2238,7 +2273,7 @@ static Vector *declaration(Tokenizer *tokenizer, Scope *scope) {
     } else {
       VarDef *def = register_var(scope, name, type, range, scs);
       if (token_consume(tokenizer, '=')) {
-        initializer(tokenizer, scope, type, &def->init);
+        initializer(tokenizer, scope, type, &def->init, NULL);
       }
       vec_push(def_list, def);
     }
@@ -2256,7 +2291,7 @@ static Vector *declaration(Tokenizer *tokenizer, Scope *scope) {
       } else {
         VarDef *def = register_var(scope, name, type, range, scs);
         if (token_consume(tokenizer, '=')) {
-          initializer(tokenizer, scope, type, &def->init);
+          initializer(tokenizer, scope, type, &def->init, NULL);
         }
         vec_push(def_list, def);
       }
@@ -2643,7 +2678,7 @@ static void struct_initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
           Initializer *meminit = map_get_by_index((*init)->members, i, NULL);
           // if name is null, try parsing designator as inner struct/union's
           // designator
-          initializer(tokenizer, scope, member->type, &meminit);
+          initializer(tokenizer, scope, member->type, &meminit, NULL);
           if (token_peek(tokenizer) == current) {
             // if the designator is not found in inner struct/union, continue to
             // next member
@@ -2662,7 +2697,7 @@ static void struct_initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
       for (int i = idx; i < vec_len(body->member_list); i++) {
         Initializer *meminit = map_get_by_index((*init)->members, i, NULL);
         Member *member = vec_get(body->member_list, i);
-        initializer(tokenizer, scope, member->type, &meminit);
+        initializer(tokenizer, scope, member->type, &meminit, NULL);
         map_set_by_index((*init)->members, i, member->name, meminit);
         if ((i < vec_len(body->member_list) - 1 &&
              token_consume(tokenizer, ',') == NULL) ||
@@ -2703,7 +2738,7 @@ static void union_initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
           Initializer *meminit = map_get_by_index((*init)->members, 0, NULL);
           // if name is null, try parsing designator as inner struct/union's
           // designator
-          initializer(tokenizer, scope, member->type, &meminit);
+          initializer(tokenizer, scope, member->type, &meminit, NULL);
           if (token_peek(tokenizer) == current) {
             // if the designator is not found in inner struct/union, continue to
             // next member
@@ -2717,7 +2752,7 @@ static void union_initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
     } else {
       Initializer *meminit = map_get_by_index((*init)->members, 0, NULL);
       Member *member = vec_get(body->member_list, 0);
-      initializer(tokenizer, scope, member->type, &meminit);
+      initializer(tokenizer, scope, member->type, &meminit, NULL);
       map_set_by_index((*init)->members, 0, member->name, meminit);
       break;
     }
@@ -2784,7 +2819,7 @@ static void array_initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
         }
       }
       Initializer *eleminit = vec_get((*init)->elements, i);
-      initializer(tokenizer, scope, type->ptrof, &eleminit);
+      initializer(tokenizer, scope, type->ptrof, &eleminit, NULL);
       vec_set((*init)->elements, i, eleminit);
       token_consume(tokenizer, ',');
       idx = i + 1;
@@ -2795,7 +2830,7 @@ static void array_initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
       for (int i = idx; i < max_len; i++) {
         vec_extend((*init)->elements, i + 1);
         Initializer *eleminit = vec_get((*init)->elements, i);
-        initializer(tokenizer, scope, type->ptrof, &eleminit);
+        initializer(tokenizer, scope, type->ptrof, &eleminit, NULL);
         vec_set((*init)->elements, i, eleminit);
         if ((i < max_len - 1 && token_consume(tokenizer, ',') == NULL)) {
           break;
@@ -2821,9 +2856,10 @@ static void array_initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
 }
 
 static void initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
-                        Initializer **init) {
+                        Initializer **init, Range *range) {
   Token *token;
   if ((token = token_consume(tokenizer, '{')) != NULL) {
+    Range start = token->range;
     switch (type->ty) {
     case TY_BOOL:
     case TY_CHAR:
@@ -2839,7 +2875,7 @@ static void initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
     case TY_U_LLONG:
     case TY_PTR:
     case TY_ENUM:
-      initializer(tokenizer, scope, type, init);
+      initializer(tokenizer, scope, type, init, NULL);
       break;
     case TY_STRUCT:
       struct_initializer(tokenizer, scope, type, true, init);
@@ -2855,7 +2891,10 @@ static void initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
       range_error(token->range, "初期化できない型です: %d", type->ty);
     }
     (void)token_consume(tokenizer, ',');
-    token_expect(tokenizer, '}');
+    Range end = token_expect(tokenizer, '}')->range;
+    if (range != NULL) {
+      *range = range_join(start, end);
+    }
     return;
   };
 
@@ -2876,6 +2915,9 @@ static void initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
     *init = new_initializer(type);
     Expr *expr = assignment_expression(tokenizer, scope);
     (*init)->expr = new_expr_cast(scope, type, expr, expr->range);
+    if (range != NULL) {
+      *range = expr->range;
+    }
   }
 }
 

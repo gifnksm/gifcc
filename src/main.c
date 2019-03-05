@@ -255,6 +255,7 @@ void dump_type(Type *ty) {
   printf(">");
 }
 static void dump_expr(Expr *expr, int level);
+static void dump_init(Initializer *init, Range range, int level);
 static void dump_unop_expr(Expr *expr, char *label, int level) {
   dump_range_start(expr->range);
   dump_indent(level);

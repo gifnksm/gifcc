@@ -1,5 +1,7 @@
 #include "gifcc.h"
 
+static void walk_initializer(Initializer *init);
+
 #define UNARYOP(op, r, a, range)                                               \
   switch ((op)) {                                                              \
   case EX_MINUS:                                                               \

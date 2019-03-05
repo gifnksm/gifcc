@@ -108,6 +108,15 @@ static void gen_lval(Expr *expr) {
     gen_expr(expr->unop.operand);
     return;
   }
+  if (expr->ty == EX_COMMA) {
+    Expr *lhs = expr->binop.lhs;
+    Expr *rhs = expr->binop.rhs;
+    gen_expr(lhs);
+    int lhs_size = get_val_size(lhs->val_type, lhs->range);
+    printf("  add rsp, %d\n", align(lhs_size, 8));
+    gen_lval(rhs);
+    return;
+  }
 
   range_error(expr->range, "左辺値が変数ではありません");
 }

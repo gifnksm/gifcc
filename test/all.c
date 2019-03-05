@@ -2237,6 +2237,25 @@ static void test70(void) {
   }
 }
 
+static void test71(void) {
+  struct S {
+    int x;
+    int y;
+    int z;
+  };
+  struct S s;
+  s = (struct S){3, 4, 5};
+  CHECK_INT(3, s.x);
+  CHECK_INT(4, s.y);
+  CHECK_INT(5, s.z);
+
+  struct S *p;
+  p = &(struct S){1, 2, 3};
+  CHECK_INT(1, p->x);
+  CHECK_INT(2, p->y);
+  CHECK_INT(3, p->z);
+}
+
 static int num_check = 0;
 static void check_int(const char *file, int line, int a, int b) {
   if (a != b) {
@@ -2269,7 +2288,7 @@ int main(void) {
       TEST(test56), TEST(test57), TEST(test58), TEST(test59), TEST(test60),
       TEST(test61), TEST(test62), TEST(test63), TEST(test64), TEST(test65),
       TEST(test66), TEST(test67), TEST(test68), TEST(test69), TEST(test70),
-      {NULL, NULL},
+      TEST(test71), {NULL, NULL},
   };
   int i = 0;
   for (i = 0; test_list[i].name != NULL; i++) {
