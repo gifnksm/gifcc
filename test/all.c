@@ -2237,6 +2237,14 @@ static void test70(void) {
   }
 }
 
+struct Test71_S {
+  int a;
+  int b;
+  int c;
+};
+struct Test71_S test71_s = (struct Test71_S){7, 8, 9};
+struct Test71_S *test71_p = &(struct Test71_S){10, 11, 12};
+
 static void test71(void) {
   struct S {
     int x;
@@ -2254,6 +2262,13 @@ static void test71(void) {
   CHECK_INT(1, p->x);
   CHECK_INT(2, p->y);
   CHECK_INT(3, p->z);
+
+  CHECK_INT(7, test71_s.a);
+  CHECK_INT(8, test71_s.b);
+  CHECK_INT(9, test71_s.c);
+  CHECK_INT(10, test71_p->a);
+  CHECK_INT(11, test71_p->b);
+  CHECK_INT(12, test71_p->c);
 }
 
 static int num_check = 0;

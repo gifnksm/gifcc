@@ -10,6 +10,7 @@ static Vector *break_labels = NULL;
 static Vector *continue_labels = NULL;
 
 static void gen_expr(Expr *expr);
+static void gen_gvar(GlobalVar *gvar);
 
 typedef struct {
   const char *rax;
@@ -995,13 +996,31 @@ static void gen_gvar_init(Initializer *init, Range range) {
         range_error(range, "int型ではありません");
       }
     } else if (expr->ty == EX_ADDRESS) {
-      if (expr->unop.operand->ty != EX_GLOBAL_VAR) {
-        range_error(range, "グローバル変数以外へのポインタです");
+      if (expr->unop.operand->ty == EX_GLOBAL_VAR) {
+        Expr *gvar = expr->unop.operand;
+        printf("  .quad %s\n", gvar->global_var.name);
+        return;
       }
-      Expr *gvar = expr->unop.operand;
-      printf("  .quad %s\n", gvar->global_var.name);
+      if (expr->unop.operand->ty == EX_COMPOUND) {
+        Expr *compound = expr->unop.operand;
+        GlobalVar *gvar = NEW(GlobalVar);
+        gvar->name = make_label("compound");
+        gvar->type = compound->val_type;
+        gvar->range = compound->range;
+        gvar->storage_class.is_static = true;
+        gvar->init = compound->compound;
+
+        printf("  .quad %s\n", gvar->name);
+        gen_gvar(gvar);
+        return;
+      }
+      range_error(
+          range,
+          "グローバル変数またはコンパウンドリテラル以外へのポインタです");
+    } else if (expr->ty == EX_COMPOUND) {
+      gen_gvar_init(expr->compound, expr->range);
     } else {
-      range_error(range, "数値でもポインタでもありません");
+      range_error(range, "数値でもポインタでもありません: %d", expr->ty);
     }
     return;
   }

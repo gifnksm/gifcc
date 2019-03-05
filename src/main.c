@@ -309,6 +309,14 @@ static void dump_expr(Expr *expr, int level) {
     print_string_literal(expr->str);
     printf(")\n");
     return;
+  case EX_COMPOUND:
+    dump_range_start(expr->range);
+    dump_indent(level);
+    dump_type(expr->val_type);
+    printf("(COMPOUND ");
+    dump_init(expr->compound, expr->range, level + 1);
+    printf(")\n");
+    return;
 
   // prefix unary operator
   case EX_PRE_INC:

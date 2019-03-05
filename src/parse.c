@@ -224,6 +224,8 @@ static void union_initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
                               bool brace_root, Initializer **init);
 static void array_initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
                               bool brace_root, Initializer **init);
+static void initializer_inner(Tokenizer *tokenizer, Scope *scope, Type *type,
+                              Initializer **init, Range *range);
 static void initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
                         Initializer **init, Range *range);
 
@@ -1458,7 +1460,9 @@ static Expr *new_expr_compound(Scope *scope, Type *val_type, Initializer *init,
     return expr;
   }
 
-  range_error(range, "関数外のコンパウンドリテラルは対応していません");
+  Expr *expr = new_expr(EX_COMPOUND, val_type, range);
+  expr->compound = init;
+  return expr;
 }
 
 static Expr *new_expr_unary(Scope *scope, int op, Expr *operand, Range range) {
@@ -2678,7 +2682,7 @@ static void struct_initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
           Initializer *meminit = map_get_by_index((*init)->members, i, NULL);
           // if name is null, try parsing designator as inner struct/union's
           // designator
-          initializer(tokenizer, scope, member->type, &meminit, NULL);
+          initializer_inner(tokenizer, scope, member->type, &meminit, NULL);
           if (token_peek(tokenizer) == current) {
             // if the designator is not found in inner struct/union, continue to
             // next member
@@ -2697,7 +2701,7 @@ static void struct_initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
       for (int i = idx; i < vec_len(body->member_list); i++) {
         Initializer *meminit = map_get_by_index((*init)->members, i, NULL);
         Member *member = vec_get(body->member_list, i);
-        initializer(tokenizer, scope, member->type, &meminit, NULL);
+        initializer_inner(tokenizer, scope, member->type, &meminit, NULL);
         map_set_by_index((*init)->members, i, member->name, meminit);
         if ((i < vec_len(body->member_list) - 1 &&
              token_consume(tokenizer, ',') == NULL) ||
@@ -2738,7 +2742,7 @@ static void union_initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
           Initializer *meminit = map_get_by_index((*init)->members, 0, NULL);
           // if name is null, try parsing designator as inner struct/union's
           // designator
-          initializer(tokenizer, scope, member->type, &meminit, NULL);
+          initializer_inner(tokenizer, scope, member->type, &meminit, NULL);
           if (token_peek(tokenizer) == current) {
             // if the designator is not found in inner struct/union, continue to
             // next member
@@ -2752,7 +2756,7 @@ static void union_initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
     } else {
       Initializer *meminit = map_get_by_index((*init)->members, 0, NULL);
       Member *member = vec_get(body->member_list, 0);
-      initializer(tokenizer, scope, member->type, &meminit, NULL);
+      initializer_inner(tokenizer, scope, member->type, &meminit, NULL);
       map_set_by_index((*init)->members, 0, member->name, meminit);
       break;
     }
@@ -2819,7 +2823,7 @@ static void array_initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
         }
       }
       Initializer *eleminit = vec_get((*init)->elements, i);
-      initializer(tokenizer, scope, type->ptrof, &eleminit, NULL);
+      initializer_inner(tokenizer, scope, type->ptrof, &eleminit, NULL);
       vec_set((*init)->elements, i, eleminit);
       token_consume(tokenizer, ',');
       idx = i + 1;
@@ -2830,7 +2834,7 @@ static void array_initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
       for (int i = idx; i < max_len; i++) {
         vec_extend((*init)->elements, i + 1);
         Initializer *eleminit = vec_get((*init)->elements, i);
-        initializer(tokenizer, scope, type->ptrof, &eleminit, NULL);
+        initializer_inner(tokenizer, scope, type->ptrof, &eleminit, NULL);
         vec_set((*init)->elements, i, eleminit);
         if ((i < max_len - 1 && token_consume(tokenizer, ',') == NULL)) {
           break;
@@ -2855,8 +2859,8 @@ static void array_initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
   }
 }
 
-static void initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
-                        Initializer **init, Range *range) {
+static void initializer_inner(Tokenizer *tokenizer, Scope *scope, Type *type,
+                              Initializer **init, Range *range) {
   Token *token;
   if ((token = token_consume(tokenizer, '{')) != NULL) {
     Range start = token->range;
@@ -2908,6 +2912,28 @@ static void initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
   }
   if (type->ty == TY_ARRAY) {
     array_initializer(tokenizer, scope, type, false, init);
+    return;
+  }
+
+  {
+    *init = new_initializer(type);
+    Expr *expr = assignment_expression(tokenizer, scope);
+    (*init)->expr = new_expr_cast(scope, type, expr, expr->range);
+    if (range != NULL) {
+      *range = expr->range;
+    }
+  }
+}
+
+static void initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
+                        Initializer **init, Range *range) {
+  if (token_peek(tokenizer)->ty == '{') {
+    initializer_inner(tokenizer, scope, type, init, range);
+    return;
+  };
+
+  if (type->ty == TY_ARRAY && token_peek(tokenizer)->ty == TK_STR) {
+    initializer_inner(tokenizer, scope, type, init, range);
     return;
   }
 

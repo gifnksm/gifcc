@@ -208,6 +208,7 @@ typedef enum {
   EX_STACK_VAR,
   EX_GLOBAL_VAR,
   EX_STR,
+  EX_COMPOUND,
 
   // prefix unary operator
   EX_PRE_INC,
@@ -371,6 +372,9 @@ typedef struct Expr {
 
     // EX_STR
     const char *str;
+
+    // EX_COMPOUND
+    Initializer *compound;
 
     // EX_CALL
     struct {
