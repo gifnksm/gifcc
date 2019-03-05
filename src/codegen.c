@@ -199,13 +199,13 @@ static void gen_expr(Expr *expr) {
       switch (size - copy_size) {
       case 1:
         printf("  mov %s, [rbp - %d]\n", Reg1.rax, src_offset - copy_size);
-        printf("  mov [rsp + %d], %s\n", copy_size, Reg8.rax);
+        printf("  mov [rsp + %d], %s\n", copy_size, Reg1.rax);
         copy_size += 1;
         break;
       case 2:
       case 3:
         printf("  mov %s, [rbp - %d]\n", Reg2.rax, src_offset - copy_size);
-        printf("  mov [rsp + %d], %s\n", copy_size, Reg8.rax);
+        printf("  mov [rsp + %d], %s\n", copy_size, Reg2.rax);
         copy_size += 2;
         break;
       case 4:
@@ -213,7 +213,7 @@ static void gen_expr(Expr *expr) {
       case 6:
       case 7:
         printf("  mov %s, [rbp - %d]\n", Reg4.rax, src_offset - copy_size);
-        printf("  mov [rsp + %d], %s\n", copy_size, Reg8.rax);
+        printf("  mov [rsp + %d], %s\n", copy_size, Reg4.rax);
         copy_size += 4;
         break;
       default:
@@ -237,13 +237,13 @@ static void gen_expr(Expr *expr) {
       switch (size - copy_size) {
       case 1:
         printf("  mov %s, %s[rip + %d]\n", Reg1.rax, name, copy_size);
-        printf("  mov [rsp + %d], %s\n", copy_size, Reg8.rax);
+        printf("  mov [rsp + %d], %s\n", copy_size, Reg1.rax);
         copy_size += 1;
         break;
       case 2:
       case 3:
         printf("  mov %s, %s[rip + %d]\n", Reg2.rax, name, copy_size);
-        printf("  mov [rsp + %d], %s\n", copy_size, Reg8.rax);
+        printf("  mov [rsp + %d], %s\n", copy_size, Reg2.rax);
         copy_size += 2;
         break;
       case 4:
@@ -251,7 +251,7 @@ static void gen_expr(Expr *expr) {
       case 6:
       case 7:
         printf("  mov %s, %s[rip + %d]\n", Reg4.rax, name, copy_size);
-        printf("  mov [rsp + %d], %s\n", copy_size, Reg8.rax);
+        printf("  mov [rsp + %d], %s\n", copy_size, Reg4.rax);
         copy_size += 4;
         break;
       default:
@@ -463,13 +463,13 @@ static void gen_expr(Expr *expr) {
       switch (size - copy_size) {
       case 1:
         printf("  mov %s, [rax + %d]\n", Reg1.rdi, copy_size);
-        printf("  mov [rsp + %d], %s\n", copy_size, Reg8.rdi);
+        printf("  mov [rsp + %d], %s\n", copy_size, Reg1.rdi);
         copy_size += 1;
         break;
       case 2:
       case 3:
         printf("  mov %s, [rax + %d]\n", Reg2.rdi, copy_size);
-        printf("  mov [rsp + %d], %s\n", copy_size, Reg8.rdi);
+        printf("  mov [rsp + %d], %s\n", copy_size, Reg2.rdi);
         copy_size += 2;
         break;
       case 4:
@@ -477,7 +477,7 @@ static void gen_expr(Expr *expr) {
       case 6:
       case 7:
         printf("  mov %s, [rax + %d]\n", Reg4.rdi, copy_size);
-        printf("  mov [rsp + %d], %s\n", copy_size, Reg8.rdi);
+        printf("  mov [rsp + %d], %s\n", copy_size, Reg4.rdi);
         copy_size += 4;
         break;
       default:
@@ -712,9 +712,10 @@ static void gen_stmt(Stmt *stmt) {
   case ST_IF: {
     char *else_label = make_label("if.else");
     char *end_label = make_label("if.end");
+    const Reg *r = get_int_reg(stmt->cond->val_type, stmt->cond->range);
     gen_expr(stmt->cond);
     printf("  pop rax\n");
-    printf("  cmp rax, 0\n");
+    printf("  cmp %s, 0\n", r->rax);
     printf("  je %s\n", else_label);
     gen_stmt(stmt->then_stmt);
     printf("  jmp %s\n", end_label);
@@ -725,13 +726,14 @@ static void gen_stmt(Stmt *stmt) {
   }
   case ST_SWITCH: {
     char *end_label = make_label("switch.end");
+    const Reg *r = get_int_reg(stmt->cond->val_type, stmt->cond->range);
     gen_expr(stmt->cond);
     for (int i = 0; i < vec_len(stmt->cases); i++) {
       Stmt *case_expr = vec_get(stmt->cases, i);
       gen_expr(case_expr->expr);
       printf("  pop rax\n");
       printf("  pop rdi\n");
-      printf("  cmp rax, rdi\n");
+      printf("  cmp %s, %s\n", r->rax, r->rdi);
       printf("  je %s\n", case_expr->label);
       printf("  push rdi\n");
     }
@@ -758,9 +760,10 @@ static void gen_stmt(Stmt *stmt) {
     char *cond_label = make_label("while.cond");
     char *end_label = make_label("while.end");
     printf("%s:\n", cond_label);
+    const Reg *r = get_int_reg(stmt->cond->val_type, stmt->cond->range);
     gen_expr(stmt->cond);
     printf("  pop rax\n");
-    printf("  cmp rax, 0\n");
+    printf("  cmp %s, 0\n", r->rax);
     printf("  je %s\n", end_label);
 
     vec_push(break_labels, end_label);
@@ -786,9 +789,10 @@ static void gen_stmt(Stmt *stmt) {
     vec_pop(continue_labels);
 
     printf("%s:\n", cond_label);
+    const Reg *r = get_int_reg(stmt->cond->val_type, stmt->cond->range);
     gen_expr(stmt->cond);
     printf("  pop rax\n");
-    printf("  cmp rax, 0\n");
+    printf("  cmp %s, 0\n", r->rax);
     printf("  jne %s\n", loop_label);
     printf("%s:\n", end_label);
     return;
@@ -802,9 +806,10 @@ static void gen_stmt(Stmt *stmt) {
     }
     printf("%s:\n", cond_label);
     if (stmt->cond != NULL) {
+      const Reg *r = get_int_reg(stmt->cond->val_type, stmt->cond->range);
       gen_expr(stmt->cond);
       printf("  pop rax\n");
-      printf("  cmp rax, 0\n");
+      printf("  cmp %s, 0\n", r->rax);
       printf("  je %s\n", end_label);
     }
 
