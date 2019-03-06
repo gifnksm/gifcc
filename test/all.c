@@ -2293,6 +2293,32 @@ static void test71(void) {
   CHECK_INT(7, test71_k);
 }
 
+struct Test72_Arg1 {
+  int a;
+  int b;
+  int c;
+  int d;
+};
+struct Test72_Arg2 {
+  long x;
+  long y;
+  long z;
+};
+static void test72_func(struct Test72_Arg1 a1, struct Test72_Arg2 a2) {
+  CHECK_INT(3, a1.a);
+  CHECK_INT(4, a1.b);
+  CHECK_INT(5, a1.c);
+  CHECK_INT(6, a1.d);
+  CHECK_INT(10, a2.x);
+  CHECK_INT(20, a2.y);
+  CHECK_INT(30, a2.z);
+}
+static void test72(void) {
+  struct Test72_Arg1 a1 = {3, 4, 5, 6};
+  struct Test72_Arg2 a2 = {10, 20, 30};
+  test72_func(a1, a2);
+}
+
 static int num_check = 0;
 static void check_int(const char *file, int line, int a, int b) {
   if (a != b) {
@@ -2325,7 +2351,7 @@ int main(void) {
       TEST(test56), TEST(test57), TEST(test58), TEST(test59), TEST(test60),
       TEST(test61), TEST(test62), TEST(test63), TEST(test64), TEST(test65),
       TEST(test66), TEST(test67), TEST(test68), TEST(test69), TEST(test70),
-      TEST(test71), {NULL, NULL},
+      TEST(test71), TEST(test72), {NULL, NULL},
   };
   int i = 0;
   for (i = 0; test_list[i].name != NULL; i++) {

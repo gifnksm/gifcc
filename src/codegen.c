@@ -10,7 +10,13 @@ static Vector *break_labels = NULL;
 static Vector *continue_labels = NULL;
 
 static void gen_expr(Expr *expr);
+static void gen_expr_call(Expr *expr);
 static void gen_gvar(GlobalVar *gvar, Vector *gvar_list);
+
+typedef enum {
+  ARG_CLASS_INTEGER,
+  ARG_CLASS_MEMORY,
+} arg_class_t;
 
 typedef struct {
   const char *rax;
@@ -281,71 +287,7 @@ static void gen_expr(Expr *expr) {
   }
 
   if (expr->ty == EX_CALL) {
-    int num_push = 0;
-    Vector *arg = expr->call.argument;
-    bool call_direct;
-    if (expr->call.callee->val_type->ty == TY_FUNC) {
-      call_direct = true;
-    } else if (expr->call.callee->val_type->ty == TY_PTR &&
-               expr->call.callee->val_type->ptrof->ty == TY_FUNC) {
-      call_direct = false;
-    } else if (expr->call.callee->ty == EX_GLOBAL_VAR) {
-      call_direct = true;
-    } else {
-      range_error(expr->call.callee->range,
-                  "関数または関数ポインタ以外を呼び出そうとしました: %d",
-                  expr->call.callee->val_type->ty);
-    }
-    if (arg && vec_len(arg) > 0) {
-      // 引数をスタックに積む
-      for (int i = vec_len(arg) - 1; i >= 0; i--) {
-        gen_expr(vec_get(arg, i));
-      }
-    }
-    if (!call_direct) {
-      gen_expr(expr->call.callee);
-      printf("  pop r10\n");
-    }
-    if (arg && vec_len(arg) > 0) {
-      // レジスタ渡しする引数をpopする
-      for (int i = 0; i < vec_len(arg); i++) {
-        switch (i) {
-        // 0~5番目の引数はレジスタ経由で渡す
-        case 0:
-          printf("  pop rdi\n");
-          break;
-        case 1:
-          printf("  pop rsi\n");
-          break;
-        case 2:
-          printf("  pop rdx\n");
-          break;
-        case 3:
-          printf("  pop rcx\n");
-          break;
-        case 4:
-          printf("  pop r8\n");
-          break;
-        case 5:
-          printf("  pop r9\n");
-          break;
-        // 6番目以降の引数はスタック経由で渡すため、pushされたままにする
-        default:
-          num_push++;
-          break;
-        }
-      }
-    }
-    printf("  mov al, 0\n");
-    if (call_direct) {
-      printf("  call %s\n", expr->call.callee->global_var.name);
-    } else {
-      printf("  call r10\n");
-    }
-    if (num_push > 0) {
-      printf("  add rsp, %d\n", 8 * num_push);
-    }
-    printf("  push rax\n");
+    gen_expr_call(expr);
     return;
   }
 
@@ -699,6 +641,166 @@ static void gen_expr(Expr *expr) {
   printf("  push rax\n");
 }
 
+static void classify_arg_type(const Type *type, Range range, IntVector *class,
+                              int *num_int) {
+  const int NUM_INT_REG = 6;
+  switch (type->ty) {
+  case TY_BOOL:
+  case TY_CHAR:
+  case TY_S_CHAR:
+  case TY_S_SHORT:
+  case TY_S_INT:
+  case TY_S_LONG:
+  case TY_S_LLONG:
+  case TY_U_CHAR:
+  case TY_U_SHORT:
+  case TY_U_INT:
+  case TY_U_LONG:
+  case TY_U_LLONG:
+  case TY_PTR:
+  case TY_ENUM:
+    if (*num_int + 1 <= NUM_INT_REG) {
+      int_vec_push(class, ARG_CLASS_INTEGER);
+      (*num_int)++;
+    } else {
+      int_vec_push(class, ARG_CLASS_MEMORY);
+    }
+    break;
+  case TY_ARRAY:
+  case TY_STRUCT:
+  case TY_UNION: {
+    int size = get_val_size(type, range);
+    if (size > 16) {
+      int_vec_push(class, ARG_CLASS_MEMORY);
+    } else {
+      if (size > 8 && *num_int + 2 <= NUM_INT_REG) {
+        int_vec_push(class, ARG_CLASS_INTEGER);
+        (*num_int) += 2;
+      } else if (size <= 8 && *num_int + 1 <= NUM_INT_REG) {
+        int_vec_push(class, ARG_CLASS_INTEGER);
+        (*num_int)++;
+      } else {
+        int_vec_push(class, ARG_CLASS_MEMORY);
+      }
+    }
+    break;
+  }
+  case TY_FUNC:
+    range_error(range, "void型の引数です");
+  case TY_VOID:
+    range_error(range, "void型の引数です");
+  }
+}
+
+static IntVector *classify_arg(const Vector *args) {
+  IntVector *class = new_int_vector();
+  int num_int = 0;
+  for (int i = 0; i < vec_len(args); i++) {
+    Expr *expr = vec_get(args, i);
+    classify_arg_type(expr->val_type, expr->range, class, &num_int);
+  }
+  return class;
+}
+
+static void gen_expr_call(Expr *expr) {
+  assert(expr->ty == EX_CALL);
+
+  int num_push = 0;
+  Vector *arg = expr->call.argument;
+  int num_int_reg = 0;
+  IntVector *arg_class = arg != NULL ? classify_arg(arg) : NULL;
+  bool call_direct;
+  if (expr->call.callee->val_type->ty == TY_FUNC) {
+    call_direct = true;
+  } else if (expr->call.callee->val_type->ty == TY_PTR &&
+             expr->call.callee->val_type->ptrof->ty == TY_FUNC) {
+    call_direct = false;
+  } else if (expr->call.callee->ty == EX_GLOBAL_VAR) {
+    call_direct = true;
+  } else {
+    range_error(expr->call.callee->range,
+                "関数または関数ポインタ以外を呼び出そうとしました: %d",
+                expr->call.callee->val_type->ty);
+  }
+
+  if (arg && vec_len(arg) > 0) {
+    // メモリ渡しする引数をスタックに積む
+    for (int i = vec_len(arg) - 1; i >= 0; i--) {
+      arg_class_t class = int_vec_get(arg_class, i);
+      if (class == ARG_CLASS_MEMORY) {
+        gen_expr(vec_get(arg, i));
+      }
+    }
+    // レジスタ渡しする引数をスタックに積む
+    for (int i = vec_len(arg) - 1; i >= 0; i--) {
+      arg_class_t class = int_vec_get(arg_class, i);
+      if (class == ARG_CLASS_INTEGER) {
+        gen_expr(vec_get(arg, i));
+      }
+    }
+  }
+
+  if (!call_direct) {
+    gen_expr(expr->call.callee);
+    printf("  pop r10\n");
+  }
+
+  if (arg && vec_len(arg) > 0) {
+    // レジスタ渡しする引数をpopする
+    int int_reg_idx = 0;
+    for (int i = 0; i < vec_len(arg); i++) {
+      Expr *expr = vec_get(arg, i);
+      int size = get_val_size(expr->val_type, expr->range);
+      int num_reg = (size + 7) / 8;
+
+      arg_class_t class = int_vec_get(arg_class, i);
+      if (class != ARG_CLASS_INTEGER) {
+        num_push += num_reg;
+        continue;
+      }
+
+      for (int j = 0; j < num_reg; j++) {
+        switch (int_reg_idx) {
+        // 0~5番目の引数はレジスタ経由で渡す
+        case 0:
+          printf("  pop rdi\n");
+          break;
+        case 1:
+          printf("  pop rsi\n");
+          break;
+        case 2:
+          printf("  pop rdx\n");
+          break;
+        case 3:
+          printf("  pop rcx\n");
+          break;
+        case 4:
+          printf("  pop r8\n");
+          break;
+        case 5:
+          printf("  pop r9\n");
+          break;
+        default:
+          assert(false);
+        }
+        int_reg_idx++;
+      }
+    }
+    assert(num_int_reg == 0);
+  }
+  printf("  mov al, 0\n");
+  if (call_direct) {
+    printf("  call %s\n", expr->call.callee->global_var.name);
+  } else {
+    printf("  call r10\n");
+  }
+  if (num_push > 0) {
+    printf("  add rsp, %d\n", 8 * num_push);
+  }
+  printf("  push rax\n");
+  return;
+}
+
 static void gen_stmt(Stmt *stmt) {
   switch (stmt->ty) {
   case ST_NULL: {
@@ -872,6 +974,16 @@ static void gen_stmt(Stmt *stmt) {
   assert(false);
 }
 
+static IntVector *classify_param(const Vector *params) {
+  IntVector *class = new_int_vector();
+  int num_int = 0;
+  for (int i = 0; i < vec_len(params); i++) {
+    Param *param = vec_get(params, i);
+    classify_arg_type(param->type, param->range, class, &num_int);
+  }
+  return class;
+}
+
 static void gen_func(Function *func) {
   epilogue_label = make_label("func.epi");
   func_ctxt = func;
@@ -891,37 +1003,82 @@ static void gen_func(Function *func) {
 
   // 引数をスタックへコピー
   if (func->type->func_param != NULL) {
+    int int_reg_idx = 0;
+    int stack_offset = 16;
+    IntVector *param_class = classify_param(func->type->func_param);
     for (int i = 0; i < vec_len(func->type->func_param); i++) {
       Param *param = vec_get(func->type->func_param, i);
       StackVar *var = param->stack_var;
       assert(var != NULL);
-      const Reg *r = get_int_reg(var->type, var->range);
-      printf("  lea rax, [rbp - %d]\n",
-             align(func_ctxt->stack_size, 16) - var->offset);
-      switch (i) {
-      case 0:
-        printf("  mov [rax], %s\n", r->rdi);
-        break;
-      case 1:
-        printf("  mov [rax], %s\n", r->rsi);
-        break;
-      case 2:
-        printf("  mov [rax], %s\n", r->rdx);
-        break;
-      case 3:
-        printf("  mov [rax], %s\n", r->rcx);
-        break;
-      case 4:
-        printf("  mov [rax], %s\n", r->r8);
-        break;
-      case 5:
-        printf("  mov [rax], %s\n", r->r9);
-        break;
-        // 6番目以降の引数はスタック経由で渡すため、スタックからコピーする
-      default:
-        printf("  mov %s, [rbp + %d]\n", r->r11, (i - 6) * 8 + 16);
-        printf("  mov [rax], %s\n", r->r11);
-        break;
+      arg_class_t class = int_vec_get(param_class, i);
+      int size = get_val_size(param->type, param->range);
+      int dst_offset = align(func_ctxt->stack_size, 16) - var->offset;
+
+      if (class == ARG_CLASS_MEMORY) {
+        int copy_size = 0;
+        while (size - copy_size > 0) {
+          switch (size - copy_size) {
+          case 1:
+            printf("  mov %s, [rbp + %d]\n", Reg1.rax,
+                   stack_offset + copy_size);
+            printf("  mov [rbp - %d], %s\n", dst_offset - copy_size, Reg1.rax);
+            copy_size += 1;
+            break;
+          case 2:
+          case 3:
+            printf("  mov %s, [rbp + %d]\n", Reg2.rax,
+                   stack_offset + copy_size);
+            printf("  mov [rbp - %d], %s\n", dst_offset - copy_size, Reg2.rax);
+            copy_size += 2;
+            break;
+          case 4:
+          case 5:
+          case 6:
+          case 7:
+            printf("  mov %s, [rbp + %d]\n", Reg4.rax,
+                   stack_offset + copy_size);
+            printf("  mov [rbp - %d], %s\n", dst_offset - copy_size, Reg4.rax);
+            copy_size += 4;
+            break;
+          default:
+            printf("  mov %s, [rbp + %d]\n", Reg8.rax,
+                   stack_offset + copy_size);
+            printf("  mov [rbp - %d], %s\n", dst_offset - copy_size, Reg8.rax);
+            copy_size += 8;
+            break;
+          }
+        }
+        stack_offset += align(size, 8);
+        continue;
+      }
+      assert(class == ARG_CLASS_INTEGER);
+
+      const Reg *r = size > 8 ? &Reg8 : get_int_reg(var->type, var->range);
+      int num_reg = (size + 7) / 8;
+      for (int j = 0; j < num_reg; j++) {
+        switch (int_reg_idx) {
+        case 0:
+          printf("  mov [rbp - %d], %s\n", dst_offset - j * 8, r->rdi);
+          break;
+        case 1:
+          printf("  mov [rbp - %d], %s\n", dst_offset - j * 8, r->rsi);
+          break;
+        case 2:
+          printf("  mov [rbp - %d], %s\n", dst_offset - j * 8, r->rdx);
+          break;
+        case 3:
+          printf("  mov [rbp - %d], %s\n", dst_offset - j * 8, r->rcx);
+          break;
+        case 4:
+          printf("  mov [rbp - %d], %s\n", dst_offset - j * 8, r->r8);
+          break;
+        case 5:
+          printf("  mov [rbp - %d], %s\n", dst_offset - j * 8, r->r9);
+          break;
+        default:
+          assert(false);
+        }
+        int_reg_idx++;
       }
     }
   }

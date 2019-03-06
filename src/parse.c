@@ -1078,7 +1078,7 @@ static bool consume_function_specifier(Tokenizer *tokenizer,
   return consumed;
 }
 
-int get_val_size(Type *ty, Range range) {
+int get_val_size(const Type *ty, Range range) {
   switch (ty->ty) {
   case TY_VOID:
     return sizeof(void);
@@ -1127,7 +1127,7 @@ int get_val_size(Type *ty, Range range) {
   range_error(range, "不明な型のサイズを取得しようとしました");
 }
 
-int get_val_align(Type *ty, Range range) {
+int get_val_align(const Type *ty, Range range) {
   switch (ty->ty) {
   case TY_VOID:
     return alignof(void);

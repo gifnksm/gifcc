@@ -599,8 +599,8 @@ const Reader *token_get_reader(const Tokenizer *tokenizer);
 // parse.c
 Scope *new_pp_scope(void);
 bool is_signed_int_type(Type *ty, Range range);
-int get_val_size(Type *ty, Range range);
-int get_val_align(Type *ty, Range range);
+int get_val_size(const Type *ty, Range range);
+int get_val_align(const Type *ty, Range range);
 Expr *constant_expression(Tokenizer *tokenizer, Scope *scope);
 TranslationUnit *parse(Reader *reader);
 
