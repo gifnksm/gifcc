@@ -491,6 +491,9 @@ static void walk_expr(Expr *expr) {
     return;
   case EX_STR:
     return;
+  case EX_COMPOUND:
+    walk_initializer(expr->compound);
+    return;
 
   case EX_PRE_INC:
   case EX_PRE_DEC:
