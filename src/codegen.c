@@ -10,7 +10,7 @@ static Vector *break_labels = NULL;
 static Vector *continue_labels = NULL;
 
 static void gen_expr(Expr *expr);
-static void gen_gvar(GlobalVar *gvar);
+static void gen_gvar(GlobalVar *gvar, Vector *gvar_list);
 
 typedef struct {
   const char *rax;
@@ -941,7 +941,7 @@ static void gen_func(Function *func) {
   printf("  ret\n");
 }
 
-static void gen_gvar_init(Initializer *init, Range range) {
+static void gen_gvar_init(Initializer *init, Range range, Vector *gvar_list) {
   if (init->expr != NULL) {
     Expr *expr = init->expr;
     if (expr->ty == EX_NUM) {
@@ -1009,16 +1009,16 @@ static void gen_gvar_init(Initializer *init, Range range) {
         gvar->range = compound->range;
         gvar->storage_class.is_static = true;
         gvar->init = compound->compound;
+        vec_push(gvar_list, gvar);
 
         printf("  .quad %s\n", gvar->name);
-        gen_gvar(gvar);
         return;
       }
       range_error(
           range,
           "グローバル変数またはコンパウンドリテラル以外へのポインタです");
     } else if (expr->ty == EX_COMPOUND) {
-      gen_gvar_init(expr->compound, expr->range);
+      gen_gvar_init(expr->compound, expr->range, gvar_list);
     } else {
       range_error(range, "数値でもポインタでもありません: %d", expr->ty);
     }
@@ -1043,7 +1043,7 @@ static void gen_gvar_init(Initializer *init, Range range) {
         }
         assert(offset == member->offset);
       }
-      gen_gvar_init(meminit, range);
+      gen_gvar_init(meminit, range, gvar_list);
       offset += get_val_size(meminit->type, range);
     }
     int ty_size = get_val_size(init->type, range);
@@ -1063,7 +1063,7 @@ static void gen_gvar_init(Initializer *init, Range range) {
         printf("  .zero %d\n", get_val_size(init->type->ptrof, range));
         continue;
       }
-      gen_gvar_init(meminit, range);
+      gen_gvar_init(meminit, range, gvar_list);
     }
     return;
   }
@@ -1071,7 +1071,7 @@ static void gen_gvar_init(Initializer *init, Range range) {
   assert(false);
 }
 
-static void gen_gvar(GlobalVar *gvar) {
+static void gen_gvar(GlobalVar *gvar, Vector *gvar_list) {
   Initializer *init = gvar->init;
   if (init == NULL) {
     printf("  .bss\n");
@@ -1086,7 +1086,7 @@ static void gen_gvar(GlobalVar *gvar) {
       printf(".global %s\n", gvar->name);
     }
     printf("%s:\n", gvar->name);
-    gen_gvar_init(init, gvar->range);
+    gen_gvar_init(init, gvar->range, gvar_list);
   }
 }
 
@@ -1104,8 +1104,9 @@ void gen(TranslationUnit *tunit) {
   for (int i = 0; i < vec_len(tunit->func_list); i++) {
     gen_func(vec_get(tunit->func_list, i));
   }
-  for (int i = 0; i < vec_len(tunit->gvar_list); i++) {
-    gen_gvar(vec_get(tunit->gvar_list, i));
+  while (vec_len(tunit->gvar_list) > 0) {
+    GlobalVar *gvar = vec_remove(tunit->gvar_list, 0);
+    gen_gvar(gvar, tunit->gvar_list);
   }
   printf("  .section .rodata\n");
   for (int i = 0; i < vec_len(tunit->str_list); i++) {

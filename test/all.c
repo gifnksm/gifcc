@@ -2244,6 +2244,19 @@ struct Test71_S {
 };
 struct Test71_S test71_s = (struct Test71_S){7, 8, 9};
 struct Test71_S *test71_p = &(struct Test71_S){10, 11, 12};
+static int test71_i = 0;
+static int test71_j = 0;
+static int test71_k = 0;
+typedef struct Test71_Ref Test71_Ref;
+typedef struct Test71_Ref {
+  Test71_Ref *next;
+  int *ptr;
+} Test71_Ref;
+static Test71_Ref test71_ref = {
+    .ptr = &test71_i,
+    .next =
+        &(Test71_Ref){.ptr = &test71_j,
+                      .next = &(Test71_Ref){.ptr = &test71_k, .next = NULL}}};
 
 static void test71(void) {
   struct S {
@@ -2269,6 +2282,15 @@ static void test71(void) {
   CHECK_INT(10, test71_p->a);
   CHECK_INT(11, test71_p->b);
   CHECK_INT(12, test71_p->c);
+
+  Test71_Ref *ref = &test71_ref;
+  for (int i = 5; ref != NULL; i++) {
+    *ref->ptr = i;
+    ref = ref->next;
+  }
+  CHECK_INT(5, test71_i);
+  CHECK_INT(6, test71_j);
+  CHECK_INT(7, test71_k);
 }
 
 static int num_check = 0;
