@@ -2107,11 +2107,10 @@ static Expr *cast_expression(Tokenizer *tokenizer, Scope *scope) {
       Range range = {};
       initializer(tokenizer, scope, val_type, &init, &range);
       return new_expr_compound(scope, val_type, init, range);
-    } else {
-      Expr *operand = cast_expression(tokenizer, scope);
-      return new_expr_cast(scope, val_type, operand,
-                           range_join(start, operand->range));
     }
+    Expr *operand = cast_expression(tokenizer, scope);
+    return new_expr_cast(scope, val_type, operand,
+                         range_join(start, operand->range));
   }
   return unary_expression(tokenizer, scope);
 }
@@ -2336,10 +2335,6 @@ static Type *struct_or_union_specifier(Scope *scope, Tokenizer *tokenizer,
                                        Token *token) {
   assert(token->ty == TK_STRUCT || token->ty == TK_UNION);
   Token *tag = token_consume(tokenizer, TK_IDENT);
-  if (tag == NULL && token_peek(tokenizer)->ty != '{') {
-    range_error(token->range,
-                "構造体または共用体のタグまたは `{` がありません");
-  }
 
   type_t ty = token->ty == TK_STRUCT ? TY_STRUCT : TY_UNION;
 
@@ -2370,6 +2365,11 @@ static Type *struct_or_union_specifier(Scope *scope, Tokenizer *tokenizer,
     }
     token_expect(tokenizer, '}');
     return type;
+  }
+
+  if (tag == NULL) {
+    range_error(token->range,
+                "構造体または共用体のタグまたは `{` がありません");
   }
 
   Type *type = get_tag(scope, tag->ident);

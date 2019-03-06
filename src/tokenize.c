@@ -302,11 +302,8 @@ Token *token_expect(Tokenizer *tokenizer, int ty) {
 }
 
 static const char *quote(const char *s) {
-  int len = strlen(s);
-  char *str = calloc(len + 3, sizeof(char));
-  strcat(str, "`");
-  strcat(str, s);
-  strcat(str, "`");
+  char *str;
+  alloc_printf(&str, "`%s`", s);
   return str;
 }
 
@@ -486,11 +483,6 @@ static inline int hex2num(int c) {
 static inline bool is_oct_digit(int c) { return '0' <= c && c <= '7'; }
 static inline int oct2num(int c) {
   assert(is_oct_digit(c));
-  return c - '0';
-}
-static inline bool is_dec_digit(int c) { return isdigit(c) != 0; }
-static inline int dec2num(int c) {
-  assert(is_dec_digit(c));
   return c - '0';
 }
 
