@@ -2319,6 +2319,37 @@ static void test72(void) {
   test72_func(a1, a2);
 }
 
+struct Test73_Ret1 {
+  int a;
+  int b;
+  int c;
+  int d;
+};
+struct Test73_Ret2 {
+  long x;
+  long y;
+  long z;
+};
+static struct Test73_Ret1 test73_func1(void) {
+  return (struct Test73_Ret1){3, 4, 5, 6};
+}
+static struct Test73_Ret2 test73_func2(void) {
+  return (struct Test73_Ret2){10, 20, 30};
+}
+static void test73(void) {
+  struct Test73_Ret1 r1;
+  r1 = test73_func1();
+  CHECK_INT(3, r1.a);
+  CHECK_INT(4, r1.b);
+  CHECK_INT(5, r1.c);
+  CHECK_INT(6, r1.d);
+  struct Test73_Ret2 r2;
+  r2 = test73_func2();
+  CHECK_INT(10, r2.x);
+  CHECK_INT(20, r2.y);
+  CHECK_INT(30, r2.z);
+}
+
 static int num_check = 0;
 static void check_int(const char *file, int line, int a, int b) {
   if (a != b) {
@@ -2351,7 +2382,7 @@ int main(void) {
       TEST(test56), TEST(test57), TEST(test58), TEST(test59), TEST(test60),
       TEST(test61), TEST(test62), TEST(test63), TEST(test64), TEST(test65),
       TEST(test66), TEST(test67), TEST(test68), TEST(test69), TEST(test70),
-      TEST(test71), TEST(test72), {NULL, NULL},
+      TEST(test71), TEST(test72), TEST(test73), {NULL, NULL},
   };
   int i = 0;
   for (i = 0; test_list[i].name != NULL; i++) {

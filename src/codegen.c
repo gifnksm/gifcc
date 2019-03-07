@@ -641,8 +641,8 @@ static void gen_expr(Expr *expr) {
   printf("  push rax\n");
 }
 
-static void classify_arg_type(const Type *type, Range range, IntVector *class,
-                              int *num_int) {
+static arg_class_t classify_arg_type(const Type *type, Range range,
+                                     int *num_int) {
   const int NUM_INT_REG = 6;
   switch (type->ty) {
   case TY_BOOL:
@@ -660,44 +660,43 @@ static void classify_arg_type(const Type *type, Range range, IntVector *class,
   case TY_PTR:
   case TY_ENUM:
     if (*num_int + 1 <= NUM_INT_REG) {
-      int_vec_push(class, ARG_CLASS_INTEGER);
       (*num_int)++;
-    } else {
-      int_vec_push(class, ARG_CLASS_MEMORY);
+      return ARG_CLASS_INTEGER;
     }
-    break;
+    return ARG_CLASS_MEMORY;
   case TY_ARRAY:
   case TY_STRUCT:
   case TY_UNION: {
     int size = get_val_size(type, range);
     if (size > 16) {
-      int_vec_push(class, ARG_CLASS_MEMORY);
+      return ARG_CLASS_MEMORY;
     } else {
       if (size > 8 && *num_int + 2 <= NUM_INT_REG) {
-        int_vec_push(class, ARG_CLASS_INTEGER);
         (*num_int) += 2;
-      } else if (size <= 8 && *num_int + 1 <= NUM_INT_REG) {
-        int_vec_push(class, ARG_CLASS_INTEGER);
-        (*num_int)++;
-      } else {
-        int_vec_push(class, ARG_CLASS_MEMORY);
+        return ARG_CLASS_INTEGER;
       }
+      if (size <= 8 && *num_int + 1 <= NUM_INT_REG) {
+        (*num_int)++;
+        return ARG_CLASS_INTEGER;
+      }
+      return ARG_CLASS_MEMORY;
     }
     break;
   }
   case TY_FUNC:
-    range_error(range, "void型の引数です");
   case TY_VOID:
-    range_error(range, "void型の引数です");
+    break;
   }
+  range_error(range, "不正な型の引数です: %d", type->ty);
 }
 
-static IntVector *classify_arg(const Vector *args) {
+static IntVector *classify_arg(const Vector *args, int int_reg_idx) {
   IntVector *class = new_int_vector();
-  int num_int = 0;
+  int num_int_reg = int_reg_idx;
   for (int i = 0; i < vec_len(args); i++) {
     Expr *expr = vec_get(args, i);
-    classify_arg_type(expr->val_type, expr->range, class, &num_int);
+    int_vec_push(class,
+                 classify_arg_type(expr->val_type, expr->range, &num_int_reg));
   }
   return class;
 }
@@ -705,23 +704,42 @@ static IntVector *classify_arg(const Vector *args) {
 static void gen_expr_call(Expr *expr) {
   assert(expr->ty == EX_CALL);
 
-  int num_push = 0;
-  Vector *arg = expr->call.argument;
-  int num_int_reg = 0;
-  IntVector *arg_class = arg != NULL ? classify_arg(arg) : NULL;
   bool call_direct;
+  Type *ret_type;
   if (expr->call.callee->val_type->ty == TY_FUNC) {
     call_direct = true;
+    Type *functype = expr->call.callee->val_type;
+    ret_type = functype->func_ret;
   } else if (expr->call.callee->val_type->ty == TY_PTR &&
              expr->call.callee->val_type->ptrof->ty == TY_FUNC) {
     call_direct = false;
-  } else if (expr->call.callee->ty == EX_GLOBAL_VAR) {
-    call_direct = true;
+    Type *functype = expr->call.callee->val_type->ptrof;
+    ret_type = functype->func_ret;
   } else {
     range_error(expr->call.callee->range,
                 "関数または関数ポインタ以外を呼び出そうとしました: %d",
                 expr->call.callee->val_type->ty);
   }
+
+  int num_push = 0;
+  int int_reg_idx = 0;
+  int ret_size;
+  arg_class_t ret_class;
+  if (ret_type->ty != TY_VOID) {
+    ret_size = get_val_size(ret_type, expr->range);
+    int num_int_reg = 0;
+    ret_class = classify_arg_type(ret_type, expr->range, &num_int_reg);
+    if (ret_class == ARG_CLASS_MEMORY) {
+      // 戻り値をメモリで返す場合は、格納先の領域を獲得しておく
+      printf("  sub rsp, %d\n", align(ret_size, 8));
+      int_reg_idx++;
+    }
+  } else {
+    ret_size = 0;
+    ret_class = ARG_CLASS_INTEGER;
+  }
+  Vector *arg = expr->call.argument;
+  IntVector *arg_class = arg != NULL ? classify_arg(arg, int_reg_idx) : NULL;
 
   if (arg && vec_len(arg) > 0) {
     // メモリ渡しする引数をスタックに積む
@@ -746,8 +764,7 @@ static void gen_expr_call(Expr *expr) {
   }
 
   if (arg && vec_len(arg) > 0) {
-    // レジスタ渡しする引数をpopする
-    int int_reg_idx = 0;
+    // レジスタ渡しする引数をpopしレジスタにセットする
     for (int i = 0; i < vec_len(arg); i++) {
       Expr *expr = vec_get(arg, i);
       int size = get_val_size(expr->val_type, expr->range);
@@ -786,7 +803,10 @@ static void gen_expr_call(Expr *expr) {
         int_reg_idx++;
       }
     }
-    assert(num_int_reg == 0);
+  }
+  if (ret_class == ARG_CLASS_MEMORY) {
+    // rdiには戻り値の格納先を設定
+    printf("  lea rdi, [rsp + %d]\n", 8 * num_push);
   }
   printf("  mov al, 0\n");
   if (call_direct) {
@@ -797,7 +817,17 @@ static void gen_expr_call(Expr *expr) {
   if (num_push > 0) {
     printf("  add rsp, %d\n", 8 * num_push);
   }
-  printf("  push rax\n");
+  if (ret_type->ty != TY_VOID) {
+    if (ret_class == ARG_CLASS_MEMORY) {
+      // スタックのトップに戻り値が設定されているはずなので何もしなくて良い
+    } else {
+      assert(ret_class == ARG_CLASS_INTEGER);
+      if (ret_size > 8) {
+        printf("  push rdx\n");
+      }
+      printf("  push rax\n");
+    }
+  }
   return;
 }
 
@@ -811,8 +841,10 @@ static void gen_stmt(Stmt *stmt) {
 
     // 式の評価結果としてスタックに一つの値が残っている
     // はずなので、スタックが溢れないようにポップしておく
-    int size = get_val_size(stmt->expr->val_type, stmt->expr->range);
-    printf("  add rsp, %d\n", align(size, 8));
+    if (stmt->expr->val_type->ty != TY_VOID) {
+      int size = get_val_size(stmt->expr->val_type, stmt->expr->range);
+      printf("  add rsp, %d\n", align(size, 8));
+    }
     return;
   }
   case ST_COMPOUND: {
@@ -964,8 +996,51 @@ static void gen_stmt(Stmt *stmt) {
   }
   case ST_RETURN: {
     if (stmt->expr != NULL) {
+      Type *ret_type = func_ctxt->type->func_ret;
       gen_expr(stmt->expr);
-      printf("  pop rax\n");
+
+      int int_reg_idx = 0;
+      int size = get_val_size(ret_type, func_ctxt->range);
+      arg_class_t class =
+          classify_arg_type(ret_type, func_ctxt->range, &int_reg_idx);
+      if (class == ARG_CLASS_MEMORY) {
+        // 戻り値を格納するアドレス
+        printf("  mov rax, [rbp - %d]\n", align(func_ctxt->stack_size, 16) + 8);
+        int copy_size = 0;
+        while (size - copy_size > 0) {
+          switch (size - copy_size) {
+          case 1:
+            printf("  mov %s, [rsp + %d]\n", Reg1.rdi, copy_size);
+            printf("  mov [rax + %d], %s\n", copy_size, Reg1.rdi);
+            copy_size += 1;
+            break;
+          case 2:
+          case 3:
+            printf("  mov %s, [rsp + %d]\n", Reg2.rdi, copy_size);
+            printf("  mov [rax + %d], %s\n", copy_size, Reg2.rdi);
+            copy_size += 2;
+            break;
+          case 4:
+          case 5:
+          case 6:
+          case 7:
+            printf("  mov %s, [rsp + %d]\n", Reg4.rdi, copy_size);
+            printf("  mov [rax + %d], %s\n", copy_size, Reg4.rdi);
+            copy_size += 4;
+            break;
+          default:
+            printf("  mov %s, [rsp + %d]\n", Reg8.rdi, copy_size);
+            printf("  mov [rax + %d], %s\n", copy_size, Reg8.rdi);
+            copy_size += 8;
+            break;
+          }
+        }
+      } else {
+        printf("  pop rax\n");
+        if (size > 8) {
+          printf("  pop rdx\n");
+        }
+      }
     }
     printf("  jmp %s\n", epilogue_label);
     return;
@@ -974,12 +1049,13 @@ static void gen_stmt(Stmt *stmt) {
   assert(false);
 }
 
-static IntVector *classify_param(const Vector *params) {
+static IntVector *classify_param(const Vector *params, int int_reg_idx) {
   IntVector *class = new_int_vector();
-  int num_int = 0;
+  int num_int_reg = int_reg_idx;
   for (int i = 0; i < vec_len(params); i++) {
     Param *param = vec_get(params, i);
-    classify_arg_type(param->type, param->range, class, &num_int);
+    int_vec_push(class,
+                 classify_arg_type(param->type, param->range, &num_int_reg));
   }
   return class;
 }
@@ -1001,11 +1077,23 @@ static void gen_func(Function *func) {
   printf("  mov rbp, rsp\n");
   printf("  sub rsp, %d\n", align(func->stack_size, 16));
 
+  int int_reg_idx = 0;
+  if (func->type->func_ret->ty != TY_VOID) {
+    int num_int_reg = 0;
+    arg_class_t class =
+        classify_arg_type(func->type->func_ret, func->range, &num_int_reg);
+    if (class == ARG_CLASS_MEMORY) {
+      // 戻り値をメモリで返す場合は、格納先のポインタをpushしておく
+      printf("  push rdi\n");
+      int_reg_idx++;
+    }
+  }
+
   // 引数をスタックへコピー
   if (func->type->func_param != NULL) {
-    int int_reg_idx = 0;
     int stack_offset = 16;
-    IntVector *param_class = classify_param(func->type->func_param);
+    IntVector *param_class =
+        classify_param(func->type->func_param, int_reg_idx);
     for (int i = 0; i < vec_len(func->type->func_param); i++) {
       Param *param = vec_get(func->type->func_param, i);
       StackVar *var = param->stack_var;
