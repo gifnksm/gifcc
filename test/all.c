@@ -2,9 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-static int num_check;
-static void check_int(const char *file, int line, int a, int b);
-#define CHECK_INT(a, b) check_int(__FILE__, __LINE__, (a), (b))
+#include "common.h"
 
 static void test01(void) {
   CHECK_INT(0, 0);
@@ -374,6 +372,7 @@ static void test07(void) {
   }
   CHECK_INT(10, b);
 
+  printf("    ");
   c = 97;
   while (c <= 122) {
     putchar(c);
@@ -800,6 +799,7 @@ static void test18(void) {
 }
 
 static void test19(void) {
+  printf("    ");
   char x[4];
   x[0] = 'a';
   x[1] = 'b';
@@ -817,11 +817,11 @@ static void test19(void) {
 }
 
 static void test20(void) {
-  puts("hogehoge");
-  puts("\n\n\r\r");
-  puts("ほげほげ");
+  puts("    hogehoge");
+  puts("    \n\n\r\r");
+  puts("    ほげほげ");
 
-  printf("%s %d\n", "abc", 456);
+  printf("    %s %d\n", "abc", 456);
 }
 
 static void test21(void) {
@@ -834,7 +834,7 @@ static void test21(void) {
   }
 
   for (int i = 0; i < 3; i++) {
-    printf("%d:", i);
+    printf("    %d:", i);
     for (int j = 0; j < 5; j++) {
       printf(" %d", a[i][j]);
       printf(" %p", &a[i][j]);
@@ -2350,23 +2350,7 @@ static void test73(void) {
   CHECK_INT(30, r2.z);
 }
 
-static int num_check = 0;
-static void check_int(const char *file, int line, int a, int b) {
-  if (a != b) {
-    printf("%s:%d:FAILED %d != %d\n", file, line, a, b);
-    abort();
-  }
-  num_check++;
-}
-
-#define TEST(name)                                                             \
-  { #name, name }
-
 int main(void) {
-  typedef struct Test {
-    const char *name;
-    void (*func)(void);
-  } Test;
   Test test_list[] = {
       TEST(test01), TEST(test02), TEST(test03), TEST(test04), TEST(test05),
       TEST(test06), TEST(test07), TEST(test08), TEST(test09), TEST(test10),
@@ -2384,13 +2368,7 @@ int main(void) {
       TEST(test66), TEST(test67), TEST(test68), TEST(test69), TEST(test70),
       TEST(test71), TEST(test72), TEST(test73), {NULL, NULL},
   };
-  int i = 0;
-  for (i = 0; test_list[i].name != NULL; i++) {
-    Test *test = &test_list[i];
-    test->func();
-    printf("%s OK (%d assertions)\n", test->name, num_check);
-    num_check = 0;
-  }
+  RUN_TEST(test_list);
 
   return 0;
 }

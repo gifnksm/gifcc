@@ -1,6 +1,7 @@
 OUTDIR=../target/test
 GIFCC=../target/gifcc
 
+HEADERS=$(wildcard *.h)
 SRCS=$(wildcard *.c)
 ASMS=$(patsubst %.c,$(OUTDIR)/%.s,$(SRCS))
 EXES=$(patsubst %.c,$(OUTDIR)/%.s,$(SRCS))
@@ -35,22 +36,22 @@ gcc-run-$(1): $(OUTDIR)/$(1).gcc
 endef
 $(foreach name,$(NAMES),$(eval $(call defrules,$(name))))
 
-$(OUTDIR)/%.token: %.c $(GIFCC) | $(OUTDIR)/
+$(OUTDIR)/%.token: %.c $(HEADERS) $(GIFCC) | $(OUTDIR)/
 	$(GIFCC) --output token $< > $@.tmp
 	mv $@.tmp $@
 
-$(OUTDIR)/%.ast: %.c $(GIFCC) | $(OUTDIR)/
+$(OUTDIR)/%.ast: %.c $(HEADERS) $(GIFCC) | $(OUTDIR)/
 	$(GIFCC) --output ast $< > $@.tmp
 	mv $@.tmp $@
 
-$(OUTDIR)/%.s: %.c $(GIFCC) | $(OUTDIR)/
+$(OUTDIR)/%.s: %.c $(HEADERS) $(GIFCC) | $(OUTDIR)/
 	$(GIFCC) $< > $@.tmp
 	mv $@.tmp $@
 
 $(OUTDIR)/%: $(OUTDIR)/%.s
 	gcc -o $@ $<
 
-$(OUTDIR)/%.gcc: %.c | $(OUTDIR)/
+$(OUTDIR)/%.gcc: %.c $(HEADERS) | $(OUTDIR)/
 	gcc -g3 -w -o $@ $<
 
 %/:

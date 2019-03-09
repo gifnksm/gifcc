@@ -1,8 +1,5 @@
 #include "cpp.h"
 
-#define CHECK_INT(a, b) check_int(__FILE__, __LINE__, (a), (b))
-static void check_int(const char *file, int line, int a, int b);
-
 #ifdef FOO
 #error "FOO must not be defined"
 #endif
@@ -67,29 +64,7 @@ static int n5 = 6\
 #define DEFVAR(var, val, type) type var = val
 DEFVAR(n6, 700, int);
 
-#define CAT2(a, b) a##b
-#define CAT(a, b) CAT2(a, b)
-#define AB(x) CAT(x, y)
-static void run01(void) {
-  static int xy = 800;
-  CHECK_INT(800, CAT(A, B)(x));
-}
-
-static void run02(void) {
-  printf("__DATE__ = %s\n", __DATE__);
-  printf("__TIME__ = %s\n", __TIME__);
-  printf("__FILE__ = %s\n", __FILE__);
-  printf("__LINE__ = %d\n", __LINE__);
-}
-
-static void check_int(const char *file, int line, int a, int b) {
-  if (a != b) {
-    printf("%s:%d:FAILED %d != %d\n", file, line, a, b);
-    abort();
-  }
-}
-
-int main(void) {
+static void test01(void) {
   CHECK_INT(100, n0);
   CHECK_INT(200, n1);
   CHECK_INT(300, n2);
@@ -97,9 +72,25 @@ int main(void) {
   CHECK_INT(500, n4);
   CHECK_INT(600, n5);
   CHECK_INT(700, n6);
-  run01();
-  run02();
+}
 
-  puts("OK");
+#define CAT2(a, b) a##b
+#define CAT(a, b) CAT2(a, b)
+#define AB(x) CAT(x, y)
+static void test02(void) {
+  static int xy = 800;
+  CHECK_INT(800, CAT(A, B)(x));
+}
+
+static void test03(void) {
+  printf("    __DATE__ = %s\n", __DATE__);
+  printf("    __TIME__ = %s\n", __TIME__);
+  printf("    __FILE__ = %s\n", __FILE__);
+  printf("    __LINE__ = %d\n", __LINE__);
+}
+
+int main(void) {
+  Test test_list[] = {TEST(test01), TEST(test02), TEST(test03), {NULL, NULL}};
+  RUN_TEST(test_list);
   return 0;
 }
