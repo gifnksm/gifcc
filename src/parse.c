@@ -2659,6 +2659,9 @@ static void array_initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
     if (token_peek(tokenizer)->ty != '[' && token_peek(tokenizer)->ty != '}') {
       int max_len = type->array_len < 0 ? INT_MAX : type->array_len;
       for (int i = idx; i < max_len; i++) {
+        if (token_peek(tokenizer)->ty == '}') {
+          break;
+        }
         vec_extend((*init)->elements, i + 1);
         Initializer *eleminit = vec_get((*init)->elements, i);
         initializer_inner(tokenizer, scope, type->ptrof, &eleminit, NULL);
