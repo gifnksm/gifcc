@@ -69,6 +69,7 @@ enum {
   TK_UNION,         // `union`
   TK_ENUM,          // `enum`
   TK_SIZEOF,        // `sizeof`
+  TK_ALIGNOF,       // `_Alignof`
   TK_TYPEDEF,       // `typedef`
   TK_EXTERN,        // `extern`
   TK_STATIC,        // `static`

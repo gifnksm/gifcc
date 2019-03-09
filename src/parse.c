@@ -1908,8 +1908,15 @@ static Expr *unary_expression(Tokenizer *tokenizer, Scope *scope) {
     token_expect(tokenizer, '(');
     Type *type = type_name(scope, tokenizer);
     Token *end = token_expect(tokenizer, ')');
-    return new_expr_num(new_number_size_t(get_val_size(type, end->range)),
-                        range_join(token->range, end->range));
+    Range range = range_join(token->range, end->range);
+    return new_expr_num(new_number_size_t(get_val_size(type, range)), range);
+  }
+  if ((token = token_consume(tokenizer, TK_ALIGNOF)) != NULL) {
+    token_expect(tokenizer, '(');
+    Type *type = type_name(scope, tokenizer);
+    Token *end = token_expect(tokenizer, ')');
+    Range range = range_join(token->range, end->range);
+    return new_expr_num(new_number_size_t(get_val_align(type, range)), range);
   }
   return postfix_expression(tokenizer, scope);
 }

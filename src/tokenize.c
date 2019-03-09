@@ -65,6 +65,7 @@ static const LongToken LONG_IDENT_TOKENS[] = {
     {"union", TK_UNION},
     {"enum", TK_ENUM},
     {"sizeof", TK_SIZEOF},
+    {"_Alignof", TK_ALIGNOF},
     {"typedef", TK_TYPEDEF},
     {"extern", TK_EXTERN},
     {"static", TK_STATIC},
