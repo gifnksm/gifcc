@@ -544,6 +544,7 @@ static Type *integer_promoted(Scope *scope, Expr **e) {
   case TY_S_LLONG:
   case TY_U_LLONG:
   case TY_FLOAT:
+  case TY_DOUBLE:
   case TY_VOID:
   case TY_PTR:
   case TY_ARRAY:
@@ -565,14 +566,17 @@ static Type *arith_converted(Scope *scope, Expr **e1, Expr **e2) {
     return NULL;
   }
 
-  if (!is_integer_type(ty1) || !is_integer_type(ty2)) {
-    if (ty1->ty == TY_FLOAT) {
-      *e2 = new_expr_cast(scope, ty1, *e2, r2);
-      return ty1;
+  if (is_float_type(ty1) || is_float_type(ty2)) {
+    Type *type;
+    if (ty1->ty == TY_DOUBLE || ty2->ty == TY_DOUBLE) {
+      type = new_type(TY_DOUBLE, EMPTY_TYPE_QUALIFIER);
+    } else {
+      assert(ty1->ty == TY_FLOAT || ty2->ty == TY_FLOAT);
+      type = new_type(TY_FLOAT, EMPTY_TYPE_QUALIFIER);
     }
-    assert(ty2->ty == TY_FLOAT);
-    *e1 = new_expr_cast(scope, ty2, *e1, r1);
-    return ty2;
+    *e1 = new_expr_cast(scope, type, *e1, r1);
+    *e2 = new_expr_cast(scope, type, *e2, r2);
+    return type;
   }
 
   ty1 = integer_promoted(scope, e1);
@@ -692,6 +696,7 @@ static bool token_is_type_specifier(Scope *scope, Token *token) {
   case TK_SIGNED:
   case TK_UNSIGNED:
   case TK_FLOAT:
+  case TK_DOUBLE:
   case TK_STRUCT:
   case TK_UNION:
   case TK_ENUM:
@@ -738,6 +743,15 @@ static bool consume_type_specifier(Scope *scope, Tokenizer *tokenizer,
         range_error(token->range, "無効な型です");
       }
       ts->concrete_type = new_type(TY_FLOAT, EMPTY_TYPE_QUALIFIER);
+      ts->range = token->range;
+      consumed = true;
+      continue;
+    }
+    if ((token = token_consume(tokenizer, TK_DOUBLE)) != NULL) {
+      if (concrete_type_specified) {
+        range_error(token->range, "無効な型です");
+      }
+      ts->concrete_type = new_type(TY_DOUBLE, EMPTY_TYPE_QUALIFIER);
       ts->range = token->range;
       consumed = true;
       continue;
@@ -1016,6 +1030,8 @@ int get_val_size(const Type *ty, Range range) {
     return sizeof(unsigned long long);
   case TY_FLOAT:
     return sizeof(float);
+  case TY_DOUBLE:
+    return sizeof(double);
   case TY_PTR:
     return sizeof(void *);
   case TY_ARRAY:
@@ -1071,6 +1087,8 @@ int get_val_align(const Type *ty, Range range) {
     return alignof(unsigned long long);
   case TY_FLOAT:
     return alignof(float);
+  case TY_DOUBLE:
+    return alignof(double);
   case TY_PTR:
     return alignof(void *);
   case TY_ARRAY:
@@ -2739,6 +2757,7 @@ static void initializer_inner(Tokenizer *tokenizer, Scope *scope, Type *type,
     case TY_U_LONG:
     case TY_U_LLONG:
     case TY_FLOAT:
+    case TY_DOUBLE:
     case TY_PTR:
     case TY_ENUM:
       initializer(tokenizer, scope, type, init, NULL);
@@ -2998,6 +3017,7 @@ static void gen_init(Scope *scope, Expr **expr, Initializer *init, Expr *dest,
   case TY_U_LONG:
   case TY_U_LLONG:
   case TY_FLOAT:
+  case TY_DOUBLE:
   case TY_PTR:
   case TY_ENUM: {
     Expr *assign = new_expr_binop(

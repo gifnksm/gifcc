@@ -103,6 +103,7 @@ bool is_integer_type(Type *ty) {
   case TY_ENUM:
     return true;
   case TY_FLOAT:
+  case TY_DOUBLE:
   case TY_VOID:
   case TY_PTR:
   case TY_ARRAY:
@@ -117,6 +118,7 @@ bool is_integer_type(Type *ty) {
 bool is_float_type(Type *ty) {
   switch (ty->ty) {
   case TY_FLOAT:
+  case TY_DOUBLE:
     return true;
   case TY_BOOL:
   case TY_CHAR:
@@ -164,6 +166,7 @@ int get_int_type_rank(Type *ty, Range range) {
   case TY_U_LLONG:
     return 6;
   case TY_FLOAT:
+  case TY_DOUBLE:
   case TY_VOID:
   case TY_PTR:
   case TY_ARRAY:
@@ -194,6 +197,7 @@ bool is_signed_int_type(Type *ty, Range range) {
   case TY_U_LLONG:
     return false;
   case TY_FLOAT:
+  case TY_DOUBLE:
   case TY_PTR:
   case TY_VOID:
   case TY_ARRAY:
@@ -264,6 +268,9 @@ char *format_type(const Type *type, bool detail) {
     break;
   case TY_FLOAT:
     type_str = "float";
+    break;
+  case TY_DOUBLE:
+    type_str = "double";
     break;
   case TY_PTR:
     type_str = format("PTR(%s)", format_type(type->ptrof, false));

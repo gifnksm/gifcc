@@ -50,6 +50,7 @@ static const LongToken LONG_IDENT_TOKENS[] = {
     {"unsigned", TK_UNSIGNED},
     {"_Bool", TK_BOOL},
     {"float", TK_FLOAT},
+    {"double", TK_DOUBLE},
     {"if", TK_IF},
     {"else", TK_ELSE},
     {"switch", TK_SWITCH},

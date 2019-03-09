@@ -77,6 +77,41 @@ const Reg Reg1 = {
     .r11 = "r11b",
 };
 
+typedef struct {
+  const char *add;
+  const char *sub;
+  const char *mul;
+  const char *div;
+  const char *comi;
+  const char *cvtt_to_si;
+  const char *cvt_to_ss;
+  const char *cvt_to_sd;
+  const char *cvtt_from_si;
+} FloatOp;
+
+const FloatOp FloatOpSS = {
+    .add = "addss",
+    .sub = "subss",
+    .mul = "mulss",
+    .div = "divss",
+    .comi = "comiss",
+    .cvtt_to_si = "cvttss2si",
+    .cvt_to_ss = NULL,
+    .cvt_to_sd = "cvtss2sd",
+    .cvtt_from_si = "cvtsi2ss",
+};
+const FloatOp FloatOpSD = {
+    .add = "addsd",
+    .sub = "subsd",
+    .mul = "mulsd",
+    .div = "divsd",
+    .comi = "comisd",
+    .cvtt_to_si = "cvttsd2si",
+    .cvt_to_ss = "cvtsd2ss",
+    .cvt_to_sd = NULL,
+    .cvtt_from_si = "cvtsi2sd",
+};
+
 static bool is_int_reg_type(Type *type) {
   return is_ptr_type(type) || is_integer_type(type);
 }
@@ -100,6 +135,17 @@ static const Reg *get_int_reg_for_size(size_t size, Range range) {
 static const Reg *get_int_reg(Type *type, Range range) {
   assert(is_int_reg_type(type));
   return get_int_reg_for_size(get_val_size(type, range), range);
+}
+
+static const FloatOp *get_float_op(Type *type, Range range) {
+  switch (type->ty) {
+  case TY_FLOAT:
+    return &FloatOpSS;
+  case TY_DOUBLE:
+    return &FloatOpSD;
+  default:
+    range_error(range, "不正な型です: %s", format_type(type, false));
+  }
 }
 
 char *make_label(const char *s) {
@@ -174,6 +220,7 @@ static char *num2str(Number num, Range range) {
   case TY_FLOAT:
     sprintf(buf, "%u", num.u_int_val);
     break;
+  case TY_DOUBLE:
   case TY_U_LONG:
     sprintf(buf, "%lu", num.u_long_val);
     break;
@@ -525,21 +572,38 @@ static void gen_expr(Expr *expr) {
     }
 
     if (is_float_type(operand->val_type) && is_int_reg_type(expr->val_type)) {
+      const FloatOp *op = get_float_op(operand->val_type, operand->range);
       const Reg *to = get_int_reg(expr->val_type, expr->range);
       pop_xmm(0);
-      printf("  cvttss2si %s, xmm0\n", to->rax);
+      printf("  %s %s, xmm0\n", op->cvtt_to_si, to->rax);
       printf("  push rax\n");
       return;
     }
 
     if (is_int_reg_type(operand->val_type) && is_float_type(expr->val_type)) {
+      const FloatOp *op = get_float_op(expr->val_type, expr->range);
       const Reg *from = get_int_reg(operand->val_type, operand->range);
       printf("  pop rax\n");
-      printf("  cvtsi2ss xmm0, %s\n", from->rax);
+      printf("  %s xmm0, %s\n", op->cvtt_from_si, from->rax);
       push_xmm(0);
       return;
     }
 
+    if (is_float_type(operand->val_type) && is_float_type(expr->val_type)) {
+      const FloatOp *op = get_float_op(operand->val_type, expr->range);
+      pop_xmm(0);
+      if (expr->val_type->ty == TY_FLOAT) {
+        printf("  %s xmm0, xmm0\n", op->cvt_to_ss);
+      } else if (expr->val_type->ty == TY_DOUBLE) {
+        printf("  %s xmm0, xmm0\n", op->cvt_to_sd);
+      } else {
+        goto CastError;
+      }
+      push_xmm(0);
+      return;
+    }
+
+  CastError:
     range_error(expr->range, "不正なキャストです: %s, %s",
                 format_type(operand->val_type, false),
                 format_type(expr->val_type, false));
@@ -648,6 +712,7 @@ static arg_class_t classify_arg_type(const Type *type, Range range,
     break;
   }
   case TY_FLOAT:
+  case TY_DOUBLE:
   case TY_FUNC:
   case TY_VOID:
     break;
@@ -909,6 +974,8 @@ static void gen_expr_binop_float(Expr *expr) {
   Type *type = expr->binop.lhs->val_type;
   assert(is_float_reg_type(type));
 
+  const FloatOp *op = get_float_op(type, expr->range);
+
   gen_expr(expr->binop.lhs);
   gen_expr(expr->binop.rhs);
 
@@ -917,24 +984,24 @@ static void gen_expr_binop_float(Expr *expr) {
 
   switch (expr->ty) {
   case EX_ADD:
-    printf("  addss xmm0, xmm1\n");
+    printf("  %s xmm0, xmm1\n", op->add);
     push_xmm(0);
     break;
   case EX_SUB:
-    printf("  subss xmm0, xmm1\n");
+    printf("  %s xmm0, xmm1\n", op->sub);
     push_xmm(0);
     break;
   case EX_MUL:
-    printf("  mulss xmm0, xmm1\n");
+    printf("  %s xmm0, xmm1\n", op->mul);
     push_xmm(0);
     break;
   case EX_DIV:
-    printf("  divss xmm0, xmm1\n");
+    printf("  %s xmm0, xmm1\n", op->div);
     push_xmm(0);
     break;
   case EX_EQEQ: {
     const Reg *r = get_int_reg(expr->val_type, expr->range);
-    printf("  ucomiss xmm0, xmm1\n");
+    printf("  %s xmm0, xmm1\n", op->comi);
     printf("  sete al\n");
     printf("  setnp dil\n");
     printf("  and al, dil\n");
@@ -944,7 +1011,7 @@ static void gen_expr_binop_float(Expr *expr) {
   }
   case EX_NOTEQ: {
     const Reg *r = get_int_reg(expr->val_type, expr->range);
-    printf("  ucomiss xmm0, xmm1\n");
+    printf("  %s xmm0, xmm1\n", op->comi);
     printf("  setne al\n");
     printf("  setp dil\n");
     printf("  or al, dil\n");
@@ -954,7 +1021,7 @@ static void gen_expr_binop_float(Expr *expr) {
   }
   case EX_LT: {
     const Reg *r = get_int_reg(expr->val_type, expr->range);
-    printf("  comiss xmm0, xmm1\n");
+    printf("  %s xmm0, xmm1\n", op->comi);
     printf("  setl al\n");
     printf("  movzb %s, al\n", r->rax);
     printf("  push rax\n");
@@ -962,7 +1029,7 @@ static void gen_expr_binop_float(Expr *expr) {
   }
   case EX_GT: {
     const Reg *r = get_int_reg(expr->val_type, expr->range);
-    printf("  comiss xmm0, xmm1\n");
+    printf("  %s xmm0, xmm1\n", op->comi);
     printf("  setg al\n");
     printf("  movzb %s, al\n", r->rax);
     printf("  push rax\n");
@@ -970,7 +1037,7 @@ static void gen_expr_binop_float(Expr *expr) {
   }
   case EX_LTEQ: {
     const Reg *r = get_int_reg(expr->val_type, expr->range);
-    printf("  comiss xmm0, xmm1\n");
+    printf("  %s xmm0, xmm1\n", op->comi);
     printf("  setle al\n");
     printf("  movzb %s, al\n", r->rax);
     printf("  push rax\n");
@@ -978,7 +1045,7 @@ static void gen_expr_binop_float(Expr *expr) {
   }
   case EX_GTEQ: {
     const Reg *r = get_int_reg(expr->val_type, expr->range);
-    printf("  comiss xmm0, xmm1\n");
+    printf("  %s xmm0, xmm1\n", op->comi);
     printf("  setge al\n");
     printf("  movzb %s, al\n", r->rax);
     printf("  push rax\n");
@@ -1378,9 +1445,11 @@ static void gen_gvar_init(Initializer *init, Range range, Vector *gvar_list) {
       case TY_U_SHORT:
         printf("  .word %hu\n", expr->num.u_short_val);
         break;
+      case TY_FLOAT:
       case TY_U_INT:
         printf("  .long %u\n", expr->num.u_int_val);
         break;
+      case TY_DOUBLE:
       case TY_U_LONG:
         printf("  .quad %lu\n", expr->num.u_long_val);
         break;
@@ -1393,7 +1462,6 @@ static void gen_gvar_init(Initializer *init, Range range, Vector *gvar_list) {
       case TY_ENUM:
         printf("  .long %d\n", expr->num.enum_val);
         break;
-      case TY_FLOAT:
       case TY_VOID:
       case TY_ARRAY:
       case TY_FUNC:

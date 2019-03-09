@@ -54,6 +54,7 @@ enum {
   TK_UNSIGNED,      // `unsigned`
   TK_BOOL,          // `_Bool`
   TK_FLOAT,         // `float`
+  TK_DOUBLE,        // `double`
   TK_IF,            // `if`
   TK_ELSE,          // `else`
   TK_SWITCH,        // `switch`
@@ -135,6 +136,9 @@ typedef struct Range {
     case TY_FLOAT:                                                             \
       (dest) = (num)->float_val;                                               \
       break;                                                                   \
+    case TY_DOUBLE:                                                            \
+      (dest) = (num)->double_val;                                              \
+      break;                                                                   \
     case TY_PTR:                                                               \
       (dest) = (num)->ptr_val;                                                 \
       break;                                                                   \
@@ -165,6 +169,7 @@ typedef enum {
   TY_U_LONG,
   TY_U_LLONG,
   TY_FLOAT,
+  TY_DOUBLE,
   TY_PTR,
   TY_ARRAY,
   TY_FUNC,
@@ -193,6 +198,7 @@ typedef struct Number {
     unsigned long u_long_val;
     unsigned long long u_llong_val;
     float float_val;
+    double double_val;
     intptr_t ptr_val;
     int enum_val;
   };

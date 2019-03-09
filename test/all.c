@@ -2344,25 +2344,49 @@ static void test73(void) {
 static void test74(void) {
   int n = 1;
   int m = 2;
-  float x = n;
-  float y = m;
-  float z = m;
-  float s = (x / y + 3) * z;
-  CHECK_INT(7, s);
 
-  CHECK_INT(1, y > x);
-  CHECK_INT(0, y < x);
-  CHECK_INT(1, y >= x);
-  CHECK_INT(0, y <= x);
-  CHECK_INT(0, y == x);
-  CHECK_INT(1, y != x);
+  float fx = n;
+  float fy = m;
+  float fz = m;
+  float fs = (fx / fy + 3) * fz;
+  CHECK_INT(7, fs);
 
-  CHECK_INT(0, y > z);
-  CHECK_INT(0, y < z);
-  CHECK_INT(1, y >= z);
-  CHECK_INT(1, y <= z);
-  CHECK_INT(1, y == z);
-  CHECK_INT(0, y != z);
+  CHECK_INT(1, fy > fx);
+  CHECK_INT(0, fy < fx);
+  CHECK_INT(1, fy >= fx);
+  CHECK_INT(0, fy <= fx);
+  CHECK_INT(0, fy == fx);
+  CHECK_INT(1, fy != fx);
+
+  CHECK_INT(0, fy > fz);
+  CHECK_INT(0, fy < fz);
+  CHECK_INT(1, fy >= fz);
+  CHECK_INT(1, fy <= fz);
+  CHECK_INT(1, fy == fz);
+  CHECK_INT(0, fy != fz);
+
+  double dx = n;
+  double dy = m;
+  double dz = m;
+  double ds = (dx / dy + 3) * dz;
+  CHECK_INT(7, ds);
+
+  CHECK_INT(1, dy > dx);
+  CHECK_INT(0, dy < dx);
+  CHECK_INT(1, dy >= dx);
+  CHECK_INT(0, dy <= dx);
+  CHECK_INT(0, dy == dx);
+  CHECK_INT(1, dy != dx);
+
+  CHECK_INT(0, dy > dz);
+  CHECK_INT(0, dy < dz);
+  CHECK_INT(1, dy >= dz);
+  CHECK_INT(1, dy <= dz);
+  CHECK_INT(1, dy == dz);
+  CHECK_INT(0, dy != dz);
+
+  CHECK_INT(1, fx == dx);
+  CHECK_INT(1, (float)dx == fx);
 }
 
 int main(void) {

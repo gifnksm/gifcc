@@ -48,6 +48,9 @@ Number new_number(type_t ty, unsigned long long val) {
   case TY_FLOAT:
     num.float_val = val;
     return num;
+  case TY_DOUBLE:
+    num.double_val = val;
+    return num;
   case TY_STRUCT:
   case TY_UNION:
   case TY_ARRAY:
