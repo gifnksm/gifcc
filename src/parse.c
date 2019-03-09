@@ -56,6 +56,7 @@ typedef struct TypeSpecifier {
     BASE_TYPE_UNSPECIFIED,
     BASE_TYPE_CHAR,
     BASE_TYPE_INT,
+    BASE_TYPE_DOUBLE,
   } base_type;
   enum { SIGN_UNSPECIFIED, SIGN_SIGNED, SIGN_UNSIGNED } signedness;
   enum { SIZE_UNSPECIFIED, SIZE_SHORT, SIZE_LONG, SIZE_LLONG } size;
@@ -545,6 +546,7 @@ static Type *integer_promoted(Scope *scope, Expr **e) {
   case TY_U_LLONG:
   case TY_FLOAT:
   case TY_DOUBLE:
+  case TY_LDOUBLE:
   case TY_VOID:
   case TY_PTR:
   case TY_ARRAY:
@@ -747,15 +749,6 @@ static bool consume_type_specifier(Scope *scope, Tokenizer *tokenizer,
       consumed = true;
       continue;
     }
-    if ((token = token_consume(tokenizer, TK_DOUBLE)) != NULL) {
-      if (concrete_type_specified) {
-        range_error(token->range, "無効な型です");
-      }
-      ts->concrete_type = new_type(TY_DOUBLE, EMPTY_TYPE_QUALIFIER);
-      ts->range = token->range;
-      consumed = true;
-      continue;
-    }
     if ((token = token_consume(tokenizer, TK_STRUCT)) != NULL ||
         (token = token_consume(tokenizer, TK_UNION)) != NULL) {
       if (concrete_type_specified) {
@@ -790,6 +783,15 @@ static bool consume_type_specifier(Scope *scope, Tokenizer *tokenizer,
         range_error(token->range, "無効な型です");
       }
       ts->base_type = BASE_TYPE_CHAR;
+      ts->range = token->range;
+      consumed = true;
+      continue;
+    }
+    if ((token = token_consume(tokenizer, TK_DOUBLE)) != NULL) {
+      if (base_type_specified) {
+        range_error(token->range, "無効な型です");
+      }
+      ts->base_type = BASE_TYPE_DOUBLE;
       ts->range = token->range;
       consumed = true;
       continue;
@@ -917,6 +919,19 @@ static Type *construct_type_specifier(TypeSpecifier ts, TypeQualifier tq) {
       return new_type(TY_U_CHAR, tq);
     }
     break;
+  case BASE_TYPE_DOUBLE:
+    if (ts.signedness != SIGN_UNSPECIFIED) {
+      range_error(ts.range, "無効な型です");
+    }
+    switch (ts.size) {
+    case SIZE_UNSPECIFIED:
+      return new_type(TY_DOUBLE, tq);
+    case SIZE_LONG:
+      return new_type(TY_LDOUBLE, tq);
+    case SIZE_SHORT:
+    case SIZE_LLONG:
+      range_error(ts.range, "無効な型です");
+    }
   }
   assert(false);
 }
@@ -1032,6 +1047,8 @@ int get_val_size(const Type *ty, Range range) {
     return sizeof(float);
   case TY_DOUBLE:
     return sizeof(double);
+  case TY_LDOUBLE:
+    return sizeof(long double);
   case TY_PTR:
     return sizeof(void *);
   case TY_ARRAY:
@@ -1089,6 +1106,8 @@ int get_val_align(const Type *ty, Range range) {
     return alignof(float);
   case TY_DOUBLE:
     return alignof(double);
+  case TY_LDOUBLE:
+    return alignof(long double);
   case TY_PTR:
     return alignof(void *);
   case TY_ARRAY:
@@ -2758,6 +2777,7 @@ static void initializer_inner(Tokenizer *tokenizer, Scope *scope, Type *type,
     case TY_U_LLONG:
     case TY_FLOAT:
     case TY_DOUBLE:
+    case TY_LDOUBLE:
     case TY_PTR:
     case TY_ENUM:
       initializer(tokenizer, scope, type, init, NULL);
@@ -3018,6 +3038,7 @@ static void gen_init(Scope *scope, Expr **expr, Initializer *init, Expr *dest,
   case TY_U_LLONG:
   case TY_FLOAT:
   case TY_DOUBLE:
+  case TY_LDOUBLE:
   case TY_PTR:
   case TY_ENUM: {
     Expr *assign = new_expr_binop(

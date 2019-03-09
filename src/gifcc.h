@@ -139,6 +139,9 @@ typedef struct Range {
     case TY_DOUBLE:                                                            \
       (dest) = (num)->double_val;                                              \
       break;                                                                   \
+    case TY_LDOUBLE:                                                           \
+      (dest) = (num)->ldouble_val;                                             \
+      break;                                                                   \
     case TY_PTR:                                                               \
       (dest) = (num)->ptr_val;                                                 \
       break;                                                                   \
@@ -170,6 +173,7 @@ typedef enum {
   TY_U_LLONG,
   TY_FLOAT,
   TY_DOUBLE,
+  TY_LDOUBLE,
   TY_PTR,
   TY_ARRAY,
   TY_FUNC,
@@ -199,6 +203,7 @@ typedef struct Number {
     unsigned long long u_llong_val;
     float float_val;
     double double_val;
+    long double ldouble_val;
     intptr_t ptr_val;
     int enum_val;
   };

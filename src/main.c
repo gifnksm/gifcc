@@ -68,8 +68,14 @@ static void dump_number(Number num) {
     printf("%d", num.enum_val);
     break;
   case TY_FLOAT:
-  case TY_DOUBLE:
     printf("%f", num.float_val);
+    break;
+  case TY_DOUBLE:
+    printf("%f", num.double_val);
+    break;
+  case TY_LDOUBLE:
+    printf("%Lf", num.ldouble_val);
+    break;
     break;
   case TY_VOID:
     printf("void");

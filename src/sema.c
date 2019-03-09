@@ -96,6 +96,14 @@ static void eval_unop(Expr *expr) {
     UNARYOP_FLOAT(op, r, a, expr->range);
     return;
   }
+
+  case TY_LDOUBLE: {
+    long double a, *r = &expr->num.ldouble_val;
+    SET_NUMBER_VAL(a, &nop);
+    UNARYOP_FLOAT(op, r, a, expr->range);
+    return;
+  }
+
   case TY_VOID:
   case TY_BOOL:
   case TY_CHAR:
@@ -174,6 +182,9 @@ static void eval_cast(Expr *expr) {
     return;
   case TY_DOUBLE:
     SET_NUMBER_VAL(exnum->double_val, opnum);
+    return;
+  case TY_LDOUBLE:
+    SET_NUMBER_VAL(exnum->ldouble_val, opnum);
     return;
   case TY_PTR:
     SET_NUMBER_VAL(exnum->ptr_val, opnum);
@@ -317,6 +328,14 @@ static void eval_binop(Expr *expr) {
     return;
   }
 
+  case TY_LDOUBLE: {
+    long double a, b, *r = &expr->num.ldouble_val;
+    SET_NUMBER_VAL(a, &lnum);
+    SET_NUMBER_VAL(b, &rnum);
+    BINOP_FLOAT(op, r, a, b, expr->range);
+    return;
+  }
+
   case TY_VOID:
   case TY_BOOL:
   case TY_CHAR:
@@ -445,6 +464,14 @@ static void eval_binop_comp(Expr *expr) {
     return;
   }
 
+  case TY_LDOUBLE: {
+    long double a, b;
+    SET_NUMBER_VAL(a, &lnum);
+    SET_NUMBER_VAL(b, &rnum);
+    BINOP_COMP(op, r, a, b, expr->range);
+    return;
+  }
+
   case TY_VOID:
   case TY_BOOL:
   case TY_CHAR:
@@ -546,6 +573,7 @@ static void eval_binop_shift(Expr *expr) {
   case TY_U_SHORT:
   case TY_FLOAT:
   case TY_DOUBLE:
+  case TY_LDOUBLE:
   case TY_PTR:
   case TY_ENUM:
   case TY_ARRAY:

@@ -236,6 +236,7 @@ static char *num2str(Number num, Range range) {
   case TY_VOID:
     sprintf(buf, "0");
     break;
+  case TY_LDOUBLE:
   case TY_ARRAY:
   case TY_FUNC:
   case TY_STRUCT:
@@ -711,6 +712,7 @@ static arg_class_t classify_arg_type(const Type *type, Range range,
     }
     break;
   }
+  case TY_LDOUBLE:
   case TY_FLOAT:
   case TY_DOUBLE:
   case TY_FUNC:
@@ -1462,6 +1464,7 @@ static void gen_gvar_init(Initializer *init, Range range, Vector *gvar_list) {
       case TY_ENUM:
         printf("  .long %d\n", expr->num.enum_val);
         break;
+      case TY_LDOUBLE:
       case TY_VOID:
       case TY_ARRAY:
       case TY_FUNC:
