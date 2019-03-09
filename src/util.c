@@ -43,16 +43,7 @@ void print_string_literal(const char *str) {
   printf("\"");
 }
 
-int __attribute__((format(printf, 2, 3)))
-alloc_printf(char **strp, const char *fmt, ...) {
-  va_list ap;
-  va_start(ap, fmt);
-  int ret = alloc_printf_v(strp, fmt, ap);
-  va_end(ap);
-  return ret;
-}
-
-int alloc_printf_v(char **strp, const char *fmt, va_list ap) {
+static int alloc_printf_v(char **strp, const char *fmt, va_list ap) {
   va_list aq;
   va_copy(aq, ap);
 
@@ -73,4 +64,15 @@ int alloc_printf_v(char **strp, const char *fmt, va_list ap) {
   va_end(aq);
 
   return len;
+}
+
+char *__attribute__((format(printf, 1, 2))) format(const char *fmt, ...) {
+  char *buf = NULL;
+  va_list ap;
+
+  va_start(ap, fmt);
+  alloc_printf_v(&buf, fmt, ap);
+  va_end(ap);
+
+  return buf;
 }

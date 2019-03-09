@@ -94,13 +94,6 @@ static bool register_tag(Scope *scope, char *tag, Type *type);
 static Type *get_tag(Scope *scope, char *tag);
 static bool register_typedef(Scope *scope, char *name, Type *type);
 static Type *get_typedef(Scope *scope, char *name);
-static bool is_sametype(Type *ty1, Type *ty2);
-static bool is_integer_type(Type *ty);
-static int get_int_type_rank(Type *ty, Range range);
-
-static bool is_arith_type(Type *ty);
-static bool is_ptr_type(Type *ty);
-static bool is_array_type(Type *ty);
 static Type *integer_promoted(Scope *scope, Expr **e);
 static Type *arith_converted(Scope *scope, Expr **e1, Expr **e2);
 static bool token_is_storage_class_specifier(Token *token);
@@ -117,17 +110,6 @@ static bool consume_function_specifier(Tokenizer *tokenizer,
                                        FunctionSpecifier *fs);
 static noreturn void binop_type_error_raw(int ty, Expr *lhs, Expr *rhs,
                                           const char *dbg_file, int dbg_line);
-static Type *new_type(int ty, TypeQualifier tq);
-static Type *clone_type(Type *type);
-static Type *new_type_ptr(Type *base_type, TypeQualifier tq);
-static Type *new_type_array(Type *base_type, Number len, TypeQualifier tq);
-static Type *new_type_unsized_array(Type *base_type, TypeQualifier tq);
-static Type *new_type_func(Type *ret_type, Vector *func_param, bool has_varargs,
-                           TypeQualifier tq);
-static Type *new_type_struct(type_t ty, const char *tag, TypeQualifier tq);
-static Type *new_type_opaque_struct(type_t ty, const char *tag,
-                                    TypeQualifier tq);
-static Type *new_type_enum(const char *tag, TypeQualifier tq);
 static Expr *coerce_array2ptr(Scope *scope, Expr *expr);
 static Expr *coerce_func2ptr(Scope *scope, Expr *expr);
 static Expr *new_expr(int ty, Type *val_type, Range range);
@@ -535,107 +517,6 @@ static Type *get_typedef(Scope *scope, char *name) {
   return NULL;
 }
 
-static bool is_sametype(Type *ty1, Type *ty2) {
-  if (ty1->ty != ty2->ty) {
-    return false;
-  }
-  if (ty1->ty == TY_PTR) {
-    return is_sametype(ty1->ptrof, ty2->ptrof);
-  }
-  return true;
-}
-
-static bool is_integer_type(Type *ty) {
-  switch (ty->ty) {
-  case TY_BOOL:
-  case TY_CHAR:
-  case TY_S_CHAR:
-  case TY_S_SHORT:
-  case TY_S_INT:
-  case TY_S_LONG:
-  case TY_S_LLONG:
-  case TY_U_CHAR:
-  case TY_U_SHORT:
-  case TY_U_INT:
-  case TY_U_LONG:
-  case TY_U_LLONG:
-  case TY_ENUM:
-    return true;
-  case TY_VOID:
-  case TY_PTR:
-  case TY_ARRAY:
-  case TY_FUNC:
-  case TY_STRUCT:
-  case TY_UNION:
-    return false;
-  }
-  assert(false);
-  return false;
-}
-static int get_int_type_rank(Type *ty, Range range) {
-  switch (ty->ty) {
-  case TY_BOOL:
-    return 1;
-  case TY_CHAR:
-  case TY_S_CHAR:
-  case TY_U_CHAR:
-    return 2;
-  case TY_S_SHORT:
-  case TY_U_SHORT:
-    return 3;
-  case TY_S_INT:
-  case TY_U_INT:
-  case TY_ENUM:
-    return 4;
-  case TY_S_LONG:
-  case TY_U_LONG:
-    return 5;
-  case TY_S_LLONG:
-  case TY_U_LLONG:
-    return 6;
-  case TY_VOID:
-  case TY_PTR:
-  case TY_ARRAY:
-  case TY_FUNC:
-  case TY_STRUCT:
-  case TY_UNION:
-    break;
-  }
-  range_error(range, "整数型ではない型です: %d", ty->ty);
-}
-bool is_signed_int_type(Type *ty, Range range) {
-  switch (ty->ty) {
-  case TY_BOOL:
-    return false;
-  case TY_CHAR:
-    return true;
-  case TY_S_CHAR:
-  case TY_S_SHORT:
-  case TY_S_INT:
-  case TY_S_LONG:
-  case TY_S_LLONG:
-  case TY_ENUM:
-    return true;
-  case TY_U_CHAR:
-  case TY_U_SHORT:
-  case TY_U_INT:
-  case TY_U_LONG:
-  case TY_U_LLONG:
-    return false;
-  case TY_PTR:
-  case TY_VOID:
-  case TY_ARRAY:
-  case TY_FUNC:
-  case TY_STRUCT:
-  case TY_UNION:
-    break;
-  }
-  range_error(range, "整数型ではない型です: %d", ty->ty);
-}
-static bool is_arith_type(Type *ty) { return is_integer_type(ty); }
-static bool is_ptr_type(Type *ty) { return ty->ty == TY_PTR; }
-static bool is_array_type(Type *ty) { return ty->ty == TY_ARRAY; }
-static bool is_func_type(Type *ty) { return ty->ty == TY_FUNC; }
 static Type *integer_promoted(Scope *scope, Expr **e) {
   if (!is_integer_type((*e)->val_type)) {
     return NULL;
@@ -1110,21 +991,25 @@ int get_val_size(const Type *ty, Range range) {
     return sizeof(void *);
   case TY_ARRAY:
     if (ty->array_len < 0) {
-      range_error(range, "不完全な配列型のサイズを取得しようとしました");
+      range_error(range, "不完全な配列型のサイズを取得しようとしました: %s",
+                  format_type(ty, false));
     }
     return get_val_size(ty->ptrof, range) * ty->array_len;
   case TY_FUNC:
-    range_error(range, "関数型の値サイズを取得しようとしました");
+    range_error(range, "関数型の値サイズを取得しようとしました: %s",
+                format_type(ty, false));
   case TY_STRUCT:
   case TY_UNION:
     if (ty->struct_body->member_list == NULL) {
-      range_error(range, "不完全型の値のサイズを取得しようとしました");
+      range_error(range, "不完全型の値のサイズを取得しようとしました: %s",
+                  format_type(ty, false));
     }
     return align(ty->struct_body->member_size, ty->struct_body->member_align);
   case TY_ENUM:
     return sizeof(int);
   }
-  range_error(range, "不明な型のサイズを取得しようとしました");
+  range_error(range, "不明な型のサイズを取得しようとしました: %s",
+              format_type(ty, false));
 }
 
 int get_val_align(const Type *ty, Range range) {
@@ -1160,17 +1045,21 @@ int get_val_align(const Type *ty, Range range) {
   case TY_ARRAY:
     return get_val_align(ty->ptrof, range);
   case TY_FUNC:
-    range_error(range, "関数型の値アラインメントを取得しようとしました");
+    range_error(range, "関数型の値アラインメントを取得しようとしました: %s",
+                format_type(ty, false));
   case TY_STRUCT:
   case TY_UNION:
     if (ty->struct_body->member_list == NULL) {
-      range_error(range, "不完全型の値のアラインメントを取得しようとしました");
+      range_error(range,
+                  "不完全型の値のアラインメントを取得しようとしました: %s",
+                  format_type(ty, false));
     }
     return ty->struct_body->member_align;
   case TY_ENUM:
     return alignof(int);
   }
-  range_error(range, "不明な型の値アラインメントを取得しようとしました");
+  range_error(range, "不明な型の値アラインメントを取得しようとしました: %s",
+              format_type(ty, false));
 }
 
 #define binop_type_error(ty, lhs, rhs)                                         \
@@ -1178,86 +1067,9 @@ int get_val_align(const Type *ty, Range range) {
 static noreturn void binop_type_error_raw(int ty, Expr *lhs, Expr *rhs,
                                           const char *dbg_file, int dbg_line) {
   range_error_raw(range_join(lhs->range, rhs->range), dbg_file, dbg_line,
-                  "不正な型の値に対する演算です: 演算=%d(%c), 左辺=%d, 右辺=%d",
-                  ty, ty, lhs->val_type->ty, rhs->val_type->ty);
-}
-
-static Type *new_type(int ty, TypeQualifier tq) {
-  Type *type = NEW(Type);
-  type->ty = ty;
-  type->qualifier = tq;
-  return type;
-}
-
-static Type *clone_type(Type *type) {
-  Type *cloned = NEW(Type);
-  *cloned = *type;
-  return cloned;
-}
-
-static Type *new_type_ptr(Type *base_type, TypeQualifier tq) {
-  Type *ptrtype = new_type(TY_PTR, tq);
-  ptrtype->ptrof = base_type;
-  return ptrtype;
-}
-
-static Type *new_type_array(Type *base_type, Number len, TypeQualifier tq) {
-  int l;
-  SET_NUMBER_VAL(l, &len);
-  Type *ptrtype = new_type(TY_ARRAY, tq);
-  ptrtype->ty = TY_ARRAY;
-  ptrtype->ptrof = base_type;
-  ptrtype->array_len = l;
-  return ptrtype;
-}
-
-static Type *new_type_unsized_array(Type *base_type, TypeQualifier tq) {
-  Type *ptrtype = new_type(TY_ARRAY, tq);
-  ptrtype->ptrof = base_type;
-  ptrtype->array_len = -1;
-  return ptrtype;
-}
-
-static Type *new_type_func(Type *ret_type, Vector *func_param, bool has_varargs,
-                           TypeQualifier tq) {
-  Type *funtype = new_type(TY_FUNC, tq);
-  funtype->func_ret = ret_type;
-  funtype->func_param = func_param;
-  funtype->func_has_varargs = has_varargs;
-  return funtype;
-}
-
-static void init_struct_body(StructBody *body) {
-  body->member_name_map = new_map();
-  body->member_list = new_vector();
-  body->member_size = 0;
-  body->member_align = 0;
-}
-
-static Type *new_type_struct(type_t ty, const char *tag, TypeQualifier tq) {
-  assert(ty == TY_STRUCT || ty == TY_UNION);
-
-  Type *type = new_type(ty, tq);
-  type->tag = tag;
-  type->struct_body = NEW(StructBody);
-  init_struct_body(type->struct_body);
-
-  return type;
-}
-
-static Type *new_type_opaque_struct(type_t ty, const char *tag,
-                                    TypeQualifier tq) {
-  assert(ty == TY_STRUCT || ty == TY_UNION);
-  Type *type = new_type(ty, tq);
-  type->tag = tag;
-  type->struct_body = NEW(StructBody);
-  return type;
-}
-
-static Type *new_type_enum(const char *tag, TypeQualifier tq) {
-  Type *type = new_type(TY_ENUM, tq);
-  type->tag = tag;
-  return type;
+                  "不正な型の値に対する演算です: 演算=%d(%c), 左辺=%s, 右辺=%s",
+                  ty, ty, format_type(lhs->val_type, false),
+                  format_type(rhs->val_type, false));
 }
 
 static Expr *coerce_array2ptr(Scope *scope, Expr *expr) {
@@ -1488,7 +1300,8 @@ static Expr *new_expr_unary(Scope *scope, int op, Expr *operand, Range range) {
   }
   case EX_INDIRECT: {
     if (operand->val_type->ty != TY_PTR) {
-      range_error(range, "ポインタ型でない値に対するデリファレンスです");
+      range_error(range, "ポインタ型でない値に対するデリファレンスです: %s",
+                  format_type(operand->val_type, false));
     }
     if (operand->val_type->ptrof->ty == TY_FUNC) {
       return operand;
@@ -1499,7 +1312,9 @@ static Expr *new_expr_unary(Scope *scope, int op, Expr *operand, Range range) {
   case EX_PLUS:
   case EX_MINUS:
     if (!is_arith_type(operand->val_type)) {
-      range_error(range, "不正な型の値に対する演算です: 算術型ではありません");
+      range_error(range,
+                  "不正な型の値に対する演算です: 算術型ではありません: %s",
+                  format_type(operand->val_type, false));
     }
     if (is_integer_type(operand->val_type)) {
       val_type = integer_promoted(scope, &operand);
@@ -1517,7 +1332,9 @@ static Expr *new_expr_unary(Scope *scope, int op, Expr *operand, Range range) {
   }
   case EX_NOT:
     if (!is_integer_type(operand->val_type)) {
-      range_error(range, "不正な型の値に対する演算です: 整数型ではありません");
+      range_error(range,
+                  "不正な型の値に対する演算です: 整数型ではありません: %s",
+                  format_type(operand->val_type, false));
     }
     val_type = integer_promoted(scope, &operand);
     break;
@@ -1735,8 +1552,9 @@ static Expr *new_expr_cond(Scope *scope, Expr *cond, Expr *then_expr,
     val_type = arith_converted(scope, &then_expr, &else_expr);
   } else {
     if (!is_sametype(then_expr->val_type, else_expr->val_type)) {
-      range_error(range, "条件演算子の両辺の型が異なります: %d, %d",
-                  then_expr->val_type->ty, else_expr->val_type->ty);
+      range_error(range, "条件演算子の両辺の型が異なります: %s, %s",
+                  format_type(then_expr->val_type, false),
+                  format_type(else_expr->val_type, false));
     }
     val_type = then_expr->val_type;
   }
@@ -1776,14 +1594,16 @@ static Expr *new_expr_arrow(Scope *scope, Expr *operand, char *name,
   if (operand->val_type->ty != TY_PTR ||
       (operand->val_type->ptrof->ty != TY_STRUCT &&
        operand->val_type->ptrof->ty != TY_UNION)) {
-    range_error(range, "構造体または共用体以外のメンバへのアクセスです");
+    range_error(range, "構造体または共用体以外のメンバへのアクセスです: %s",
+                format_type(operand->val_type, false));
   }
 
   StructBody *body = operand->val_type->ptrof->struct_body;
   Member *member =
       body->member_name_map ? map_get(body->member_name_map, name) : NULL;
   if (member == NULL) {
-    range_error(range, "存在しないメンバへのアクセスです: %s", name);
+    range_error(range, "存在しないメンバへのアクセスです: %s %s",
+                format_type(operand->val_type, false), name);
   }
   Expr *expr =
       new_expr(EX_ADD, new_type_ptr(member->type, EMPTY_TYPE_QUALIFIER), range);
@@ -2892,7 +2712,8 @@ static void initializer_inner(Tokenizer *tokenizer, Scope *scope, Type *type,
       break;
     case TY_VOID:
     case TY_FUNC:
-      range_error(token->range, "初期化できない型です: %d", type->ty);
+      range_error(token->range, "初期化できない型です: %s",
+                  format_type(type, false));
     }
     (void)token_consume(tokenizer, ',');
     Range end = token_expect(tokenizer, '}')->range;
@@ -3200,7 +3021,8 @@ static void gen_init(Scope *scope, Expr **expr, Initializer *init, Expr *dest,
     break;
   }
 
-  range_error(dest->range, "不正な型の初貴化です");
+  range_error(dest->range, "不正な型の初貴化です: %s",
+              format_type(type, false));
 }
 
 static Stmt *compound_statement(Tokenizer *tokenizer, Scope *scope) {

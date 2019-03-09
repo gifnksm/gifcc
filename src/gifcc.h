@@ -521,9 +521,9 @@ bool map_remove(Map *map, char *key);
 
 // util.c
 void print_string_literal(const char *str);
-int __attribute__((format(printf, 2, 3)))
-alloc_printf(char **strp, const char *fmt, ...);
-int alloc_printf_v(char **strp, const char *fmt, va_list ap);
+char *__attribute__((format(printf, 1, 2))) format(const char *fmt, ...);
+
+// util_test.c
 void runtest(void);
 
 // reader.c
@@ -595,6 +595,27 @@ Token *token_consume2(Tokenizer *tokenizer, int ty1, int ty2);
 Token *token_expect(Tokenizer *tokenizer, int ty);
 const char *token_kind_to_str(int kind);
 const Reader *token_get_reader(const Tokenizer *tokenizer);
+
+// type.c
+Type *new_type(int ty, TypeQualifier tq);
+Type *clone_type(Type *type);
+Type *new_type_ptr(Type *base_type, TypeQualifier tq);
+Type *new_type_array(Type *base_type, Number len, TypeQualifier tq);
+Type *new_type_unsized_array(Type *base_type, TypeQualifier tq);
+Type *new_type_func(Type *ret_type, Vector *func_param, bool has_varargs,
+                    TypeQualifier tq);
+Type *new_type_struct(type_t ty, const char *tag, TypeQualifier tq);
+Type *new_type_opaque_struct(type_t ty, const char *tag, TypeQualifier tq);
+Type *new_type_enum(const char *tag, TypeQualifier tq);
+void init_struct_body(StructBody *body);
+bool is_sametype(Type *ty1, Type *ty2);
+bool is_integer_type(Type *ty);
+int get_int_type_rank(Type *ty, Range range);
+bool is_arith_type(Type *ty);
+bool is_ptr_type(Type *ty);
+bool is_array_type(Type *ty);
+bool is_func_type(Type *ty);
+char *format_type(const Type *type, bool detail);
 
 // parse.c
 Scope *new_pp_scope(void);

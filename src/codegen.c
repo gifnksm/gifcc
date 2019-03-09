@@ -687,7 +687,7 @@ static arg_class_t classify_arg_type(const Type *type, Range range,
   case TY_VOID:
     break;
   }
-  range_error(range, "不正な型の引数です: %d", type->ty);
+  range_error(range, "不正な型の引数です: %s", format_type(type, false));
 }
 
 static IntVector *classify_arg(const Vector *args, int int_reg_idx) {
@@ -717,8 +717,8 @@ static void gen_expr_call(Expr *expr) {
     ret_type = functype->func_ret;
   } else {
     range_error(expr->call.callee->range,
-                "関数または関数ポインタ以外を呼び出そうとしました: %d",
-                expr->call.callee->val_type->ty);
+                "関数または関数ポインタ以外を呼び出そうとしました: %s",
+                format_type(expr->call.callee->val_type, false));
   }
 
   int num_push = 0;

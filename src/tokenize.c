@@ -175,11 +175,9 @@ static Vector *macro_line(Tokenizer *tokenizer) {
   int offset = reader_get_offset(tokenizer->reader);
   reader_get_position(tokenizer->reader, offset, NULL, &line, NULL);
 
-  char *buf;
-  alloc_printf(&buf, "%d", line);
-
   Vector *rep = new_vector();
-  vec_push(rep, new_token_num(buf, range_builtin(tokenizer->reader)));
+  vec_push(rep,
+           new_token_num(format("%d", line), range_builtin(tokenizer->reader)));
   return rep;
 }
 
@@ -257,9 +255,7 @@ Token *token_peek_ahead(Tokenizer *tokenizer, int n) {
           continue;
         }
 
-        char *buf;
-        alloc_printf(&buf, "%s%s", last->str, next->str);
-        last->str = buf;
+        last->str = format("%s%s", last->str, next->str);
         last->range = range_join(last->range, next->range);
       }
 
@@ -301,11 +297,7 @@ Token *token_expect(Tokenizer *tokenizer, int ty) {
   return token;
 }
 
-static const char *quote(const char *s) {
-  char *str;
-  alloc_printf(&str, "`%s`", s);
-  return str;
-}
+static const char *quote(const char *s) { return format("`%s`", s); }
 
 const char *token_kind_to_str(int kind) {
   if (kind <= 255) {
@@ -343,9 +335,7 @@ const char *token_kind_to_str(int kind) {
 
 static const char *pp_token_to_str(const Token *token) {
   if (token->ty <= 255) {
-    char *name;
-    alloc_printf(&name, "%c", token->ty);
-    return name;
+    return format("%c", token->ty);
   }
   if (token->ident != NULL) {
     return token->ident;
@@ -929,8 +919,7 @@ static Vector *pp_convert_defined(Map *define_map, Vector *tokens) {
       range_error(token->range, "識別子がありません");
     }
     bool defined = map_get(define_map, token->ident) != NULL;
-    char *num;
-    alloc_printf(&num, "%d", defined);
+    char *num = format("%d", defined);
     Token *num_token = new_token_num(num, range_join(def_start, token->range));
     if (has_paren) {
       token = vec_remove(tokens, 0);
@@ -1346,9 +1335,7 @@ static void do_include(Reader *reader, int offset, const char *path,
 
 static bool try_include(Reader *reader, const char *base_path,
                         const char *rel_path) {
-  char *abs_path = NULL;
-  alloc_printf(&abs_path, "%s/%s", base_path, rel_path);
-
+  char *abs_path = format("%s/%s", base_path, rel_path);
   FILE *fp = fopen(abs_path, "r");
   if (fp != NULL) {
     reader_add_file(reader, fp, rel_path);
