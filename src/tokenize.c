@@ -1167,9 +1167,21 @@ static Vector *pp_subst_macros(Tokenizer *tokenizer, Range *expanded_from,
       Token *ident = vec_remove(input, 0);
       Vector *arg = pp_get_func_arg(params, arguments, ident);
       if (arg != NULL) {
+        // NonStandard/GNU: , ## __VA_ARGS__
+        if (strcmp(ident->ident, "__VA_ARGS__") == 0 && vec_len(output) > 0 &&
+            ((Token *)vec_last(output))->ty == ',') {
+          if (vec_len(arg) == 0) {
+            vec_pop(output);
+          } else {
+            vec_append(output, vec_clone(arg));
+          }
+          continue;
+        }
+
         if (vec_len(arg) == 0) {
           continue;
         }
+
         pp_glue(output, vec_clone(arg));
         continue;
       }

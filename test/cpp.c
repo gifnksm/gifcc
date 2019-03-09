@@ -83,10 +83,10 @@ static void test02(void) {
 }
 
 static void test03(void) {
-  printf("    __DATE__ = %s\n", __DATE__);
-  printf("    __TIME__ = %s\n", __TIME__);
-  printf("    __FILE__ = %s\n", __FILE__);
-  printf("    __LINE__ = %d\n", __LINE__);
+  TEST_PRINTF("__DATE__ = %s", __DATE__);
+  TEST_PRINTF("__TIME__ = %s", __TIME__);
+  TEST_PRINTF("__FILE__ = %s", __FILE__);
+  TEST_PRINTF("__LINE__ = %d", __LINE__);
 }
 
 int main(void) {

@@ -372,14 +372,6 @@ static void test07(void) {
   }
   CHECK_INT(10, b);
 
-  printf("    ");
-  c = 97;
-  while (c <= 122) {
-    putchar(c);
-    c++;
-  };
-  CHECK_INT(10, putchar(10));
-
   do
     a = 10;
   while (0);
@@ -799,13 +791,12 @@ static void test18(void) {
 }
 
 static void test19(void) {
-  printf("    ");
   char x[4];
   x[0] = 'a';
   x[1] = 'b';
   x[2] = 'c';
   x[3] = '\0';
-  puts(x);
+  TEST_PRINTF("%s", x);
 
   x[0] = -1;
   x[1] = 2;
@@ -817,11 +808,11 @@ static void test19(void) {
 }
 
 static void test20(void) {
-  puts("    hogehoge");
-  puts("    \n\n\r\r");
-  puts("    ほげほげ");
+  TEST_PRINTF("    hogehoge");
+  TEST_PRINTF("    \n\n\r\r");
+  TEST_PRINTF("    ほげほげ");
 
-  printf("    %s %d\n", "abc", 456);
+  TEST_PRINTF("%s %d", "abc", 456);
 }
 
 static void test21(void) {
@@ -834,13 +825,13 @@ static void test21(void) {
   }
 
   for (int i = 0; i < 3; i++) {
-    printf("    %d:", i);
+    char buf[1024];
+    int idx = 0;
     for (int j = 0; j < 5; j++) {
-      printf(" %d", a[i][j]);
-      printf(" %p", &a[i][j]);
-      printf(" (%zu)", &a[i][j] - &a[0][0]);
+      idx += sprintf(&buf[idx], " %2d %p (%2zu)", a[i][j], &a[i][j],
+                     &a[i][j] - &a[0][0]);
     }
-    printf("\n");
+    TEST_PRINTF("%2d: %s", i, buf);
   }
 
   for (int i = 0; i < 3; i++) {
