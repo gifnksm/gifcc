@@ -52,7 +52,11 @@ typedef struct VarDef {
 
 typedef struct TypeSpecifier {
   Range range;
-  enum { BASE_TYPE_UNSPECIFIED, BASE_TYPE_CHAR, BASE_TYPE_INT } base_type;
+  enum {
+    BASE_TYPE_UNSPECIFIED,
+    BASE_TYPE_CHAR,
+    BASE_TYPE_INT,
+  } base_type;
   enum { SIGN_UNSPECIFIED, SIGN_SIGNED, SIGN_UNSIGNED } signedness;
   enum { SIZE_UNSPECIFIED, SIZE_SHORT, SIZE_LONG, SIZE_LLONG } size;
   Type *concrete_type;
@@ -539,6 +543,7 @@ static Type *integer_promoted(Scope *scope, Expr **e) {
   case TY_U_LONG:
   case TY_S_LLONG:
   case TY_U_LLONG:
+  case TY_FLOAT:
   case TY_VOID:
   case TY_PTR:
   case TY_ARRAY:
@@ -551,15 +556,28 @@ static Type *integer_promoted(Scope *scope, Expr **e) {
 }
 
 static Type *arith_converted(Scope *scope, Expr **e1, Expr **e2) {
-  if (!is_arith_type((*e1)->val_type) || !is_arith_type((*e2)->val_type)) {
+  Type *ty1 = (*e1)->val_type;
+  Type *ty2 = (*e2)->val_type;
+  Range r1 = (*e1)->range;
+  Range r2 = (*e2)->range;
+
+  if (!is_arith_type(ty1) || !is_arith_type(ty2)) {
     return NULL;
   }
 
-  Type *ty1 = integer_promoted(scope, e1);
-  Type *ty2 = integer_promoted(scope, e2);
+  if (!is_integer_type(ty1) || !is_integer_type(ty2)) {
+    if (ty1->ty == TY_FLOAT) {
+      *e2 = new_expr_cast(scope, ty1, *e2, r2);
+      return ty1;
+    }
+    assert(ty2->ty == TY_FLOAT);
+    *e1 = new_expr_cast(scope, ty2, *e1, r1);
+    return ty2;
+  }
 
-  Range r1 = (*e1)->range;
-  Range r2 = (*e2)->range;
+  ty1 = integer_promoted(scope, e1);
+  ty2 = integer_promoted(scope, e2);
+
   bool is_signed1 = is_signed_int_type(ty1, r1);
   bool is_signed2 = is_signed_int_type(ty2, r2);
   int rank1 = get_int_type_rank(ty1, r1);
@@ -673,6 +691,7 @@ static bool token_is_type_specifier(Scope *scope, Token *token) {
   case TK_CHAR:
   case TK_SIGNED:
   case TK_UNSIGNED:
+  case TK_FLOAT:
   case TK_STRUCT:
   case TK_UNION:
   case TK_ENUM:
@@ -710,6 +729,15 @@ static bool consume_type_specifier(Scope *scope, Tokenizer *tokenizer,
         range_error(token->range, "無効な型です");
       }
       ts->concrete_type = new_type(TY_BOOL, EMPTY_TYPE_QUALIFIER);
+      ts->range = token->range;
+      consumed = true;
+      continue;
+    }
+    if ((token = token_consume(tokenizer, TK_FLOAT)) != NULL) {
+      if (concrete_type_specified) {
+        range_error(token->range, "無効な型です");
+      }
+      ts->concrete_type = new_type(TY_FLOAT, EMPTY_TYPE_QUALIFIER);
       ts->range = token->range;
       consumed = true;
       continue;
@@ -752,7 +780,6 @@ static bool consume_type_specifier(Scope *scope, Tokenizer *tokenizer,
       consumed = true;
       continue;
     }
-
     if ((token = token_consume(tokenizer, TK_SHORT)) != NULL) {
       if (size_specified) {
         range_error(token->range, "無効な型です");
@@ -987,6 +1014,8 @@ int get_val_size(const Type *ty, Range range) {
     return sizeof(unsigned long);
   case TY_U_LLONG:
     return sizeof(unsigned long long);
+  case TY_FLOAT:
+    return sizeof(float);
   case TY_PTR:
     return sizeof(void *);
   case TY_ARRAY:
@@ -1040,6 +1069,8 @@ int get_val_align(const Type *ty, Range range) {
     return alignof(unsigned long);
   case TY_U_LLONG:
     return alignof(unsigned long long);
+  case TY_FLOAT:
+    return alignof(float);
   case TY_PTR:
     return alignof(void *);
   case TY_ARRAY:
@@ -2707,6 +2738,7 @@ static void initializer_inner(Tokenizer *tokenizer, Scope *scope, Type *type,
     case TY_U_SHORT:
     case TY_U_LONG:
     case TY_U_LLONG:
+    case TY_FLOAT:
     case TY_PTR:
     case TY_ENUM:
       initializer(tokenizer, scope, type, init, NULL);
@@ -2965,6 +2997,7 @@ static void gen_init(Scope *scope, Expr **expr, Initializer *init, Expr *dest,
   case TY_U_INT:
   case TY_U_LONG:
   case TY_U_LLONG:
+  case TY_FLOAT:
   case TY_PTR:
   case TY_ENUM: {
     Expr *assign = new_expr_binop(

@@ -102,6 +102,35 @@ bool is_integer_type(Type *ty) {
   case TY_U_LLONG:
   case TY_ENUM:
     return true;
+  case TY_FLOAT:
+  case TY_VOID:
+  case TY_PTR:
+  case TY_ARRAY:
+  case TY_FUNC:
+  case TY_STRUCT:
+  case TY_UNION:
+    return false;
+  }
+  assert(false);
+  return false;
+}
+bool is_float_type(Type *ty) {
+  switch (ty->ty) {
+  case TY_FLOAT:
+    return true;
+  case TY_BOOL:
+  case TY_CHAR:
+  case TY_S_CHAR:
+  case TY_S_SHORT:
+  case TY_S_INT:
+  case TY_S_LONG:
+  case TY_S_LLONG:
+  case TY_U_CHAR:
+  case TY_U_SHORT:
+  case TY_U_INT:
+  case TY_U_LONG:
+  case TY_U_LLONG:
+  case TY_ENUM:
   case TY_VOID:
   case TY_PTR:
   case TY_ARRAY:
@@ -134,6 +163,7 @@ int get_int_type_rank(Type *ty, Range range) {
   case TY_S_LLONG:
   case TY_U_LLONG:
     return 6;
+  case TY_FLOAT:
   case TY_VOID:
   case TY_PTR:
   case TY_ARRAY:
@@ -163,6 +193,7 @@ bool is_signed_int_type(Type *ty, Range range) {
   case TY_U_LONG:
   case TY_U_LLONG:
     return false;
+  case TY_FLOAT:
   case TY_PTR:
   case TY_VOID:
   case TY_ARRAY:
@@ -173,7 +204,9 @@ bool is_signed_int_type(Type *ty, Range range) {
   }
   range_error(range, "整数型ではない型です: %s", format_type(ty, false));
 }
-bool is_arith_type(Type *ty) { return is_integer_type(ty); }
+bool is_arith_type(Type *ty) {
+  return is_integer_type(ty) || is_float_type(ty);
+}
 bool is_ptr_type(Type *ty) { return ty->ty == TY_PTR; }
 bool is_array_type(Type *ty) { return ty->ty == TY_ARRAY; }
 bool is_func_type(Type *ty) { return ty->ty == TY_FUNC; }
@@ -228,6 +261,9 @@ char *format_type(const Type *type, bool detail) {
     break;
   case TY_U_LLONG:
     type_str = "unsigned long long";
+    break;
+  case TY_FLOAT:
+    type_str = "float";
     break;
   case TY_PTR:
     type_str = format("PTR(%s)", format_type(type->ptrof, false));

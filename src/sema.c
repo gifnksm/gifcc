@@ -2,18 +2,30 @@
 
 static void walk_initializer(Initializer *init);
 
-#define UNARYOP(op, r, a, range)                                               \
-  switch ((op)) {                                                              \
-  case EX_MINUS:                                                               \
-    *(r) = (-(a));                                                             \
-    break;                                                                     \
+#define UNARYOP_PROLOGUE(op, r, a, range) switch ((op)) {
+#define UNARYOP_BODY_INT(op, r, a, range)                                      \
   case EX_NOT:                                                                 \
     *(r) = (~(a));                                                             \
-    break;                                                                     \
+    break;
+#define UNARYOP_BODY_ARITH(op, r, a, range)                                    \
+  case EX_MINUS:                                                               \
+    *(r) = (-(a));                                                             \
+    break;
+#define UNARYOP_EPILOGUE(op, r, a, range)                                      \
   default:                                                                     \
     range_error(range, "不正な演算です: %d", op);                              \
     break;                                                                     \
-  }
+    }
+
+#define UNARYOP_INT(...)                                                       \
+  UNARYOP_PROLOGUE(__VA_ARGS__)                                                \
+  UNARYOP_BODY_INT(__VA_ARGS__)                                                \
+  UNARYOP_BODY_ARITH(__VA_ARGS__)                                              \
+  UNARYOP_EPILOGUE(__VA_ARGS__)
+#define UNARYOP_FLOAT(...)                                                     \
+  UNARYOP_PROLOGUE(__VA_ARGS__)                                                \
+  UNARYOP_BODY_ARITH(__VA_ARGS__)                                              \
+  UNARYOP_EPILOGUE(__VA_ARGS__)
 
 static void eval_unop(Expr *expr) {
   Expr *operand = expr->unop.operand;
@@ -32,42 +44,49 @@ static void eval_unop(Expr *expr) {
   case TY_S_INT: {
     signed int a, *r = &expr->num.s_int_val;
     SET_NUMBER_VAL(a, &nop);
-    UNARYOP(op, r, a, expr->range);
+    UNARYOP_INT(op, r, a, expr->range);
     return;
   }
 
   case TY_S_LONG: {
     signed long a, *r = &expr->num.s_long_val;
     SET_NUMBER_VAL(a, &nop);
-    UNARYOP(op, r, a, expr->range);
+    UNARYOP_INT(op, r, a, expr->range);
     return;
   }
 
   case TY_S_LLONG: {
     signed long long a, *r = &expr->num.s_llong_val;
     SET_NUMBER_VAL(a, &nop);
-    UNARYOP(op, r, a, expr->range);
+    UNARYOP_INT(op, r, a, expr->range);
     return;
   }
 
   case TY_U_INT: {
     unsigned int a, *r = &expr->num.u_int_val;
     SET_NUMBER_VAL(a, &nop);
-    UNARYOP(op, r, a, expr->range);
+    UNARYOP_INT(op, r, a, expr->range);
     return;
   }
 
   case TY_U_LONG: {
     unsigned long a, *r = &expr->num.u_long_val;
     SET_NUMBER_VAL(a, &nop);
-    UNARYOP(op, r, a, expr->range);
+    UNARYOP_INT(op, r, a, expr->range);
     return;
   }
 
   case TY_U_LLONG: {
     unsigned long long a, *r = &expr->num.u_llong_val;
     SET_NUMBER_VAL(a, &nop);
-    UNARYOP(op, r, a, expr->range);
+    UNARYOP_INT(op, r, a, expr->range);
+    return;
+  }
+
+  case TY_FLOAT: {
+    float a, *r = &expr->num.float_val;
+    SET_NUMBER_VAL(a, &nop);
+    UNARYOP_FLOAT(op, r, a, expr->range);
     return;
   }
 
@@ -144,6 +163,9 @@ static void eval_cast(Expr *expr) {
   case TY_U_LLONG:
     SET_NUMBER_VAL(exnum->u_llong_val, opnum);
     return;
+  case TY_FLOAT:
+    SET_NUMBER_VAL(exnum->float_val, opnum);
+    return;
   case TY_PTR:
     SET_NUMBER_VAL(exnum->ptr_val, opnum);
     return;
@@ -158,25 +180,10 @@ static void eval_cast(Expr *expr) {
   }
 }
 
-#define BINOP(op, r, a, b, range)                                              \
-  switch ((op)) {                                                              \
-  case EX_MUL:                                                                 \
-    *(r) = ((a) * (b));                                                        \
-    break;                                                                     \
-  case EX_DIV:                                                                 \
-    if (b == 0) {                                                              \
-      range_error(range, "ゼロ除算です");                                      \
-    }                                                                          \
-    *(r) = ((a) / (b));                                                        \
-    break;                                                                     \
+#define BINOP_PROLOGUE(op, r, a, b, range) switch ((op)) {
+#define BINOP_BODY_INT(op, r, a, b, range)                                     \
   case EX_MOD:                                                                 \
     *(r) = ((a) % (b));                                                        \
-    break;                                                                     \
-  case EX_ADD:                                                                 \
-    *(r) = ((a) + (b));                                                        \
-    break;                                                                     \
-  case EX_SUB:                                                                 \
-    *(r) = ((a) - (b));                                                        \
     break;                                                                     \
   case EX_AND:                                                                 \
     *(r) = ((a) & (b));                                                        \
@@ -186,11 +193,38 @@ static void eval_cast(Expr *expr) {
     break;                                                                     \
   case EX_OR:                                                                  \
     *(r) = ((a) | (b));                                                        \
+    break;
+#define BINOP_BODY_ARITH(op, r, a, b, range)                                   \
+  case EX_MUL:                                                                 \
+    *(r) = ((a) * (b));                                                        \
     break;                                                                     \
+  case EX_DIV:                                                                 \
+    if (b == 0) {                                                              \
+      range_error(range, "ゼロ除算です");                                      \
+    }                                                                          \
+    *(r) = ((a) / (b));                                                        \
+    break;                                                                     \
+  case EX_ADD:                                                                 \
+    *(r) = ((a) + (b));                                                        \
+    break;                                                                     \
+  case EX_SUB:                                                                 \
+    *(r) = ((a) - (b));                                                        \
+    break;
+#define BINOP_EPILOGUE(op, r, a, b, range)                                     \
   default:                                                                     \
     range_error(range, "不正な演算です: %d", op);                              \
     break;                                                                     \
-  }
+    }
+
+#define BINOP_INT(...)                                                         \
+  BINOP_PROLOGUE(__VA_ARGS__)                                                  \
+  BINOP_BODY_INT(__VA_ARGS__)                                                  \
+  BINOP_BODY_ARITH(__VA_ARGS__)                                                \
+  BINOP_EPILOGUE(__VA_ARGS__)
+#define BINOP_FLOAT(...)                                                       \
+  BINOP_PROLOGUE(__VA_ARGS__)                                                  \
+  BINOP_BODY_ARITH(__VA_ARGS__)                                                \
+  BINOP_EPILOGUE(__VA_ARGS__)
 
 static void eval_binop(Expr *expr) {
   Expr *lhs = expr->binop.lhs;
@@ -214,7 +248,7 @@ static void eval_binop(Expr *expr) {
     signed int a, b, *r = &expr->num.s_int_val;
     SET_NUMBER_VAL(a, &lnum);
     SET_NUMBER_VAL(b, &rnum);
-    BINOP(op, r, a, b, expr->range);
+    BINOP_INT(op, r, a, b, expr->range);
     return;
   }
 
@@ -222,7 +256,7 @@ static void eval_binop(Expr *expr) {
     signed long a, b, *r = &expr->num.s_long_val;
     SET_NUMBER_VAL(a, &lnum);
     SET_NUMBER_VAL(b, &rnum);
-    BINOP(op, r, a, b, expr->range);
+    BINOP_INT(op, r, a, b, expr->range);
     return;
   }
 
@@ -230,7 +264,7 @@ static void eval_binop(Expr *expr) {
     signed long long a, b, *r = &expr->num.s_llong_val;
     SET_NUMBER_VAL(a, &lnum);
     SET_NUMBER_VAL(b, &rnum);
-    BINOP(op, r, a, b, expr->range);
+    BINOP_INT(op, r, a, b, expr->range);
     return;
   }
 
@@ -238,7 +272,7 @@ static void eval_binop(Expr *expr) {
     unsigned int a, b, *r = &expr->num.u_int_val;
     SET_NUMBER_VAL(a, &lnum);
     SET_NUMBER_VAL(b, &rnum);
-    BINOP(op, r, a, b, expr->range);
+    BINOP_INT(op, r, a, b, expr->range);
     return;
   }
 
@@ -246,7 +280,7 @@ static void eval_binop(Expr *expr) {
     unsigned long a, b, *r = &expr->num.u_long_val;
     SET_NUMBER_VAL(a, &lnum);
     SET_NUMBER_VAL(b, &rnum);
-    BINOP(op, r, a, b, expr->range);
+    BINOP_INT(op, r, a, b, expr->range);
     return;
   }
 
@@ -254,7 +288,15 @@ static void eval_binop(Expr *expr) {
     unsigned long long a, b, *r = &expr->num.u_llong_val;
     SET_NUMBER_VAL(a, &lnum);
     SET_NUMBER_VAL(b, &rnum);
-    BINOP(op, r, a, b, expr->range);
+    BINOP_INT(op, r, a, b, expr->range);
+    return;
+  }
+
+  case TY_FLOAT: {
+    float a, b, *r = &expr->num.float_val;
+    SET_NUMBER_VAL(a, &lnum);
+    SET_NUMBER_VAL(b, &rnum);
+    BINOP_FLOAT(op, r, a, b, expr->range);
     return;
   }
 
@@ -370,6 +412,14 @@ static void eval_binop_comp(Expr *expr) {
     return;
   }
 
+  case TY_FLOAT: {
+    float a, b;
+    SET_NUMBER_VAL(a, &lnum);
+    SET_NUMBER_VAL(b, &rnum);
+    BINOP_COMP(op, r, a, b, expr->range);
+    return;
+  }
+
   case TY_VOID:
   case TY_BOOL:
   case TY_CHAR:
@@ -469,6 +519,7 @@ static void eval_binop_shift(Expr *expr) {
   case TY_S_SHORT:
   case TY_U_CHAR:
   case TY_U_SHORT:
+  case TY_FLOAT:
   case TY_PTR:
   case TY_ENUM:
   case TY_ARRAY:

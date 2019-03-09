@@ -53,6 +53,7 @@ enum {
   TK_SIGNED,        // `signed`
   TK_UNSIGNED,      // `unsigned`
   TK_BOOL,          // `_Bool`
+  TK_FLOAT,         // `float`
   TK_IF,            // `if`
   TK_ELSE,          // `else`
   TK_SWITCH,        // `switch`
@@ -131,6 +132,9 @@ typedef struct Range {
     case TY_U_LLONG:                                                           \
       (dest) = (num)->u_llong_val;                                             \
       break;                                                                   \
+    case TY_FLOAT:                                                             \
+      (dest) = (num)->float_val;                                               \
+      break;                                                                   \
     case TY_PTR:                                                               \
       (dest) = (num)->ptr_val;                                                 \
       break;                                                                   \
@@ -160,6 +164,7 @@ typedef enum {
   TY_U_INT,
   TY_U_LONG,
   TY_U_LLONG,
+  TY_FLOAT,
   TY_PTR,
   TY_ARRAY,
   TY_FUNC,
@@ -187,6 +192,7 @@ typedef struct Number {
     unsigned int u_int_val;
     unsigned long u_long_val;
     unsigned long long u_llong_val;
+    float float_val;
     intptr_t ptr_val;
     int enum_val;
   };
@@ -611,6 +617,7 @@ Type *new_type_enum(const char *tag, TypeQualifier tq);
 void init_struct_body(StructBody *body);
 bool is_sametype(Type *ty1, Type *ty2);
 bool is_integer_type(Type *ty);
+bool is_float_type(Type *ty);
 int get_int_type_rank(Type *ty, Range range);
 bool is_arith_type(Type *ty);
 bool is_ptr_type(Type *ty);

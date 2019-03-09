@@ -11,6 +11,8 @@ static Vector *continue_labels = NULL;
 
 static void gen_expr(Expr *expr);
 static void gen_expr_call(Expr *expr);
+static void gen_expr_binop_int(Expr *expr);
+static void gen_expr_binop_float(Expr *expr);
 static void gen_gvar(GlobalVar *gvar, Vector *gvar_list);
 
 typedef enum {
@@ -75,8 +77,13 @@ const Reg Reg1 = {
     .r11 = "r11b",
 };
 
-static const Reg *get_int_reg(Type *ty, Range range) {
-  switch (get_val_size(ty, range)) {
+static bool is_int_reg_type(Type *type) {
+  return is_ptr_type(type) || is_integer_type(type);
+}
+static bool is_float_reg_type(Type *type) { return is_float_type(type); }
+
+static const Reg *get_int_reg_for_size(size_t size, Range range) {
+  switch (size) {
   case 8:
     return &Reg8;
   case 4:
@@ -88,6 +95,11 @@ static const Reg *get_int_reg(Type *ty, Range range) {
   default:
     range_error(range, "サポートしていない型サイズです");
   }
+}
+
+static const Reg *get_int_reg(Type *type, Range range) {
+  assert(is_int_reg_type(type));
+  return get_int_reg_for_size(get_val_size(type, range), range);
 }
 
 char *make_label(const char *s) {
@@ -159,6 +171,7 @@ static char *num2str(Number num, Range range) {
     sprintf(buf, "%hu", num.u_short_val);
     break;
   case TY_U_INT:
+  case TY_FLOAT:
     sprintf(buf, "%u", num.u_int_val);
     break;
   case TY_U_LONG:
@@ -192,12 +205,26 @@ static int get_incdec_size(Expr *expr) {
   return 1;
 }
 
+static void pop_xmm(int n) {
+  printf("  movsd xmm%d, [rsp]\n", n);
+  printf("  add rsp, 8\n");
+}
+
+static void push_xmm(int n) {
+  printf("  sub rsp, 8\n");
+  printf("  movsd [rsp], xmm%d\n", n);
+}
+
 static void gen_expr(Expr *expr) {
   if (expr->ty == EX_NUM) {
-    if (get_val_size(expr->val_type, expr->range) < 4) {
+    if (expr->val_type->ty == TY_VOID) {
+      return;
+    }
+    int size = get_val_size(expr->val_type, expr->range);
+    if (size < 4) {
       printf("  push %s\n", num2str(expr->num, expr->range));
     } else {
-      const Reg *r = get_int_reg(expr->val_type, expr->range);
+      const Reg *r = get_int_reg_for_size(size, expr->range);
       printf("  mov %s, %s\n", r->rax, num2str(expr->num, expr->range));
       printf("  push rax\n");
     }
@@ -443,8 +470,7 @@ static void gen_expr(Expr *expr) {
   }
   if (expr->ty == EX_PLUS) {
     // 単項の `+`
-    assert(false);
-    return;
+    range_error(expr->range, "不正な演算子です: %d", expr->ty);
   }
   if (expr->ty == EX_MINUS) {
     // 単項の `-`
@@ -465,30 +491,58 @@ static void gen_expr(Expr *expr) {
     return;
   }
   if (expr->ty == EX_LOG_NOT) {
-    assert(false);
+    range_error(expr->range, "不正な演算子です: %d", expr->ty);
   }
 
   if (expr->ty == EX_CAST) {
-    const Reg *r = get_int_reg(expr->val_type, expr->range);
     Expr *operand = expr->unop.operand;
     gen_expr(operand);
-    const Reg *from = get_int_reg(operand->val_type, operand->range);
-    int from_size = get_val_size(operand->val_type, operand->range);
-    int to_size = get_val_size(expr->val_type, expr->range);
-    if (to_size > from_size) {
+
+    if (expr->val_type->ty == TY_VOID) {
       printf("  pop rax\n");
-      if (is_signed_int_type(operand->val_type, operand->range)) {
-        printf("  movsx %s, %s\n", r->rax, from->rax);
-      } else {
-        if (from_size < 4) {
-          printf("  movzx %s, %s\n", r->rax, from->rax);
-        } else {
-          printf("  mov %s, %s\n", from->rax, from->rax);
-        }
-      }
-      printf("  push rax\n");
+      return;
     }
-    return;
+
+    if (is_int_reg_type(operand->val_type) && is_int_reg_type(expr->val_type)) {
+      const Reg *to = get_int_reg(expr->val_type, expr->range);
+      const Reg *from = get_int_reg(operand->val_type, operand->range);
+      int from_size = get_val_size(operand->val_type, operand->range);
+      int to_size = get_val_size(expr->val_type, expr->range);
+      if (to_size > from_size) {
+        printf("  pop rax\n");
+        if (is_signed_int_type(operand->val_type, operand->range)) {
+          printf("  movsx %s, %s\n", to->rax, from->rax);
+        } else {
+          if (from_size < 4) {
+            printf("  movzx %s, %s\n", to->rax, from->rax);
+          } else {
+            printf("  mov %s, %s\n", from->rax, from->rax);
+          }
+        }
+        printf("  push rax\n");
+      }
+      return;
+    }
+
+    if (is_float_type(operand->val_type) && is_int_reg_type(expr->val_type)) {
+      const Reg *to = get_int_reg(expr->val_type, expr->range);
+      pop_xmm(0);
+      printf("  cvttss2si %s, xmm0\n", to->rax);
+      printf("  push rax\n");
+      return;
+    }
+
+    if (is_int_reg_type(operand->val_type) && is_float_type(expr->val_type)) {
+      const Reg *from = get_int_reg(operand->val_type, operand->range);
+      printf("  pop rax\n");
+      printf("  cvtsi2ss xmm0, %s\n", from->rax);
+      push_xmm(0);
+      return;
+    }
+
+    range_error(expr->range, "不正なキャストです: %s, %s",
+                format_type(operand->val_type, false),
+                format_type(expr->val_type, false));
   }
   if (expr->ty == EX_PRE_INC) {
     // 前置の `++`
@@ -536,109 +590,19 @@ static void gen_expr(Expr *expr) {
   }
 
   // 二項演算子
-  const Reg *r = get_int_reg(expr->val_type, expr->range);
-  gen_expr(expr->binop.lhs);
-  gen_expr(expr->binop.rhs);
-
-  printf("  pop rdi\n");
-  printf("  pop rax\n");
-
-  switch (expr->ty) {
-  case EX_ADD:
-    printf("  add %s, %s\n", r->rax, r->rdi);
-    break;
-  case EX_SUB:
-    printf("  sub %s, %s\n", r->rax, r->rdi);
-    break;
-  case EX_MUL:
-    printf("  imul %s, %s\n", r->rax, r->rdi);
-    break;
-  case EX_DIV:
-    if (is_signed_int_type(expr->binop.lhs->val_type, expr->binop.lhs->range)) {
-      printf("  mov %s, 0\n", r->rdx);
-      printf("  idiv %s\n", r->rdi);
-    } else {
-      printf("  mov %s, 0\n", r->rdx);
-      printf("  div %s\n", r->rdi);
-    }
-    break;
-  case EX_MOD:
-    printf("  mov %s, 0\n", r->rdx);
-    printf("  div %s\n", r->rdi);
-    printf("  mov %s, %s\n", r->rax, r->rdx);
-    break;
-  case EX_EQEQ:
-    printf("  cmp %s, %s\n", r->rax, r->rdi);
-    printf("  sete al\n");
-    printf("  movzb %s, al\n", r->rax);
-    break;
-  case EX_NOTEQ:
-    printf("  cmp %s, %s\n", r->rax, r->rdi);
-    printf("  setne al\n");
-    printf("  movzb %s, al\n", r->rax);
-    break;
-  case EX_LT:
-    printf("  cmp %s, %s\n", r->rax, r->rdi);
-    if (is_signed_int_type(expr->binop.lhs->val_type, expr->binop.lhs->range)) {
-      printf("  setl al\n");
-    } else {
-      printf("  setb al\n");
-    }
-    printf("  movzb %s, al\n", r->rax);
-    break;
-  case EX_GT:
-    printf("  cmp %s, %s\n", r->rax, r->rdi);
-    if (is_signed_int_type(expr->binop.lhs->val_type, expr->binop.lhs->range)) {
-      printf("  setg al\n");
-    } else {
-      printf("  seta al\n");
-    }
-    printf("  movzb %s, al\n", r->rax);
-    break;
-  case EX_LTEQ:
-    printf("  cmp %s, %s\n", r->rax, r->rdi);
-    if (is_signed_int_type(expr->binop.lhs->val_type, expr->binop.lhs->range)) {
-      printf("  setle al\n");
-    } else {
-      printf("  setbe al\n");
-    }
-    printf("  movzb %s, al\n", r->rax);
-    break;
-  case EX_GTEQ:
-    printf("  cmp %s, %s\n", r->rax, r->rdi);
-    if (is_signed_int_type(expr->binop.lhs->val_type, expr->binop.lhs->range)) {
-      printf("  setge al\n");
-    } else {
-      printf("  setae al\n");
-    }
-    printf("  movzb %s, al\n", r->rax);
-    break;
-  case EX_LSHIFT:
-    printf("  mov %s, %s\n", r->rcx, r->rdi);
-    printf("  shl %s, cl\n", r->rax);
-    break;
-  case EX_RSHIFT:
-    printf("  mov %s, %s\n", r->rcx, r->rdi);
-    if (is_signed_int_type(expr->binop.lhs->val_type, expr->binop.lhs->range)) {
-      printf("  sar %s, cl\n", r->rax);
-    } else {
-      printf("  shr %s, cl\n", r->rax);
-    }
-    break;
-  case EX_AND:
-    printf("  and %s, %s\n", r->rax, r->rdi);
-    break;
-  case EX_XOR:
-    printf("  xor %s, %s\n", r->rax, r->rdi);
-    break;
-  case EX_OR:
-    printf("  or %s, %s\n", r->rax, r->rdi);
-    break;
-  default:
-    assert(false);
+  const Expr *lhs = expr->binop.lhs;
+  if (is_int_reg_type(lhs->val_type)) {
+    gen_expr_binop_int(expr);
+    return;
   }
 
-  printf("  push rax\n");
+  if (is_float_reg_type(lhs->val_type)) {
+    gen_expr_binop_float(expr);
+    return;
+  }
+
+  range_error(expr->range, "不正な型の演算です: %s",
+              format_type(expr->val_type, false));
 }
 
 static arg_class_t classify_arg_type(const Type *type, Range range,
@@ -683,6 +647,7 @@ static arg_class_t classify_arg_type(const Type *type, Range range,
     }
     break;
   }
+  case TY_FLOAT:
   case TY_FUNC:
   case TY_VOID:
     break;
@@ -827,6 +792,201 @@ static void gen_expr_call(Expr *expr) {
       }
       printf("  push rax\n");
     }
+  }
+  return;
+}
+
+static void gen_expr_binop_int(Expr *expr) {
+  assert(is_int_reg_type(expr->binop.lhs->val_type));
+
+  const Reg *r = get_int_reg(expr->val_type, expr->range);
+  gen_expr(expr->binop.lhs);
+  gen_expr(expr->binop.rhs);
+
+  printf("  pop rdi\n");
+  printf("  pop rax\n");
+
+  switch (expr->ty) {
+  case EX_ADD:
+    printf("  add %s, %s\n", r->rax, r->rdi);
+    break;
+  case EX_SUB:
+    printf("  sub %s, %s\n", r->rax, r->rdi);
+    break;
+  case EX_MUL:
+    printf("  imul %s, %s\n", r->rax, r->rdi);
+    break;
+  case EX_DIV:
+    if (is_signed_int_type(expr->binop.lhs->val_type, expr->binop.lhs->range)) {
+      printf("  mov %s, 0\n", r->rdx);
+      printf("  idiv %s\n", r->rdi);
+    } else {
+      printf("  mov %s, 0\n", r->rdx);
+      printf("  div %s\n", r->rdi);
+    }
+    break;
+  case EX_MOD:
+    printf("  mov %s, 0\n", r->rdx);
+    printf("  div %s\n", r->rdi);
+    printf("  mov %s, %s\n", r->rax, r->rdx);
+    break;
+  case EX_EQEQ:
+    printf("  cmp %s, %s\n", r->rax, r->rdi);
+    printf("  sete al\n");
+    printf("  movzb %s, al\n", r->rax);
+    break;
+  case EX_NOTEQ:
+    printf("  cmp %s, %s\n", r->rax, r->rdi);
+    printf("  setne al\n");
+    printf("  movzb %s, al\n", r->rax);
+    break;
+  case EX_LT:
+    printf("  cmp %s, %s\n", r->rax, r->rdi);
+    if (is_signed_int_type(expr->binop.lhs->val_type, expr->binop.lhs->range)) {
+      printf("  setl al\n");
+    } else {
+      printf("  setb al\n");
+    }
+    printf("  movzb %s, al\n", r->rax);
+    break;
+  case EX_GT:
+    printf("  cmp %s, %s\n", r->rax, r->rdi);
+    if (is_signed_int_type(expr->binop.lhs->val_type, expr->binop.lhs->range)) {
+      printf("  setg al\n");
+    } else {
+      printf("  seta al\n");
+    }
+    printf("  movzb %s, al\n", r->rax);
+    break;
+  case EX_LTEQ:
+    printf("  cmp %s, %s\n", r->rax, r->rdi);
+    if (is_signed_int_type(expr->binop.lhs->val_type, expr->binop.lhs->range)) {
+      printf("  setle al\n");
+    } else {
+      printf("  setbe al\n");
+    }
+    printf("  movzb %s, al\n", r->rax);
+    break;
+  case EX_GTEQ:
+    printf("  cmp %s, %s\n", r->rax, r->rdi);
+    if (is_signed_int_type(expr->binop.lhs->val_type, expr->binop.lhs->range)) {
+      printf("  setge al\n");
+    } else {
+      printf("  setae al\n");
+    }
+    printf("  movzb %s, al\n", r->rax);
+    break;
+  case EX_LSHIFT:
+    printf("  mov %s, %s\n", r->rcx, r->rdi);
+    printf("  shl %s, cl\n", r->rax);
+    break;
+  case EX_RSHIFT:
+    printf("  mov %s, %s\n", r->rcx, r->rdi);
+    if (is_signed_int_type(expr->binop.lhs->val_type, expr->binop.lhs->range)) {
+      printf("  sar %s, cl\n", r->rax);
+    } else {
+      printf("  shr %s, cl\n", r->rax);
+    }
+    break;
+  case EX_AND:
+    printf("  and %s, %s\n", r->rax, r->rdi);
+    break;
+  case EX_XOR:
+    printf("  xor %s, %s\n", r->rax, r->rdi);
+    break;
+  case EX_OR:
+    printf("  or %s, %s\n", r->rax, r->rdi);
+    break;
+  default:
+    range_error(expr->range, "不正な演算子です: %d", expr->ty);
+  }
+
+  printf("  push rax\n");
+  return;
+}
+
+static void gen_expr_binop_float(Expr *expr) {
+  Type *type = expr->binop.lhs->val_type;
+  assert(is_float_reg_type(type));
+
+  gen_expr(expr->binop.lhs);
+  gen_expr(expr->binop.rhs);
+
+  pop_xmm(1); // rhs
+  pop_xmm(0); // lhs
+
+  switch (expr->ty) {
+  case EX_ADD:
+    printf("  addss xmm0, xmm1\n");
+    push_xmm(0);
+    break;
+  case EX_SUB:
+    printf("  subss xmm0, xmm1\n");
+    push_xmm(0);
+    break;
+  case EX_MUL:
+    printf("  mulss xmm0, xmm1\n");
+    push_xmm(0);
+    break;
+  case EX_DIV:
+    printf("  divss xmm0, xmm1\n");
+    push_xmm(0);
+    break;
+  case EX_EQEQ: {
+    const Reg *r = get_int_reg(expr->val_type, expr->range);
+    printf("  ucomiss xmm0, xmm1\n");
+    printf("  sete al\n");
+    printf("  setnp dil\n");
+    printf("  and al, dil\n");
+    printf("  movzb %s, al\n", r->rax);
+    printf("  push rax\n");
+    break;
+  }
+  case EX_NOTEQ: {
+    const Reg *r = get_int_reg(expr->val_type, expr->range);
+    printf("  ucomiss xmm0, xmm1\n");
+    printf("  setne al\n");
+    printf("  setp dil\n");
+    printf("  or al, dil\n");
+    printf("  movzb %s, al\n", r->rax);
+    printf("  push rax\n");
+    break;
+  }
+  case EX_LT: {
+    const Reg *r = get_int_reg(expr->val_type, expr->range);
+    printf("  comiss xmm0, xmm1\n");
+    printf("  setl al\n");
+    printf("  movzb %s, al\n", r->rax);
+    printf("  push rax\n");
+    break;
+  }
+  case EX_GT: {
+    const Reg *r = get_int_reg(expr->val_type, expr->range);
+    printf("  comiss xmm0, xmm1\n");
+    printf("  setg al\n");
+    printf("  movzb %s, al\n", r->rax);
+    printf("  push rax\n");
+    break;
+  }
+  case EX_LTEQ: {
+    const Reg *r = get_int_reg(expr->val_type, expr->range);
+    printf("  comiss xmm0, xmm1\n");
+    printf("  setle al\n");
+    printf("  movzb %s, al\n", r->rax);
+    printf("  push rax\n");
+    break;
+  }
+  case EX_GTEQ: {
+    const Reg *r = get_int_reg(expr->val_type, expr->range);
+    printf("  comiss xmm0, xmm1\n");
+    printf("  setge al\n");
+    printf("  movzb %s, al\n", r->rax);
+    printf("  push rax\n");
+    break;
+  }
+  default:
+    range_error(expr->range, "不正な演算子です: %d %s", expr->ty,
+                format_type(type, false));
   }
   return;
 }
@@ -1046,7 +1206,7 @@ static void gen_stmt(Stmt *stmt) {
     return;
   }
   }
-  assert(false);
+  range_error(stmt->range, "不正な文です: %d", stmt->ty);
 }
 
 static IntVector *classify_param(const Vector *params, int int_reg_idx) {
@@ -1233,6 +1393,7 @@ static void gen_gvar_init(Initializer *init, Range range, Vector *gvar_list) {
       case TY_ENUM:
         printf("  .long %d\n", expr->num.enum_val);
         break;
+      case TY_FLOAT:
       case TY_VOID:
       case TY_ARRAY:
       case TY_FUNC:
