@@ -8,6 +8,7 @@
 typedef struct File {
   const char *source;
   const char *name;
+  int stack_idx;
   int size;
   int offset;
   IntVector *line_offset;
@@ -80,10 +81,7 @@ const Range *range_add_expanded_from(const Range *range,
     cloned->expanded_from = expanded_from;
     return cloned;
   }
-  if (range->expanded_from->start == expanded_from->start &&
-      range->expanded_from->len == expanded_from->len) {
-    return range;
-  }
+
   const Range *exp =
       range_add_expanded_from(range->expanded_from, expanded_from);
   if (exp == range->expanded_from) {
@@ -100,11 +98,44 @@ const Range *range_join(const Range *a, const Range *b) {
   assert(a->start >= 0);
   assert(b->start >= 0);
   assert(a->reader == b->reader);
+
+  while (true) {
+    File *af = get_file_offset(a->reader, a->start)->file;
+    File *bf = get_file_offset(b->reader, b->start)->file;
+
+    if (af->stack_idx < bf->stack_idx) {
+      if (b->expanded_from == NULL) {
+        break;
+      }
+      b = b->expanded_from;
+      continue;
+    }
+    if (af->stack_idx > bf->stack_idx) {
+      if (a->expanded_from == NULL) {
+        break;
+      }
+      a = a->expanded_from;
+    }
+    if (af == bf || a->expanded_from == NULL || b->expanded_from == NULL) {
+      break;
+    }
+    a = a->expanded_from;
+    b = b->expanded_from;
+  }
+
   int aend = a->start + a->len;
   int bend = b->start + b->len;
   int start = a->start < b->start ? a->start : b->start;
   int end = aend > bend ? aend : bend;
-  return range_from_reader(a->reader, start, end);
+
+  Range *range = NEW(Range);
+  *range = (Range){
+      .reader = a->reader,
+      .expanded_from = a->expanded_from,
+      .start = start,
+      .len = end - start,
+  };
+  return range;
 }
 
 void range_get_start(const Range *range, const char **filename, int *line,
@@ -128,6 +159,7 @@ Reader *new_reader(void) {
 
 void reader_add_file(Reader *reader, FILE *fp, const char *filename) {
   File *file = new_file(fp, filename);
+  file->stack_idx = vec_len(reader->file_stack);
   vec_push(reader->file_stack, file);
   switch_file(reader, file);
 }
