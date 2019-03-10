@@ -305,7 +305,7 @@ static void print_source(Range range) {
   int start = range.start;
   int len = range.len;
   while (len > 0) {
-    FileOffset *fo = get_file_offset(reader, range.start);
+    FileOffset *fo = get_file_offset(reader, start);
     FileOffset *next_fo = fo->index < vec_len(reader->file_offset) - 1
                               ? vec_get(reader->file_offset, fo->index + 1)
                               : NULL;
@@ -313,8 +313,11 @@ static void print_source(Range range) {
                        ? next_fo->global_offset
                        : fo->global_offset + (fo->file->size - fo->file_offset);
     int sf = start - fo->global_offset;
-    int ef = sf + len > file_end ? file_end : sf + len;
+    int ef = file_end - fo->global_offset;
     int file_len = ef - sf;
+    if (file_len > len) {
+      file_len = len;
+    }
 
     const char *start_filename;
     int start_line, start_column;
@@ -322,8 +325,9 @@ static void print_source(Range range) {
                         &start_column);
     const char *end_filename;
     int end_line, end_column;
-    reader_get_position(reader, start + len, &end_filename, &end_line,
+    reader_get_position(reader, start + file_len - 1, &end_filename, &end_line,
                         &end_column);
+    assert(strcmp(start_filename, end_filename) == 0);
 
     for (int line = start_line; line <= end_line; line++) {
       int sl = int_vec_get(fo->file->line_offset, line - 1);
@@ -349,7 +353,7 @@ static void print_source(Range range) {
       } else {
         fprintf(stderr, "~");
       }
-      for (int i = sc + 1; i < ec; i++) {
+      for (int i = sc + 1; i <= ec; i++) {
         fprintf(stderr, "~");
       }
       fprintf(stderr, "\n");
