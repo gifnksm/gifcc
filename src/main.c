@@ -95,7 +95,7 @@ static void output_token(Reader *reader) {
     token = token_pop(tokenizer);
     const char *filename;
     int line, column;
-    reader_get_position(reader, token->range.start, &filename, &line, &column);
+    range_get_start(token->range, &filename, &line, &column);
     printf("%s:%d:%d:\t%-8s", filename, line, column,
            token_kind_to_str(token->ty));
     switch (token->ty) {
@@ -118,24 +118,23 @@ static void output_token(Reader *reader) {
   } while (token->ty != TK_EOF);
 }
 
-static void dump_range_start(Range range) {
+static void dump_range_start(const Range *range) {
   const char *filename;
   int line, column;
-  reader_get_position(range.reader, range.start, &filename, &line, &column);
+  range_get_start(range, &filename, &line, &column);
   printf("%s:%d:%d\t", filename, line, column);
 }
 
-static void dump_range_end(Range range) {
+static void dump_range_end(const Range *range) {
   const char *filename;
   int line, column;
-  reader_get_position(range.reader, range.start + range.len, &filename, &line,
-                      &column);
+  range_get_end(range, &filename, &line, &column);
   printf("%s:%d:%d\t", filename, line, column);
 }
 static void dump_indent(int level) { printf("%*s", 2 * level, ""); }
 void dump_type(Type *ty) { printf("<%s>", format_type(ty, true)); }
 static void dump_expr(Expr *expr, int level);
-static void dump_init(Initializer *init, Range range, int level);
+static void dump_init(Initializer *init, const Range *range, int level);
 static void dump_unop_expr(Expr *expr, char *label, int level) {
   dump_range_start(expr->range);
   dump_indent(level);
@@ -517,7 +516,7 @@ static void dump_stmt(Stmt *stmt, int level) {
   error("未知のノードです: %d\n", stmt->ty);
 }
 
-static void dump_init(Initializer *init, Range range, int level) {
+static void dump_init(Initializer *init, const Range *range, int level) {
   if (init == NULL) {
     dump_range_start(range);
     dump_indent(level);

@@ -123,7 +123,7 @@ static bool is_sse_reg_type(Type *type) {
 }
 static bool is_x87_reg_type(Type *type) { return type->ty == TY_LDOUBLE; }
 
-static const Reg *get_int_reg_for_size(size_t size, Range range) {
+static const Reg *get_int_reg_for_size(size_t size, const Range *range) {
   switch (size) {
   case 8:
     return &Reg8;
@@ -138,12 +138,12 @@ static const Reg *get_int_reg_for_size(size_t size, Range range) {
   }
 }
 
-static const Reg *get_int_reg(Type *type, Range range) {
+static const Reg *get_int_reg(Type *type, const Range *range) {
   assert(is_int_reg_type(type));
   return get_int_reg_for_size(get_val_size(type, range), range);
 }
 
-static const SseOp *get_sse_op(Type *type, Range range) {
+static const SseOp *get_sse_op(Type *type, const Range *range) {
   switch (type->ty) {
   case TY_FLOAT:
     return &SseOpSS;
@@ -192,7 +192,7 @@ static void gen_lval(Expr *expr) {
   range_error(expr->range, "左辺値が変数ではありません");
 }
 
-static char *num2str(Number num, Range range) {
+static char *num2str(Number num, const Range *range) {
   char buf[1024];
   switch (num.type) {
   case TY_BOOL:
@@ -745,7 +745,7 @@ static void gen_expr(Expr *expr) {
               format_type(expr->val_type, false));
 }
 
-static arg_class_t classify_arg_type(const Type *type, Range range,
+static arg_class_t classify_arg_type(const Type *type, const Range *range,
                                      int *num_int, int *num_sse) {
   const int NUM_INT_REG = 6;
   const int NUM_SSE_REG = 8;
@@ -1651,7 +1651,8 @@ static void gen_func(Function *func) {
   printf("  ret\n");
 }
 
-static void gen_gvar_init(Initializer *init, Range range, Vector *gvar_list) {
+static void gen_gvar_init(Initializer *init, const Range *range,
+                          Vector *gvar_list) {
   if (init->expr != NULL) {
     Expr *expr = init->expr;
     if (expr->ty == EX_NUM) {

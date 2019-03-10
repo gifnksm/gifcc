@@ -760,7 +760,7 @@ static void walk_expr(Expr *expr) {
       } else {
         taken = expr->cond.else_expr;
       }
-      Range range = expr->range;
+      const Range *range = expr->range;
       walk_expr(taken);
       *expr = *taken;
       expr->range = range;

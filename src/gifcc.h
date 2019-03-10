@@ -87,12 +87,6 @@ typedef struct Reader Reader;
 typedef struct Tokenizer Tokenizer;
 
 typedef struct Range Range;
-typedef struct Range {
-  const Reader *reader;
-  int start;
-  int len;
-  Range *expanded_from;
-} Range;
 
 #define SET_NUMBER_VAL(dest, num)                                              \
   do {                                                                         \
@@ -213,7 +207,7 @@ typedef struct Number {
 // トークンの型
 typedef struct {
   int ty;
-  Range range;
+  const Range *range;
   Set *pp_hideset;
   const char *num;
   char *ident;
@@ -348,13 +342,13 @@ typedef struct StackVar {
   char *name;
   int offset;
   Type *type;
-  Range range;
+  const Range *range;
 } StackVar;
 
 typedef struct GlobalVar {
   char *name;
   Type *type;
-  Range range;
+  const Range *range;
   StorageClassSpecifier storage_class;
   Initializer *init;
 } GlobalVar;
@@ -362,7 +356,7 @@ typedef struct GlobalVar {
 typedef struct Param {
   Token *name;
   Type *type;
-  Range range;
+  const Range *range;
   StackVar *stack_var;
 } Param;
 
@@ -374,7 +368,7 @@ typedef struct StringLiteral {
 typedef struct Expr {
   expr_t ty;
   Type *val_type; // 値の型
-  Range range;
+  const Range *range;
 
   union {
     // EX_NUM
@@ -423,7 +417,7 @@ typedef struct Expr {
 
 typedef struct Stmt {
   stmt_t ty;
-  Range range;
+  const Range *range;
 
   // ST_LABEL, ST_GOTO
   char *name;
@@ -465,7 +459,7 @@ typedef struct Member {
 typedef struct Function {
   char *name;
   Type *type;
-  Range range;
+  const Range *range;
   StorageClassSpecifier storage_class;
   FunctionSpecifier func;
   int stack_size;
@@ -546,6 +540,15 @@ char *__attribute__((format(printf, 1, 2))) format(const char *fmt, ...);
 void runtest(void);
 
 // reader.c
+const Range *range_from_reader(const Reader *reader, int start, int end);
+const Range *range_builtin(const Reader *reader);
+const Range *range_add_expanded_from(const Range *range,
+                                     const Range *expanded_from);
+const Range *range_join(const Range *a, const Range *b);
+void range_get_start(const Range *range, const char **filename, int *line,
+                     int *column);
+void range_get_end(const Range *range, const char **filename, int *line,
+                   int *column);
 Reader *new_reader(void);
 void reader_add_file(Reader *reader, FILE *fp, const char *filename);
 char reader_peek(const Reader *reader);
@@ -559,7 +562,7 @@ bool reader_is_sol(const Reader *reader);
 int reader_get_offset(const Reader *reader);
 void reader_get_position(const Reader *reader, int offset,
                          const char **filename, int *line, int *column);
-char *reader_get_source(Range range);
+char *reader_get_source(const Range *range);
 #define reader_error_here(reader, fmt, ...)                                    \
   reader_error_offset_raw(reader, reader_get_offset(reader), __FILE__,         \
                           __LINE__, (fmt), ##__VA_ARGS__)
@@ -582,18 +585,18 @@ reader_warn_offset_raw(const Reader *reader, int offset, const char *dbg_file,
 #define range_error(range, fmt, ...)                                           \
   range_error_raw((range), __FILE__, __LINE__, (fmt), ##__VA_ARGS__)
 noreturn __attribute__((format(printf, 4, 5))) void
-range_error_raw(Range range, const char *dbg_file, int dbg_line,
+range_error_raw(const Range *range, const char *dbg_file, int dbg_line,
                 const char *fmt, ...);
-noreturn void range_error_raw_v(Range range, const char *dbg_file, int dbg_line,
-                                const char *fmt, va_list ap);
+noreturn void range_error_raw_v(const Range *range, const char *dbg_file,
+                                int dbg_line, const char *fmt, va_list ap);
 
 #define range_warn(range, fmt, ...)                                            \
   range_warn_raw((range), __FILE__, __LINE__, (fmt), ##__VA_ARGS__)
-__attribute__((format(printf, 4, 5))) void range_warn_raw(Range range,
+__attribute__((format(printf, 4, 5))) void range_warn_raw(const Range *range,
                                                           const char *dbg_file,
                                                           int dbg_line,
                                                           const char *fmt, ...);
-void range_warn_raw_v(Range range, const char *dbg_file, int dbg_line,
+void range_warn_raw_v(const Range *range, const char *dbg_file, int dbg_line,
                       const char *fmt, va_list ap);
 
 // number.c
@@ -631,7 +634,8 @@ void init_struct_body(StructBody *body);
 bool is_sametype(Type *ty1, Type *ty2);
 bool is_integer_type(Type *ty);
 bool is_float_type(Type *ty);
-int get_int_type_rank(Type *ty, Range range);
+int get_int_type_rank(Type *ty, const Range *range);
+bool is_signed_int_type(Type *ty, const Range *range);
 bool is_arith_type(Type *ty);
 bool is_ptr_type(Type *ty);
 bool is_array_type(Type *ty);
@@ -640,9 +644,8 @@ char *format_type(const Type *type, bool detail);
 
 // parse.c
 Scope *new_pp_scope(void);
-bool is_signed_int_type(Type *ty, Range range);
-int get_val_size(const Type *ty, Range range);
-int get_val_align(const Type *ty, Range range);
+int get_val_size(const Type *ty, const Range *range);
+int get_val_align(const Type *ty, const Range *range);
 Expr *constant_expression(Tokenizer *tokenizer, Scope *scope);
 TranslationUnit *parse(Reader *reader);
 
@@ -655,32 +658,6 @@ char *make_label(const char *s);
 void gen(TranslationUnit *tunit);
 
 // inline functions
-
-static inline Range range_from_reader(const Reader *reader, int start,
-                                      int end) {
-  assert(start <= end);
-  return (Range){
-      .reader = reader,
-      .start = start,
-      .len = (end - start),
-  };
-}
-
-static inline Range range_builtin(const Reader *reader) {
-  return range_from_reader(reader, 0, 0);
-}
-
-static inline Range range_join(Range a, Range b) {
-  assert(a.start >= 0);
-  assert(b.start >= 0);
-  assert(a.reader == b.reader);
-  int aend = a.start + a.len;
-  int bend = b.start + b.len;
-  int start = a.start < b.start ? a.start : b.start;
-  int end = aend > bend ? aend : bend;
-  return range_from_reader(a.reader, start, end);
-}
-
 static inline char *get_label(Function *func, char *name) {
   return map_get(func->label_map, name);
 }

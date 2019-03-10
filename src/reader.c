@@ -27,6 +27,13 @@ struct Reader {
   Vector *file_offset;
 };
 
+typedef struct Range {
+  const Reader *reader;
+  int start;
+  int len;
+  const Range *expanded_from;
+} Range;
+
 typedef enum {
   MESSAGE_ERROR,
   MESSAGE_WARN,
@@ -39,15 +46,77 @@ static File *peek_file(const Reader *reader);
 static File *peek_file_n(const Reader *reader, int n);
 static FileOffset *get_file_offset(const Reader *reader, int offset);
 static __attribute__((format(printf, 5, 6))) void
-print_message(message_t msg, Range range, const char *dbg_file, int dbg_line,
-              const char *fmt, ...);
-static void print_message_raw(message_t msg, Range range, const char *dbg_file,
-                              int dbg_line, const char *fmt, va_list ap);
-static void print_source(Range range);
-static void print_expanded_message(Range range, const char *dbg_file,
+print_message(message_t msg, const Range *range, const char *dbg_file,
+              int dbg_line, const char *fmt, ...);
+static void print_message_raw(message_t msg, const Range *range,
+                              const char *dbg_file, int dbg_line,
+                              const char *fmt, va_list ap);
+static void print_source(const Range *range);
+static void print_expanded_message(const Range *range, const char *dbg_file,
                                    int dbg_line);
 static File *new_file(FILE *fp, const char *filename);
 static char *read_whole_file(File *file, FILE *fp);
+
+const Range *range_from_reader(const Reader *reader, int start, int end) {
+  assert(start <= end);
+  Range *range = NEW(Range);
+  *range = (Range){
+      .reader = reader,
+      .start = start,
+      .len = (end - start),
+  };
+  return range;
+}
+
+const Range *range_builtin(const Reader *reader) {
+  return range_from_reader(reader, 0, 0);
+}
+
+const Range *range_add_expanded_from(const Range *range,
+                                     const Range *expanded_from) {
+  if (range->expanded_from == NULL) {
+    Range *cloned = NEW(Range);
+    *cloned = *range;
+    cloned->expanded_from = expanded_from;
+    return cloned;
+  }
+  if (range->expanded_from->start == expanded_from->start &&
+      range->expanded_from->len == expanded_from->len) {
+    return range;
+  }
+  const Range *exp =
+      range_add_expanded_from(range->expanded_from, expanded_from);
+  if (exp == range->expanded_from) {
+    return range;
+  }
+
+  Range *cloned = NEW(Range);
+  *cloned = *range;
+  cloned->expanded_from = exp;
+  return cloned;
+}
+
+const Range *range_join(const Range *a, const Range *b) {
+  assert(a->start >= 0);
+  assert(b->start >= 0);
+  assert(a->reader == b->reader);
+  int aend = a->start + a->len;
+  int bend = b->start + b->len;
+  int start = a->start < b->start ? a->start : b->start;
+  int end = aend > bend ? aend : bend;
+  return range_from_reader(a->reader, start, end);
+}
+
+void range_get_start(const Range *range, const char **filename, int *line,
+                     int *column) {
+  reader_get_position(range->reader, range->start, filename, line, column);
+}
+
+void range_get_end(const Range *range, const char **filename, int *line,
+                   int *column) {
+  reader_get_position(range->reader, range->start + range->len, filename, line,
+                      column);
+}
 
 Reader *new_reader(void) {
   Reader *reader = NEW(Reader);
@@ -209,12 +278,12 @@ void reader_get_position(const Reader *reader, int offset,
   assert(false);
 }
 
-char *reader_get_source(Range range) {
-  int offset = range.start;
-  FileOffset *fo = get_file_offset(range.reader, offset);
+char *reader_get_source(const Range *range) {
+  int offset = range->start;
+  FileOffset *fo = get_file_offset(range->reader, offset);
   const char *source =
       &fo->file->source[offset - fo->global_offset + fo->file_offset];
-  return strndup(source, range.len);
+  return strndup(source, range->len);
 }
 
 noreturn __attribute__((format(printf, 5, 6))) void
@@ -222,7 +291,7 @@ reader_error_offset_raw(const Reader *reader, int offset, const char *dbg_file,
                         int dbg_line, const char *fmt, ...) {
   va_list ap;
   va_start(ap, fmt);
-  range_error_raw_v((Range){.reader = reader, .start = offset, .len = 1},
+  range_error_raw_v(&(Range){.reader = reader, .start = offset, .len = 1},
                     dbg_file, dbg_line, fmt, ap);
 }
 
@@ -231,20 +300,20 @@ reader_warn_offset_raw(const Reader *reader, int offset, const char *dbg_file,
                        int dbg_line, const char *fmt, ...) {
   va_list ap;
   va_start(ap, fmt);
-  range_warn_raw_v((Range){.reader = reader, .start = offset, .len = 1},
+  range_warn_raw_v(&(Range){.reader = reader, .start = offset, .len = 1},
                    dbg_file, dbg_line, fmt, ap);
 }
 
 noreturn __attribute__((format(printf, 4, 5))) void
-range_error_raw(Range range, const char *dbg_file, int dbg_line,
+range_error_raw(const Range *range, const char *dbg_file, int dbg_line,
                 const char *fmt, ...) {
   va_list ap;
   va_start(ap, fmt);
   range_error_raw_v(range, dbg_file, dbg_line, fmt, ap);
 }
 
-noreturn void range_error_raw_v(Range range, const char *dbg_file, int dbg_line,
-                                const char *fmt, va_list ap) {
+noreturn void range_error_raw_v(const Range *range, const char *dbg_file,
+                                int dbg_line, const char *fmt, va_list ap) {
   print_message_raw(MESSAGE_ERROR, range, dbg_file, dbg_line, fmt, ap);
   print_source(range);
   print_expanded_message(range, dbg_file, dbg_line);
@@ -253,13 +322,13 @@ noreturn void range_error_raw_v(Range range, const char *dbg_file, int dbg_line,
 }
 
 __attribute__((format(printf, 4, 5))) void
-range_warn_raw(Range range, const char *dbg_file, int dbg_line, const char *fmt,
-               ...) {
+range_warn_raw(const Range *range, const char *dbg_file, int dbg_line,
+               const char *fmt, ...) {
   va_list ap;
   va_start(ap, fmt);
   range_warn_raw_v(range, dbg_file, dbg_line, fmt, ap);
 }
-void range_warn_raw_v(Range range, const char *dbg_file, int dbg_line,
+void range_warn_raw_v(const Range *range, const char *dbg_file, int dbg_line,
                       const char *fmt, va_list ap) {
   print_message_raw(MESSAGE_WARN, range, dbg_file, dbg_line, fmt, ap);
   print_source(range);
@@ -267,19 +336,20 @@ void range_warn_raw_v(Range range, const char *dbg_file, int dbg_line,
 }
 
 static __attribute__((format(printf, 5, 6))) void
-print_message(message_t msg, Range range, const char *dbg_file, int dbg_line,
-              const char *fmt, ...) {
+print_message(message_t msg, const Range *range, const char *dbg_file,
+              int dbg_line, const char *fmt, ...) {
   va_list ap;
   va_start(ap, fmt);
   print_message_raw(msg, range, dbg_file, dbg_line, fmt, ap);
   va_end(ap);
 }
 
-static void print_message_raw(message_t msg, Range range, const char *dbg_file,
-                              int dbg_line, const char *fmt, va_list ap) {
+static void print_message_raw(message_t msg, const Range *range,
+                              const char *dbg_file, int dbg_line,
+                              const char *fmt, va_list ap) {
   const char *filename;
   int line, column;
-  reader_get_position(range.reader, range.start, &filename, &line, &column);
+  reader_get_position(range->reader, range->start, &filename, &line, &column);
 
   fprintf(stderr, "%s:%d:%d: ", filename, line, column);
 
@@ -300,10 +370,10 @@ static void print_message_raw(message_t msg, Range range, const char *dbg_file,
   fprintf(stderr, " (DEBUG:%s:%d)\n", dbg_file, dbg_line);
 }
 
-static void print_source(Range range) {
-  const Reader *reader = range.reader;
-  int start = range.start;
-  int len = range.len;
+static void print_source(const Range *range) {
+  const Reader *reader = range->reader;
+  int start = range->start;
+  int len = range->len;
   while (len > 0) {
     FileOffset *fo = get_file_offset(reader, start);
     FileOffset *next_fo = fo->index < vec_len(reader->file_offset) - 1
@@ -364,10 +434,10 @@ static void print_source(Range range) {
   }
 }
 
-static void print_expanded_message(Range range, const char *dbg_file,
+static void print_expanded_message(const Range *range, const char *dbg_file,
                                    int dbg_line) {
-  while (range.expanded_from != NULL) {
-    range = *range.expanded_from;
+  while (range->expanded_from != NULL) {
+    range = range->expanded_from;
     print_message(MESSAGE_NOTE, range, dbg_file, dbg_line, "マクロ展開元");
     print_source(range);
   }

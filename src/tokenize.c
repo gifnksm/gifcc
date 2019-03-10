@@ -92,12 +92,12 @@ static const char *SHORT_PUNCT_TOKENS = "=!<>&|^+-*/%();?:~{}[],.#";
 
 static bool do_read_token(Tokenizer *tokenizer, Token **token, bool skip_eol,
                           bool check_pp_cond);
-static Token *new_token(int ty, Range range);
-static Token *token_clone(Token *token);
-static Token *new_token_num(const char *num, Range range);
-static Token *new_token_char(Number val, Range range);
-static Token *new_token_ident(char *ident, Range range);
-static Token *new_token_str(const char *str, Range range);
+static Token *new_token(int ty, const Range *range);
+static Token *token_clone(Token *token, const Range *expanded_from);
+static Token *new_token_num(const char *num, const Range *range);
+static Token *new_token_char(Number val, const Range *range);
+static Token *new_token_ident(char *ident, const Range *range);
+static Token *new_token_str(const char *str, const Range *range);
 static Macro *new_obj_macro(Vector *replacement);
 static Macro *new_obj_special_macro(Vector *(*replacement_func)(Tokenizer *));
 static Macro *new_func_macro(Vector *params, bool has_varargs,
@@ -110,11 +110,11 @@ static Vector *pp_convert_defined(Map *define_map, Vector *tokens);
 static Vector *pp_expand_macros(Tokenizer *tokenizer, Vector *tokens,
                                 bool (*reader)(Tokenizer *, Token **));
 static void pp_if(Vector *pp_cond_stack, bool fullfilled);
-static void pp_elif(Vector *pp_cond_stack, bool fullfilled, Range range);
-static void pp_else(Vector *pp_cond_stack, Range range);
-static void pp_endif(Vector *pp_cond_stack, Range range);
+static void pp_elif(Vector *pp_cond_stack, bool fullfilled, const Range *range);
+static void pp_else(Vector *pp_cond_stack, const Range *range);
+static void pp_endif(Vector *pp_cond_stack, const Range *range);
 static void do_include(Reader *reader, int offset, const char *path,
-                       Range range, bool include_sourcedir);
+                       const Range *range, bool include_sourcedir);
 static bool try_include(Reader *reader, const char *base_path,
                         const char *rel_path);
 static Token *read_normal_token(Reader *reader);
@@ -523,35 +523,37 @@ static bool do_read_token(Tokenizer *tokenizer, Token **token, bool skip_eol,
   return true;
 }
 
-static Token *new_token(int ty, Range range) {
+static Token *new_token(int ty, const Range *range) {
   Token *token = NEW(Token);
   token->ty = ty;
   token->range = range;
   return token;
 }
 
-static Token *token_clone(Token *token) {
+static Token *token_clone(Token *token, const Range *expanded_from) {
   Token *cloned = NEW(Token);
   *cloned = *token;
   if (token->pp_hideset != NULL) {
     cloned->pp_hideset = set_clone(token->pp_hideset);
   }
+  cloned->range = range_add_expanded_from(token->range, expanded_from);
+
   return cloned;
 }
 
-static Token *new_token_num(const char *num, Range range) {
+static Token *new_token_num(const char *num, const Range *range) {
   Token *token = new_token(TK_NUM, range);
   token->num = num;
   return token;
 }
 
-static Token *new_token_char(Number val, Range range) {
+static Token *new_token_char(Number val, const Range *range) {
   Token *token = new_token(TK_CHARCONST, range);
   token->char_val = val;
   return token;
 }
 
-static Token *new_token_ident(char *ident, Range range) {
+static Token *new_token_ident(char *ident, const Range *range) {
   Token *token = new_token(TK_IDENT, range);
 
   for (int i = 0; LONG_IDENT_TOKENS[i].str != NULL; i++) {
@@ -565,7 +567,7 @@ static Token *new_token_ident(char *ident, Range range) {
   return token;
 }
 
-static Token *new_token_str(const char *str, Range range) {
+static Token *new_token_str(const char *str, const Range *range) {
   Token *token = new_token(TK_STR, range);
   token->str = str;
   return token;
@@ -866,7 +868,8 @@ static bool pp_read_if_cond(Tokenizer *tokenizer) {
     }
   }
   int here_offset = reader_get_offset(tokenizer->reader);
-  Range here = range_from_reader(tokenizer->reader, here_offset, here_offset);
+  const Range *here =
+      range_from_reader(tokenizer->reader, here_offset, here_offset);
   Token *eof_token = new_token(TK_EOF, here);
   vec_push(tokens, eof_token);
 
@@ -908,7 +911,7 @@ static Vector *pp_convert_defined(Map *define_map, Vector *tokens) {
       vec_push(converted, token);
       continue;
     }
-    Range def_start = token->range;
+    const Range *def_start = token->range;
 
     bool has_paren = false;
     token = vec_remove(tokens, 0);
@@ -958,7 +961,7 @@ static Vector *pp_read_macro_func_arg(Tokenizer *tokenizer, Macro *macro,
   assert(macro->kind == MACRO_FUNC);
   assert(((Token *)vec_first(tokens))->ty == '(');
 
-  Range range = ((Token *)vec_first(tokens))->range;
+  const Range *range = ((Token *)vec_first(tokens))->range;
 
   Vector *arguments = new_vector();
   Vector *current_arg = NULL;
@@ -1025,16 +1028,11 @@ static Vector *pp_read_macro_func_arg(Tokenizer *tokenizer, Macro *macro,
   return arguments;
 }
 
-static Vector *pp_hsadd(Range *expanded_from, Set *hideset, Vector *output) {
+static Vector *pp_hsadd(const Range *expanded_from, Set *hideset,
+                        Vector *output) {
   for (int i = 0; i < vec_len(output); i++) {
-    Token *token = token_clone(vec_get(output, i));
+    Token *token = token_clone(vec_get(output, i), expanded_from);
     vec_set(output, i, token);
-    Range *range = &token->range;
-    while (range->expanded_from != NULL &&
-           range->expanded_from != expanded_from) {
-      range = range->expanded_from;
-    }
-    range->expanded_from = expanded_from;
 
     for (int j = 0; j < set_size(hideset); j++) {
       const char *key = set_get_by_index(hideset, j);
@@ -1064,7 +1062,7 @@ static Vector *pp_get_func_arg(Vector *params, Vector *arguments,
   return NULL;
 }
 
-static Token *pp_stringize(Vector *arg, Range range) {
+static Token *pp_stringize(Vector *arg, const Range *range) {
   String *str = new_string();
   for (int i = 0; i < vec_len(arg); i++) {
     Token *token = vec_get(arg, i);
@@ -1116,7 +1114,7 @@ static void pp_glue(Vector *ls, Vector *rs) {
   str_append(str, pp_token_to_str(r));
   str_push(str, '\0');
 
-  Range range = range_join(l->range, r->range);
+  const Range *range = range_join(l->range, r->range);
   Token *token = NULL;
   char *str_raw = str_get_raw(str);
   if (isdigit(str_raw[0])) {
@@ -1139,7 +1137,7 @@ static void pp_glue(Vector *ls, Vector *rs) {
   vec_append(ls, rs);
 }
 
-static Vector *pp_subst_macros(Tokenizer *tokenizer, Range *expanded_from,
+static Vector *pp_subst_macros(Tokenizer *tokenizer, const Range *expanded_from,
                                Vector *input, Vector *params, Vector *arguments,
                                Set *hideset, Vector *output) {
   while (vec_len(input) > 0) {
@@ -1226,8 +1224,7 @@ static Vector *pp_expand_macros(Tokenizer *tokenizer, Vector *tokens,
     }
 
     if (macro->kind == MACRO_OBJ || macro->kind == MACRO_OBJ_SPECIAL) {
-      Range *expanded_from = NEW(Range);
-      *expanded_from = ident->range;
+      const Range *expanded_from = ident->range;
       Set *hideset = new_set();
       set_insert(hideset, ident->ident);
       Vector *replacement = macro->kind == MACRO_OBJ
@@ -1258,8 +1255,7 @@ static Vector *pp_expand_macros(Tokenizer *tokenizer, Vector *tokens,
         pp_read_macro_func_arg(tokenizer, macro, tokens, &rparen, reader);
     Set *hideset = pp_hideset_intersection(ident, rparen);
     set_insert(hideset, ident->ident);
-    Range *expanded_from = NEW(Range);
-    *expanded_from = range_join(ident->range, rparen->range);
+    const Range *expanded_from = range_join(ident->range, rparen->range);
     Vector *exp_tokens = pp_expand_macros(
         tokenizer,
         pp_subst_macros(tokenizer, expanded_from, vec_clone(macro->replacement),
@@ -1277,7 +1273,8 @@ static void pp_if(Vector *pp_cond_stack, bool fullfilled) {
   vec_push(pp_cond_stack, cond);
 }
 
-static void pp_elif(Vector *pp_cond_stack, bool fullfilled, Range range) {
+static void pp_elif(Vector *pp_cond_stack, bool fullfilled,
+                    const Range *range) {
   if (vec_len(pp_cond_stack) <= 0) {
     range_error(range, "#if, #ifdef, #ifndefがありません");
   }
@@ -1289,7 +1286,7 @@ static void pp_elif(Vector *pp_cond_stack, bool fullfilled, Range range) {
   cond->once_fullfilled |= fullfilled;
 }
 
-static void pp_else(Vector *pp_cond_stack, Range range) {
+static void pp_else(Vector *pp_cond_stack, const Range *range) {
   if (vec_len(pp_cond_stack) <= 0) {
     range_error(range, "#if, #ifdef, #ifndefがありません");
   }
@@ -1299,7 +1296,7 @@ static void pp_else(Vector *pp_cond_stack, Range range) {
   cond->once_fullfilled |= fullfilled;
 }
 
-static void pp_endif(Vector *pp_cond_stack, Range range) {
+static void pp_endif(Vector *pp_cond_stack, const Range *range) {
   if (vec_len(pp_cond_stack) <= 0) {
     range_error(range, "#if, #ifdef, #ifndefがありません");
   }
@@ -1307,7 +1304,7 @@ static void pp_endif(Vector *pp_cond_stack, Range range) {
 }
 
 static void do_include(Reader *reader, int offset, const char *path,
-                       Range range, bool include_sourcedir) {
+                       const Range *range, bool include_sourcedir) {
   if (include_sourcedir) {
     const char *sourcepath;
     reader_get_position(reader, offset, &sourcepath, NULL, NULL);
@@ -1392,7 +1389,7 @@ static Token *identifier_or_keyword(Reader *reader) {
     return NULL;
   }
   int end = reader_get_offset(reader);
-  Range range = range_from_reader(reader, start, end);
+  const Range *range = range_from_reader(reader, start, end);
   return new_token_ident(str_get_raw(str), range);
 }
 

@@ -146,7 +146,7 @@ bool is_float_type(Type *ty) {
   assert(false);
   return false;
 }
-int get_int_type_rank(Type *ty, Range range) {
+int get_int_type_rank(Type *ty, const Range *range) {
   switch (ty->ty) {
   case TY_BOOL:
     return 1;
@@ -180,7 +180,7 @@ int get_int_type_rank(Type *ty, Range range) {
   }
   range_error(range, "整数型ではない型です: %s", format_type(ty, false));
 }
-bool is_signed_int_type(Type *ty, Range range) {
+bool is_signed_int_type(Type *ty, const Range *range) {
   switch (ty->ty) {
   case TY_BOOL:
     return false;
