@@ -1895,7 +1895,13 @@ static Number read_integer(Token *token) {
 
   assert(token->ty == TK_NUM);
   char *suffix = NULL;
-  unsigned long long val = strtoull(token->num, &suffix, 0);
+  unsigned long long val;
+  if (strncasecmp("0b", token->num, 2) == 0) {
+    // NonStandard/GNU: binary prefix integer literal
+    val = strtoull(&token->num[2], &suffix, 2);
+  } else {
+    val = strtoull(token->num, &suffix, 0);
+  }
 
   bool isbase10 = token->num[0] != '0';
 
