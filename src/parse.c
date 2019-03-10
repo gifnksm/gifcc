@@ -120,6 +120,7 @@ static noreturn void binop_type_error_raw(int ty, Expr *lhs, Expr *rhs,
                                           const char *dbg_file, int dbg_line);
 static Expr *coerce_array2ptr(Scope *scope, Expr *expr);
 static Expr *coerce_func2ptr(Scope *scope, Expr *expr);
+static bool is_null_ptr_const(Expr *expr);
 static Expr *new_expr(int ty, Type *val_type, const Range *range);
 static Expr *new_expr_num(Number val, const Range *range);
 static Expr *new_expr_ident(Scope *scope, char *name, const Range *range);
@@ -1168,6 +1169,22 @@ static Expr *coerce_func2ptr(Scope *scope, Expr *expr) {
   return expr;
 }
 
+static bool is_null_ptr_const(Expr *expr) {
+  if (!is_integer_type(expr->val_type)) {
+    return false;
+  }
+
+  // evaluate constant expression
+  sema_expr(expr);
+
+  if (expr->ty != EX_NUM) {
+    return false;
+  }
+  int n;
+  SET_NUMBER_VAL(n, &expr->num);
+  return n == 0;
+}
+
 static Expr *new_expr(int ty, Type *val_type, const Range *range) {
   Expr *expr = NEW(Expr);
   expr->ty = ty;
@@ -1639,6 +1656,24 @@ static Expr *new_expr_cond(Scope *scope, Expr *cond, Expr *then_expr,
   if (is_arith_type(then_expr->val_type) &&
       is_arith_type(else_expr->val_type)) {
     val_type = arith_converted(scope, &then_expr, &else_expr);
+  } else if (is_ptr_type(then_expr->val_type) &&
+             is_ptr_type(else_expr->val_type)) {
+    if (then_expr->val_type->ptrof->ty == TY_VOID) {
+      val_type = else_expr->val_type;
+    } else if (else_expr->val_type->ptrof->ty == TY_VOID) {
+      val_type = then_expr->val_type;
+    } else {
+      if (!is_sametype(then_expr->val_type, else_expr->val_type)) {
+        range_error(range, "条件演算子の両辺の型が異なります: %s, %s",
+                    format_type(then_expr->val_type, false),
+                    format_type(else_expr->val_type, false));
+      }
+      val_type = then_expr->val_type;
+    }
+  } else if (is_ptr_type(then_expr->val_type) && is_null_ptr_const(else_expr)) {
+    val_type = then_expr->val_type;
+  } else if (is_ptr_type(else_expr->val_type) && is_null_ptr_const(then_expr)) {
+    val_type = else_expr->val_type;
   } else {
     if (!is_sametype(then_expr->val_type, else_expr->val_type)) {
       range_error(range, "条件演算子の両辺の型が異なります: %s, %s",
