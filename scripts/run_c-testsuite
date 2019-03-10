@@ -7,16 +7,14 @@ PATH="$(readlink -f ${CURDIR}/../target):${PATH}"
 cd ${REPOROOT}
 git submodule update --init
 
-cd ${REPOROOT}/target
-ln -sf gifcc 9cc
-
 cd ${REPOROOT}/external/c-testsuite
 if ! [ -d ./.tmsu ]; then
     ./scripts/make-search-index
 fi
 
+cp ${REPOROOT}/scripts/gifcc-x86_64 ${REPOROOT}/external/c-testsuite/runners/single-exec/
 OUTPUT="${REPOROOT}/target/c-testsuite"
-./single-exec 9cc-x86_64 | tee ${OUTPUT} | grep -v '^#'
+./single-exec gifcc-x86_64 | tee ${OUTPUT} | grep -v '^#'
 
 PASS="$(grep '^ok' ${OUTPUT} | grep -v '# SKIP' | wc -l)"
 FAIL="$(grep '^not ok' ${OUTPUT} | wc -l)"
