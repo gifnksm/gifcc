@@ -206,6 +206,7 @@ typedef struct Number {
     long double ldouble_val;
     intptr_t ptr_val;
     int enum_val;
+    uint64_t bytes[2];
   };
 } Number;
 

@@ -2387,6 +2387,31 @@ static void test74(void) {
 
   CHECK_INT(1, fx == dx);
   CHECK_INT(1, (float)dx == fx);
+
+  long double ldx = n;
+  long double ldy = m;
+  long double ldz = m;
+  long double lds = (ldx / ldy + 3) * ldz;
+  CHECK_INT(7, lds);
+
+  CHECK_INT(1, ldy > ldx);
+  CHECK_INT(0, ldy < ldx);
+  CHECK_INT(1, ldy >= ldx);
+  CHECK_INT(0, ldy <= ldx);
+  CHECK_INT(0, ldy == ldx);
+  CHECK_INT(1, ldy != ldx);
+
+  CHECK_INT(0, ldy > ldz);
+  CHECK_INT(0, ldy < ldz);
+  CHECK_INT(1, ldy >= ldz);
+  CHECK_INT(1, ldy <= ldz);
+  CHECK_INT(1, ldy == ldz);
+  CHECK_INT(0, ldy != ldz);
+
+  CHECK_INT(1, fx == ldx);
+  CHECK_INT(1, dx == ldx);
+  CHECK_INT(1, (float)ldx == fx);
+  CHECK_INT(1, (double)ldx == dx);
 }
 
 int main(void) {

@@ -570,7 +570,9 @@ static Type *arith_converted(Scope *scope, Expr **e1, Expr **e2) {
 
   if (is_float_type(ty1) || is_float_type(ty2)) {
     Type *type;
-    if (ty1->ty == TY_DOUBLE || ty2->ty == TY_DOUBLE) {
+    if (ty1->ty == TY_LDOUBLE || ty2->ty == TY_LDOUBLE) {
+      type = new_type(TY_LDOUBLE, EMPTY_TYPE_QUALIFIER);
+    } else if (ty1->ty == TY_DOUBLE || ty2->ty == TY_DOUBLE) {
       type = new_type(TY_DOUBLE, EMPTY_TYPE_QUALIFIER);
     } else {
       assert(ty1->ty == TY_FLOAT || ty2->ty == TY_FLOAT);

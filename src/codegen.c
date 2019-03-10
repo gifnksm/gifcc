@@ -12,7 +12,8 @@ static Vector *continue_labels = NULL;
 static void gen_expr(Expr *expr);
 static void gen_expr_call(Expr *expr);
 static void gen_expr_binop_int(Expr *expr);
-static void gen_expr_binop_float(Expr *expr);
+static void gen_expr_binop_sse(Expr *expr);
+static void gen_expr_binop_x87(Expr *expr);
 static void gen_gvar(GlobalVar *gvar, Vector *gvar_list);
 
 typedef enum {
@@ -87,9 +88,9 @@ typedef struct {
   const char *cvt_to_ss;
   const char *cvt_to_sd;
   const char *cvtt_from_si;
-} FloatOp;
+} SseOp;
 
-const FloatOp FloatOpSS = {
+const SseOp SseOpSS = {
     .add = "addss",
     .sub = "subss",
     .mul = "mulss",
@@ -100,7 +101,7 @@ const FloatOp FloatOpSS = {
     .cvt_to_sd = "cvtss2sd",
     .cvtt_from_si = "cvtsi2ss",
 };
-const FloatOp FloatOpSD = {
+const SseOp SseOpSD = {
     .add = "addsd",
     .sub = "subsd",
     .mul = "mulsd",
@@ -115,7 +116,10 @@ const FloatOp FloatOpSD = {
 static bool is_int_reg_type(Type *type) {
   return is_ptr_type(type) || is_integer_type(type);
 }
-static bool is_float_reg_type(Type *type) { return is_float_type(type); }
+static bool is_sse_reg_type(Type *type) {
+  return type->ty == TY_FLOAT || type->ty == TY_DOUBLE;
+}
+static bool is_x87_reg_type(Type *type) { return type->ty == TY_LDOUBLE; }
 
 static const Reg *get_int_reg_for_size(size_t size, Range range) {
   switch (size) {
@@ -137,12 +141,12 @@ static const Reg *get_int_reg(Type *type, Range range) {
   return get_int_reg_for_size(get_val_size(type, range), range);
 }
 
-static const FloatOp *get_float_op(Type *type, Range range) {
+static const SseOp *get_sse_op(Type *type, Range range) {
   switch (type->ty) {
   case TY_FLOAT:
-    return &FloatOpSS;
+    return &SseOpSS;
   case TY_DOUBLE:
-    return &FloatOpSD;
+    return &SseOpSD;
   default:
     range_error(range, "不正な型です: %s", format_type(type, false));
   }
@@ -271,10 +275,18 @@ static void gen_expr(Expr *expr) {
     int size = get_val_size(expr->val_type, expr->range);
     if (size < 4) {
       printf("  push %s\n", num2str(expr->num, expr->range));
-    } else {
+    } else if (size <= 8) {
       const Reg *r = get_int_reg_for_size(size, expr->range);
       printf("  mov %s, %s\n", r->rax, num2str(expr->num, expr->range));
       printf("  push rax\n");
+    } else {
+      assert(is_x87_reg_type(expr->val_type));
+      assert(size == 16);
+      printf("  mov rax, %lu\n", expr->num.bytes[0]);
+      printf("  mov [rsp - 16],  rax\n");
+      printf("  mov rax, %lu\n", expr->num.bytes[1]);
+      printf("  mov [rsp - 8],  rax\n");
+      printf("  sub rsp, 16\n");
     }
     return;
   }
@@ -572,8 +584,8 @@ static void gen_expr(Expr *expr) {
       return;
     }
 
-    if (is_float_type(operand->val_type) && is_int_reg_type(expr->val_type)) {
-      const FloatOp *op = get_float_op(operand->val_type, operand->range);
+    if (is_sse_reg_type(operand->val_type) && is_int_reg_type(expr->val_type)) {
+      const SseOp *op = get_sse_op(operand->val_type, operand->range);
       const Reg *to = get_int_reg(expr->val_type, expr->range);
       pop_xmm(0);
       printf("  %s %s, xmm0\n", op->cvtt_to_si, to->rax);
@@ -581,8 +593,8 @@ static void gen_expr(Expr *expr) {
       return;
     }
 
-    if (is_int_reg_type(operand->val_type) && is_float_type(expr->val_type)) {
-      const FloatOp *op = get_float_op(expr->val_type, expr->range);
+    if (is_int_reg_type(operand->val_type) && is_sse_reg_type(expr->val_type)) {
+      const SseOp *op = get_sse_op(expr->val_type, expr->range);
       const Reg *from = get_int_reg(operand->val_type, operand->range);
       printf("  pop rax\n");
       printf("  %s xmm0, %s\n", op->cvtt_from_si, from->rax);
@@ -590,8 +602,8 @@ static void gen_expr(Expr *expr) {
       return;
     }
 
-    if (is_float_type(operand->val_type) && is_float_type(expr->val_type)) {
-      const FloatOp *op = get_float_op(operand->val_type, expr->range);
+    if (is_sse_reg_type(operand->val_type) && is_sse_reg_type(expr->val_type)) {
+      const SseOp *op = get_sse_op(operand->val_type, expr->range);
       pop_xmm(0);
       if (expr->val_type->ty == TY_FLOAT) {
         printf("  %s xmm0, xmm0\n", op->cvt_to_ss);
@@ -601,6 +613,62 @@ static void gen_expr(Expr *expr) {
         goto CastError;
       }
       push_xmm(0);
+      return;
+    }
+
+    if (is_int_reg_type(operand->val_type) && is_x87_reg_type(expr->val_type)) {
+      int size = get_val_size(operand->val_type, operand->range);
+      switch (size) {
+      case 1:
+        printf("  fild BYTE PTR [rsp]\n");
+        break;
+      case 2:
+        printf("  fild WORD PTR [rsp]\n");
+        break;
+      case 4:
+        printf("  fild DWORD PTR [rsp]\n");
+        break;
+      case 8:
+        printf("  fild QWORD PTR [rsp]\n");
+        break;
+      default:
+        goto CastError;
+      }
+      printf("  fstp TBYTE PTR [rsp - 8]\n");
+      printf("  sub rsp, 8\n");
+      return;
+    }
+
+    if (is_x87_reg_type(operand->val_type) && is_int_reg_type(expr->val_type)) {
+      printf("  fld TBYTE PTR [rsp]\n");
+      printf("  fisttp QWORD PTR [rsp + 8]\n");
+      printf("  add rsp, 8\n");
+      return;
+    }
+
+    if (is_sse_reg_type(operand->val_type) && is_x87_reg_type(expr->val_type)) {
+      if (operand->val_type->ty == TY_FLOAT) {
+        printf("  fld DWORD PTR [rsp]\n");
+      } else if (operand->val_type->ty == TY_DOUBLE) {
+        printf("  fld QWORD PTR [rsp]\n");
+      } else {
+        goto CastError;
+      }
+      printf("  fstp TBYTE PTR [rsp - 8]\n");
+      printf("  sub rsp, 8\n");
+      return;
+    }
+
+    if (is_x87_reg_type(operand->val_type) && is_sse_reg_type(expr->val_type)) {
+      printf("  fld TBYTE PTR [rsp]\n");
+      if (expr->val_type->ty == TY_FLOAT) {
+        printf("  fstp DWORD PTR [rsp + 8]\n");
+      } else if (expr->val_type->ty == TY_DOUBLE) {
+        printf("  fstp QWORD PTR [rsp + 8]\n");
+      } else {
+        goto CastError;
+      }
+      printf("  add rsp, 8\n");
       return;
     }
 
@@ -661,8 +729,13 @@ static void gen_expr(Expr *expr) {
     return;
   }
 
-  if (is_float_reg_type(lhs->val_type)) {
-    gen_expr_binop_float(expr);
+  if (is_sse_reg_type(lhs->val_type)) {
+    gen_expr_binop_sse(expr);
+    return;
+  }
+
+  if (is_x87_reg_type(lhs->val_type)) {
+    gen_expr_binop_x87(expr);
     return;
   }
 
@@ -972,11 +1045,11 @@ static void gen_expr_binop_int(Expr *expr) {
   return;
 }
 
-static void gen_expr_binop_float(Expr *expr) {
+static void gen_expr_binop_sse(Expr *expr) {
   Type *type = expr->binop.lhs->val_type;
-  assert(is_float_reg_type(type));
+  assert(is_sse_reg_type(type));
 
-  const FloatOp *op = get_float_op(type, expr->range);
+  const SseOp *op = get_sse_op(type, expr->range);
 
   gen_expr(expr->binop.lhs);
   gen_expr(expr->binop.rhs);
@@ -1048,6 +1121,102 @@ static void gen_expr_binop_float(Expr *expr) {
   case EX_GTEQ: {
     const Reg *r = get_int_reg(expr->val_type, expr->range);
     printf("  %s xmm0, xmm1\n", op->comi);
+    printf("  setge al\n");
+    printf("  movzb %s, al\n", r->rax);
+    printf("  push rax\n");
+    break;
+  }
+  default:
+    range_error(expr->range, "不正な演算子です: %d %s", expr->ty,
+                format_type(type, false));
+  }
+  return;
+}
+
+static void gen_expr_binop_x87(Expr *expr) {
+  Type *type = expr->binop.lhs->val_type;
+  assert(is_x87_reg_type(type));
+
+  gen_expr(expr->binop.lhs);
+  gen_expr(expr->binop.rhs);
+
+  printf("  fld TBYTE PTR [rsp + 16]\n");
+  printf("  fld TBYTE PTR [rsp]\n");
+
+  switch (expr->ty) {
+  case EX_ADD:
+    printf("  faddp st(1), st\n");
+    printf("  fstp TBYTE PTR [rsp + 16]\n");
+    printf("  add rsp, 16\n");
+    break;
+  case EX_SUB:
+    printf("  fsubp st(1), st\n");
+    printf("  fstp TBYTE PTR [rsp + 16]\n");
+    printf("  add rsp, 16\n");
+    break;
+  case EX_MUL:
+    printf("  fmulp st(1), st\n");
+    printf("  fstp TBYTE PTR [rsp + 16]\n");
+    printf("  add rsp, 16\n");
+    break;
+  case EX_DIV:
+    printf("  fdivp st(1), st\n");
+    printf("  fstp TBYTE PTR [rsp + 16]\n");
+    printf("  add rsp, 16\n");
+    break;
+  case EX_EQEQ: {
+    const Reg *r = get_int_reg(expr->val_type, expr->range);
+    printf("  fcomip st, st(1)\n");
+    printf("  fstp st(0)\n");
+    printf("  sete al\n");
+    printf("  setnp dil\n");
+    printf("  and al, dil\n");
+    printf("  movzb %s, al\n", r->rax);
+    printf("  push rax\n");
+    break;
+  }
+  case EX_NOTEQ: {
+    const Reg *r = get_int_reg(expr->val_type, expr->range);
+    printf("  fcomip st, st(1)\n");
+    printf("  fstp st(0)\n");
+    printf("  setne al\n");
+    printf("  setp dil\n");
+    printf("  or al, dil\n");
+    printf("  movzb %s, al\n", r->rax);
+    printf("  push rax\n");
+    break;
+  }
+  case EX_LT: {
+    const Reg *r = get_int_reg(expr->val_type, expr->range);
+    printf("  fcomip st, st(1)\n");
+    printf("  fstp st(0)\n");
+    printf("  setl al\n");
+    printf("  movzb %s, al\n", r->rax);
+    printf("  push rax\n");
+    break;
+  }
+  case EX_GT: {
+    const Reg *r = get_int_reg(expr->val_type, expr->range);
+    printf("  fcomip st, st(1)\n");
+    printf("  fstp st(0)\n");
+    printf("  setg al\n");
+    printf("  movzb %s, al\n", r->rax);
+    printf("  push rax\n");
+    break;
+  }
+  case EX_LTEQ: {
+    const Reg *r = get_int_reg(expr->val_type, expr->range);
+    printf("  fcomip st, st(1)\n");
+    printf("  fstp st(0)\n");
+    printf("  setle al\n");
+    printf("  movzb %s, al\n", r->rax);
+    printf("  push rax\n");
+    break;
+  }
+  case EX_GTEQ: {
+    const Reg *r = get_int_reg(expr->val_type, expr->range);
+    printf("  fcomip st, st(1)\n");
+    printf("  fstp st(0)\n");
     printf("  setge al\n");
     printf("  movzb %s, al\n", r->rax);
     printf("  push rax\n");
