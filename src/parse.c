@@ -1279,6 +1279,11 @@ static Expr *new_expr_call(Scope *scope, Expr *callee, Vector *argument,
     Expr *arg = vec_get(argument, i);
     if (is_integer_type(arg->val_type)) {
       integer_promoted(scope, &arg);
+    } else if (arg->val_type->ty == TY_FLOAT) {
+      arg = new_expr_cast(scope, new_type(TY_DOUBLE, EMPTY_TYPE_QUALIFIER), arg,
+                          arg->range);
+    } else {
+      // do nothing
     }
     vec_set(argument, i, arg);
   }

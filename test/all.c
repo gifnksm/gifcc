@@ -2414,6 +2414,21 @@ static void test74(void) {
   CHECK_INT(1, (double)ldx == dx);
 }
 
+static float test75_f(float f) { return 2 * f; }
+static double test75_d(double d) { return 2 * d; }
+static long double test75_ld(long double ld) { return 2 * ld; }
+static void test75(void) {
+  float f = 1;
+  CHECK_INT(1, test75_f(f) == 2 * f);
+  // TEST_PRINTF("f = %f", f);
+  double d = 1;
+  CHECK_INT(1, test75_d(d) == 2 * d);
+  // TEST_PRINTF("d = %f", f);
+  long double ld = 1;
+  CHECK_INT(1, test75_ld(ld) == 2 * ld);
+  // TEST_PRINTF("ld = %Lf", ld);
+}
+
 int main(void) {
   Test test_list[] = {
       TEST(test01), TEST(test02), TEST(test03), TEST(test04), TEST(test05),
@@ -2430,7 +2445,8 @@ int main(void) {
       TEST(test56), TEST(test57), TEST(test58), TEST(test59), TEST(test60),
       TEST(test61), TEST(test62), TEST(test63), TEST(test64), TEST(test65),
       TEST(test66), TEST(test67), TEST(test68), TEST(test69), TEST(test70),
-      TEST(test71), TEST(test72), TEST(test73), TEST(test74), {NULL, NULL},
+      TEST(test71), TEST(test72), TEST(test73), TEST(test74), TEST(test75),
+      {NULL, NULL},
   };
   RUN_TEST(test_list);
 
