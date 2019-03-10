@@ -7,6 +7,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 
 typedef struct GlobalCtxt {
   Vector *func_list;
@@ -155,6 +156,8 @@ static Stmt *new_stmt_return(Scope *scope, Expr *expr, Range range);
 static Stmt *new_stmt_compound(Vector *stmts, Range range);
 
 // expression
+static Number read_integer(Token *token);
+static Number read_float(Token *token);
 static Number read_number(Token *token);
 static Expr *primary_expression(Tokenizer *tokenizer, Scope *scope);
 static Expr *postfix_expression(Tokenizer *tokenizer, Scope *scope);
@@ -1790,7 +1793,24 @@ static Stmt *new_stmt_compound(Vector *stmts, Range range) {
   return stmt;
 }
 
-static Number read_number(Token *token) {
+static Number read_float(Token *token) {
+  assert(token->ty == TK_NUM);
+  char *suffix = NULL;
+  long double val = strtold(token->num, &suffix);
+  type_t type = TY_VOID;
+  if (strcmp(suffix, "") == 0) {
+    type = TY_DOUBLE;
+  } else if (strcasecmp(suffix, "l") == 0) {
+    type = TY_LDOUBLE;
+  } else if (strcasecmp(suffix, "f") == 0) {
+    type = TY_FLOAT;
+  } else {
+    range_error(token->range, "不正なサフィックスです");
+  }
+  return new_number_float(type, val);
+}
+
+static Number read_integer(Token *token) {
   typedef struct Suffix {
     const char *suffix;
     type_t type;
@@ -1863,6 +1883,18 @@ static Number read_number(Token *token) {
   }
 
   return new_number(ty, val);
+}
+
+static Number read_number(Token *token) {
+  assert(token->ty == TK_NUM);
+
+  bool is_float =
+      strpbrk(token->num, ".pP") ||
+      (strncasecmp(token->num, "0x", 2) && strpbrk(token->num, "eE"));
+  if (is_float) {
+    return read_float(token);
+  }
+  return read_integer(token);
 }
 
 static Expr *primary_expression(Tokenizer *tokenizer, Scope *scope) {

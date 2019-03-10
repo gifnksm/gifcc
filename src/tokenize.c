@@ -121,7 +121,7 @@ static Token *read_normal_token(Reader *reader);
 static Token *punctuator(Reader *reader);
 static Token *identifier_or_keyword(Reader *reader);
 static Token *constant(Reader *reader);
-static Token *integer_constant(Reader *reader);
+static Token *number_constant(Reader *reader);
 static Token *character_constant(Reader *reader);
 static Token *string_literal(Reader *reader);
 static char c_char(Reader *reader);
@@ -1398,14 +1398,14 @@ static Token *identifier_or_keyword(Reader *reader) {
 
 static Token *constant(Reader *reader) {
   Token *token;
-  if ((token = integer_constant(reader)) != NULL ||
+  if ((token = number_constant(reader)) != NULL ||
       (token = character_constant(reader)) != NULL) {
     return token;
   }
   return NULL;
 }
 
-static Token *integer_constant(Reader *reader) {
+static Token *number_constant(Reader *reader) {
   if (!isdigit(reader_peek(reader))) {
     return NULL;
   }
@@ -1416,13 +1416,16 @@ static Token *integer_constant(Reader *reader) {
   char ch = reader_pop(reader);
   str_push(str, ch);
 
+  char last = ch;
   while (true) {
     ch = reader_peek(reader);
-    if (!isdigit(ch) && !is_ident_head(ch)) {
+    bool is_float = strchr("eEpP", last) && strchr("+-", ch);
+    if (!isdigit(ch) && !is_ident_head(ch) && ch != '.' && !is_float) {
       break;
     }
     str_push(str, ch);
     reader_succ(reader);
+    last = ch;
   }
 
   int end = reader_get_offset(reader);
