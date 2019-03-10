@@ -1883,8 +1883,8 @@ static void test49(void) {
 }
 
 static void test50(void) {
-  char *s = "abc"
-            "def";
+  const char *s = "abc"
+                  "def";
 
   CHECK_INT('a', s[0]);
   CHECK_INT('b', s[1]);
@@ -2132,11 +2132,18 @@ static void test64(void) {
   CHECK_INT(strlen("local static str") + 1, sizeof(local_static));
 }
 
+const static char *test65_s = "ABC"
+                              "DEF";
+const static char test65_a[] = "GHI"
+                               "JKL";
 static void test65(void) {
   const char *s = "ABC"
                   "DEF";
   const char a[] = "GHI"
                    "JKL";
+  CHECK_INT(0, strcmp(test65_s, "ABCDEF"));
+  CHECK_INT(0, strcmp(test65_a, "GHIJKL"));
+  CHECK_INT(7, sizeof(test65_a) / sizeof(test65_a[0]));
   CHECK_INT(0, strcmp(s, "ABCDEF"));
   CHECK_INT(0, strcmp(a, "GHIJKL"));
   CHECK_INT(7, sizeof(a) / sizeof(a[0]));

@@ -1733,6 +1733,8 @@ static void gen_gvar_init(Initializer *init, const Range *range,
           "グローバル変数またはコンパウンドリテラル以外へのポインタです");
     } else if (expr->ty == EX_COMPOUND) {
       gen_gvar_init(expr->compound, expr->range, gvar_list);
+    } else if (expr->ty == EX_STR) {
+      printf("  .quad %s\n", expr->str);
     } else {
       range_error(range, "数値でもポインタでもありません: %d", expr->ty);
     }
