@@ -245,9 +245,11 @@ static void test05(void) {
 
   a = +3;
   CHECK_INT(103, 100 + a);
+  CHECK_INT(3, +a);
 
   a = -3;
   CHECK_INT(97, 100 + a);
+  CHECK_INT(3, -a);
 
   a = 2;
   CHECK_INT(3, ++a);
@@ -278,6 +280,9 @@ static void test05(void) {
   a = 2;
   b = a--;
   CHECK_INT(12, 10 * a + b);
+
+  a = 0xff0;
+  CHECK_INT(0x00f, 0xfff & (~a));
 }
 
 static void test06(void) {

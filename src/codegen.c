@@ -24,6 +24,7 @@ typedef enum {
 } arg_class_t;
 
 typedef struct {
+  const char *ptr;
   const char *rax;
   const char *rdi;
   const char *rsi;
@@ -36,6 +37,7 @@ typedef struct {
 } Reg;
 
 const Reg Reg8 = {
+    .ptr = "QWORD PTR",
     .rax = "rax",
     .rdi = "rdi",
     .rsi = "rsi",
@@ -47,6 +49,7 @@ const Reg Reg8 = {
     .r11 = "r11",
 };
 const Reg Reg4 = {
+    .ptr = "DWORD PTR",
     .rax = "eax",
     .rdi = "edi",
     .rsi = "esi",
@@ -58,6 +61,7 @@ const Reg Reg4 = {
     .r11 = "r11d",
 };
 const Reg Reg2 = {
+    .ptr = "WORD PTR",
     .rax = "ax",
     .rdi = "di",
     .rsi = "si",
@@ -69,6 +73,7 @@ const Reg Reg2 = {
     .r11 = "r11w",
 };
 const Reg Reg1 = {
+    .ptr = "BYTE PTR",
     .rax = "al",
     .rdi = "dil",
     .rsi = "sil",
@@ -81,6 +86,7 @@ const Reg Reg1 = {
 };
 
 typedef struct {
+  const char *ptr;
   const char *add;
   const char *sub;
   const char *mul;
@@ -93,6 +99,7 @@ typedef struct {
 } SseOp;
 
 const SseOp SseOpSS = {
+    .ptr = "DWORD PTR",
     .add = "addss",
     .sub = "subss",
     .mul = "mulss",
@@ -104,6 +111,7 @@ const SseOp SseOpSS = {
     .cvtt_from_si = "cvtsi2ss",
 };
 const SseOp SseOpSD = {
+    .ptr = "QWORD PTR",
     .add = "addsd",
     .sub = "subsd",
     .mul = "mulsd",
@@ -538,18 +546,14 @@ static void gen_expr(Expr *expr) {
     // 単項の `-`
     const Reg *r = get_int_reg(expr->val_type, expr->range);
     gen_expr(expr->unop.operand);
-    printf("  pop rax\n");
-    printf("  neg %s\n", r->rax);
-    printf("  push rax\n");
+    printf("  neg %s [rsp]\n", r->ptr);
     return;
   }
   if (expr->ty == EX_NOT) {
     // `~`
     const Reg *r = get_int_reg(expr->val_type, expr->range);
     gen_expr(expr->unop.operand);
-    printf("  pop rax\n");
-    printf("  not %s\n", r->rax);
-    printf("  push rax\n");
+    printf("  not %s [rsp]\n", r->ptr);
     return;
   }
   if (expr->ty == EX_LOG_NOT) {
@@ -561,7 +565,8 @@ static void gen_expr(Expr *expr) {
     gen_expr(operand);
 
     if (expr->val_type->ty == TY_VOID) {
-      printf("  pop rax\n");
+      int size = get_val_size(operand->val_type, operand->range);
+      printf("  add rsp, %d\n", align(size, 8));
       return;
     }
 
@@ -571,17 +576,16 @@ static void gen_expr(Expr *expr) {
       int from_size = get_val_size(operand->val_type, operand->range);
       int to_size = get_val_size(expr->val_type, expr->range);
       if (to_size > from_size) {
-        printf("  pop rax\n");
         if (is_signed_int_type(operand->val_type, operand->range)) {
-          printf("  movsx %s, %s\n", to->rax, from->rax);
+          printf("  movsx %s, %s [rsp]\n", to->rax, from->ptr);
         } else {
           if (from_size < 4) {
-            printf("  movzx %s, %s\n", to->rax, from->rax);
+            printf("  movzx %s, %s [rsp]\n", to->rax, from->ptr);
           } else {
-            printf("  mov %s, %s\n", from->rax, from->rax);
+            printf("  mov %s, %s [rsp]\n", from->rax, from->ptr);
           }
         }
-        printf("  push rax\n");
+        printf("  mov [rsp], rax\n");
       }
       return;
     }
@@ -619,23 +623,8 @@ static void gen_expr(Expr *expr) {
     }
 
     if (is_int_reg_type(operand->val_type) && is_x87_reg_type(expr->val_type)) {
-      int size = get_val_size(operand->val_type, operand->range);
-      switch (size) {
-      case 1:
-        printf("  fild BYTE PTR [rsp]\n");
-        break;
-      case 2:
-        printf("  fild WORD PTR [rsp]\n");
-        break;
-      case 4:
-        printf("  fild DWORD PTR [rsp]\n");
-        break;
-      case 8:
-        printf("  fild QWORD PTR [rsp]\n");
-        break;
-      default:
-        goto CastError;
-      }
+      const Reg *from = get_int_reg(operand->val_type, operand->range);
+      printf("  fild %s [rsp]\n", from->ptr);
       printf("  fstp TBYTE PTR [rsp - 8]\n");
       printf("  sub rsp, 8\n");
       return;
@@ -649,27 +638,17 @@ static void gen_expr(Expr *expr) {
     }
 
     if (is_sse_reg_type(operand->val_type) && is_x87_reg_type(expr->val_type)) {
-      if (operand->val_type->ty == TY_FLOAT) {
-        printf("  fld DWORD PTR [rsp]\n");
-      } else if (operand->val_type->ty == TY_DOUBLE) {
-        printf("  fld QWORD PTR [rsp]\n");
-      } else {
-        goto CastError;
-      }
+      const SseOp *from_op = get_sse_op(operand->val_type, operand->range);
+      printf("  fld %s [rsp]\n", from_op->ptr);
       printf("  fstp TBYTE PTR [rsp - 8]\n");
       printf("  sub rsp, 8\n");
       return;
     }
 
     if (is_x87_reg_type(operand->val_type) && is_sse_reg_type(expr->val_type)) {
+      const SseOp *to_op = get_sse_op(expr->val_type, expr->range);
       printf("  fld TBYTE PTR [rsp]\n");
-      if (expr->val_type->ty == TY_FLOAT) {
-        printf("  fstp DWORD PTR [rsp + 8]\n");
-      } else if (expr->val_type->ty == TY_DOUBLE) {
-        printf("  fstp QWORD PTR [rsp + 8]\n");
-      } else {
-        goto CastError;
-      }
+      printf("  fstp %s [rsp + 8]\n", to_op->ptr);
       printf("  add rsp, 8\n");
       return;
     }
@@ -683,31 +662,31 @@ static void gen_expr(Expr *expr) {
     // 前置の `++`
     const Reg *r = get_int_reg(expr->val_type, expr->range);
     gen_lval(expr->unop.operand);
-    printf("  pop rax\n");
+    printf("  mov rax, [rsp]\n");
     printf("  mov %s, [rax]\n", r->rdi);
     printf("  add %s, %d\n", r->rdi, get_incdec_size(expr));
     printf("  mov [rax], %s\n", r->rdi);
-    printf("  push rdi\n");
+    printf("  mov [rsp], rdi\n");
     return;
   }
   if (expr->ty == EX_PRE_DEC) {
     // 前置の `--`
     const Reg *r = get_int_reg(expr->val_type, expr->range);
     gen_lval(expr->unop.operand);
-    printf("  pop rax\n");
+    printf("  mov rax, [rsp]\n");
     printf("  mov %s, [rax]\n", r->rdi);
     printf("  sub %s, %d\n", r->rdi, get_incdec_size(expr));
     printf("  mov [rax], %s\n", r->rdi);
-    printf("  push rdi\n");
+    printf("  mov [rsp], rdi\n");
     return;
   }
   if (expr->ty == EX_POST_INC) {
     // 後置の `++`
     const Reg *r = get_int_reg(expr->val_type, expr->range);
     gen_lval(expr->unop.operand);
-    printf("  pop rax\n");
+    printf("  mov rax, [rsp]\n");
     printf("  mov %s, [rax]\n", r->rdi);
-    printf("  push rdi\n");
+    printf("  mov [rsp], rdi\n");
     printf("  add %s, %d\n", r->rdi, get_incdec_size(expr));
     printf("  mov [rax], %s\n", r->rdi);
     return;
@@ -716,9 +695,9 @@ static void gen_expr(Expr *expr) {
     // 後置の `--`
     const Reg *r = get_int_reg(expr->val_type, expr->range);
     gen_lval(expr->unop.operand);
-    printf("  pop rax\n");
+    printf("  mov rax, [rsp]\n");
     printf("  mov %s, [rax]\n", r->rdi);
-    printf("  push rdi\n");
+    printf("  mov [rsp], rdi\n");
     printf("  sub %s, %d\n", r->rdi, get_incdec_size(expr));
     printf("  mov [rax], %s\n", r->rdi);
     return;
@@ -988,105 +967,130 @@ static void gen_expr_binop_int(Expr *expr) {
   gen_expr(expr->binop.lhs);
   gen_expr(expr->binop.rhs);
 
-  printf("  pop rdi\n");
-  printf("  pop rax\n");
-
   switch (expr->ty) {
   case EX_ADD:
-    printf("  add %s, %s\n", r->rax, r->rdi);
+    printf("  pop rdi\n");
+    printf("  add [rsp], %s\n", r->rdi);
     break;
   case EX_SUB:
-    printf("  sub %s, %s\n", r->rax, r->rdi);
+    printf("  pop rdi\n");
+    printf("  sub [rsp], %s\n", r->rdi);
     break;
   case EX_MUL:
+    printf("  pop rdi\n");
+    printf("  pop rax\n");
     printf("  imul %s, %s\n", r->rax, r->rdi);
+    printf("  push rax\n");
     break;
   case EX_DIV:
+    printf("  pop rdi\n");
+    printf("  pop rax\n");
+    printf("  mov %s, 0\n", r->rdx);
     if (is_signed_int_type(expr->binop.lhs->val_type, expr->binop.lhs->range)) {
-      printf("  mov %s, 0\n", r->rdx);
       printf("  idiv %s\n", r->rdi);
     } else {
-      printf("  mov %s, 0\n", r->rdx);
       printf("  div %s\n", r->rdi);
     }
+    printf("  push rax\n");
     break;
   case EX_MOD:
+    printf("  pop rdi\n");
+    printf("  pop rax\n");
     printf("  mov %s, 0\n", r->rdx);
-    printf("  div %s\n", r->rdi);
+    if (is_signed_int_type(expr->binop.lhs->val_type, expr->binop.lhs->range)) {
+      printf("  idiv %s\n", r->rdi);
+    } else {
+      printf("  div %s\n", r->rdi);
+    }
     printf("  mov %s, %s\n", r->rax, r->rdx);
+    printf("  push rax\n");
     break;
   case EX_EQEQ:
-    printf("  cmp %s, %s\n", r->rax, r->rdi);
+    printf("  pop rdi\n");
+    printf("  cmp [rsp], %s\n", r->rdi);
     printf("  sete al\n");
-    printf("  movzb %s, al\n", r->rax);
+    printf("  movzx %s, al\n", r->rax);
+    printf("  mov [rsp], %s\n", r->rax);
     break;
   case EX_NOTEQ:
-    printf("  cmp %s, %s\n", r->rax, r->rdi);
+    printf("  pop rdi\n");
+    printf("  cmp [rsp], %s\n", r->rdi);
     printf("  setne al\n");
-    printf("  movzb %s, al\n", r->rax);
+    printf("  movzx %s, al\n", r->rax);
+    printf("  mov [rsp], %s\n", r->rax);
     break;
   case EX_LT:
-    printf("  cmp %s, %s\n", r->rax, r->rdi);
+    printf("  pop rdi\n");
+    printf("  cmp [rsp], %s\n", r->rdi);
     if (is_signed_int_type(expr->binop.lhs->val_type, expr->binop.lhs->range)) {
       printf("  setl al\n");
     } else {
       printf("  setb al\n");
     }
-    printf("  movzb %s, al\n", r->rax);
+    printf("  movzx %s, al\n", r->rax);
+    printf("  mov [rsp], %s\n", r->rax);
     break;
   case EX_GT:
-    printf("  cmp %s, %s\n", r->rax, r->rdi);
+    printf("  pop rdi\n");
+    printf("  cmp [rsp], %s\n", r->rdi);
     if (is_signed_int_type(expr->binop.lhs->val_type, expr->binop.lhs->range)) {
       printf("  setg al\n");
     } else {
       printf("  seta al\n");
     }
-    printf("  movzb %s, al\n", r->rax);
+    printf("  movzx %s, al\n", r->rax);
+    printf("  mov [rsp], %s\n", r->rax);
     break;
   case EX_LTEQ:
-    printf("  cmp %s, %s\n", r->rax, r->rdi);
+    printf("  pop rdi\n");
+    printf("  cmp [rsp], %s\n", r->rdi);
     if (is_signed_int_type(expr->binop.lhs->val_type, expr->binop.lhs->range)) {
       printf("  setle al\n");
     } else {
       printf("  setbe al\n");
     }
-    printf("  movzb %s, al\n", r->rax);
+    printf("  movzx %s, al\n", r->rax);
+    printf("  mov [rsp], %s\n", r->rax);
     break;
   case EX_GTEQ:
-    printf("  cmp %s, %s\n", r->rax, r->rdi);
+    printf("  pop rdi\n");
+    printf("  cmp [rsp], %s\n", r->rdi);
     if (is_signed_int_type(expr->binop.lhs->val_type, expr->binop.lhs->range)) {
       printf("  setge al\n");
     } else {
       printf("  setae al\n");
     }
-    printf("  movzb %s, al\n", r->rax);
+    printf("  movzx %s, al\n", r->rax);
+    printf("  mov [rsp], %s\n", r->rax);
     break;
   case EX_LSHIFT:
-    printf("  mov %s, %s\n", r->rcx, r->rdi);
-    printf("  shl %s, cl\n", r->rax);
+    printf("  pop rcx\n");
+    printf("  shl %s [rsp], cl\n", r->ptr);
     break;
   case EX_RSHIFT:
-    printf("  mov %s, %s\n", r->rcx, r->rdi);
+    printf("  pop rcx\n");
     if (is_signed_int_type(expr->binop.lhs->val_type, expr->binop.lhs->range)) {
-      printf("  sar %s, cl\n", r->rax);
+      printf("  sar %s [rsp], cl\n", r->ptr);
     } else {
-      printf("  shr %s, cl\n", r->rax);
+      printf("  shr %s [rsp], cl\n", r->ptr);
     }
     break;
   case EX_AND:
-    printf("  and %s, %s\n", r->rax, r->rdi);
+    printf("  pop rdi\n");
+    printf("  and [rsp], %s\n", r->rdi);
     break;
   case EX_XOR:
-    printf("  xor %s, %s\n", r->rax, r->rdi);
+    printf("  pop rdi\n");
+    printf("  xor [rsp], %s\n", r->rdi);
     break;
   case EX_OR:
-    printf("  or %s, %s\n", r->rax, r->rdi);
+    printf("  pop rdi\n");
+    printf("  or [rsp], %s\n", r->rdi);
     break;
   default:
     range_error(expr->range, "不正な演算子です: %d", expr->ty);
   }
 
-  printf("  push rax\n");
   return;
 }
 
@@ -1125,7 +1129,7 @@ static void gen_expr_binop_sse(Expr *expr) {
     printf("  sete al\n");
     printf("  setnp dil\n");
     printf("  and al, dil\n");
-    printf("  movzb %s, al\n", r->rax);
+    printf("  movzx %s, al\n", r->rax);
     printf("  push rax\n");
     break;
   }
@@ -1135,7 +1139,7 @@ static void gen_expr_binop_sse(Expr *expr) {
     printf("  setne al\n");
     printf("  setp dil\n");
     printf("  or al, dil\n");
-    printf("  movzb %s, al\n", r->rax);
+    printf("  movzx %s, al\n", r->rax);
     printf("  push rax\n");
     break;
   }
@@ -1143,7 +1147,7 @@ static void gen_expr_binop_sse(Expr *expr) {
     const Reg *r = get_int_reg(expr->val_type, expr->range);
     printf("  %s xmm0, xmm1\n", op->comi);
     printf("  setl al\n");
-    printf("  movzb %s, al\n", r->rax);
+    printf("  movzx %s, al\n", r->rax);
     printf("  push rax\n");
     break;
   }
@@ -1151,7 +1155,7 @@ static void gen_expr_binop_sse(Expr *expr) {
     const Reg *r = get_int_reg(expr->val_type, expr->range);
     printf("  %s xmm0, xmm1\n", op->comi);
     printf("  setg al\n");
-    printf("  movzb %s, al\n", r->rax);
+    printf("  movzx %s, al\n", r->rax);
     printf("  push rax\n");
     break;
   }
@@ -1159,7 +1163,7 @@ static void gen_expr_binop_sse(Expr *expr) {
     const Reg *r = get_int_reg(expr->val_type, expr->range);
     printf("  %s xmm0, xmm1\n", op->comi);
     printf("  setle al\n");
-    printf("  movzb %s, al\n", r->rax);
+    printf("  movzx %s, al\n", r->rax);
     printf("  push rax\n");
     break;
   }
@@ -1167,7 +1171,7 @@ static void gen_expr_binop_sse(Expr *expr) {
     const Reg *r = get_int_reg(expr->val_type, expr->range);
     printf("  %s xmm0, xmm1\n", op->comi);
     printf("  setge al\n");
-    printf("  movzb %s, al\n", r->rax);
+    printf("  movzx %s, al\n", r->rax);
     printf("  push rax\n");
     break;
   }
@@ -1216,7 +1220,7 @@ static void gen_expr_binop_x87(Expr *expr) {
     printf("  sete al\n");
     printf("  setnp dil\n");
     printf("  and al, dil\n");
-    printf("  movzb %s, al\n", r->rax);
+    printf("  movzx %s, al\n", r->rax);
     printf("  push rax\n");
     break;
   }
@@ -1227,7 +1231,7 @@ static void gen_expr_binop_x87(Expr *expr) {
     printf("  setne al\n");
     printf("  setp dil\n");
     printf("  or al, dil\n");
-    printf("  movzb %s, al\n", r->rax);
+    printf("  movzx %s, al\n", r->rax);
     printf("  push rax\n");
     break;
   }
@@ -1236,7 +1240,7 @@ static void gen_expr_binop_x87(Expr *expr) {
     printf("  fcomip st, st(1)\n");
     printf("  fstp st(0)\n");
     printf("  setl al\n");
-    printf("  movzb %s, al\n", r->rax);
+    printf("  movzx %s, al\n", r->rax);
     printf("  push rax\n");
     break;
   }
@@ -1245,7 +1249,7 @@ static void gen_expr_binop_x87(Expr *expr) {
     printf("  fcomip st, st(1)\n");
     printf("  fstp st(0)\n");
     printf("  setg al\n");
-    printf("  movzb %s, al\n", r->rax);
+    printf("  movzx %s, al\n", r->rax);
     printf("  push rax\n");
     break;
   }
@@ -1254,7 +1258,7 @@ static void gen_expr_binop_x87(Expr *expr) {
     printf("  fcomip st, st(1)\n");
     printf("  fstp st(0)\n");
     printf("  setle al\n");
-    printf("  movzb %s, al\n", r->rax);
+    printf("  movzx %s, al\n", r->rax);
     printf("  push rax\n");
     break;
   }
@@ -1263,7 +1267,7 @@ static void gen_expr_binop_x87(Expr *expr) {
     printf("  fcomip st, st(1)\n");
     printf("  fstp st(0)\n");
     printf("  setge al\n");
-    printf("  movzb %s, al\n", r->rax);
+    printf("  movzx %s, al\n", r->rax);
     printf("  push rax\n");
     break;
   }
