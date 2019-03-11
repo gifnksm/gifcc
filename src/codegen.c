@@ -242,19 +242,23 @@ static int get_incdec_size(Expr *expr) {
 
 static void emit_stack_sub(int size) {
   stack_pos += size;
+  assert(stack_pos >= 0);
   printf("  sub rsp, %d \t# rsp = rbp - %d\n", size, stack_pos);
 }
 static void emit_stack_add(int size) {
   stack_pos -= size;
+  assert(stack_pos >= 0);
   printf("  add rsp, %d \t# rsp = rbp - %d\n", size, stack_pos);
 }
 
 static void emit_pop(const char *operand) {
   stack_pos -= 8;
+  assert(stack_pos >= 0);
   printf("  pop %s \t# rsp = rbp - %d\n", operand, stack_pos);
 }
 static void emit_push(const char *operand) {
   stack_pos += 8;
+  assert(stack_pos >= 0);
   printf("  push %s \t# rsp = rbp - %d\n", operand, stack_pos);
 }
 
@@ -466,14 +470,19 @@ static void emit_expr(Expr *expr) {
     emit_pop("rax");
     printf("  cmp %s, 0\n", r->rax);
     printf("  je %s\n", false_label);
+
     emit_expr(expr->binop.rhs);
     emit_pop("rax");
     printf("  cmp %s, 0\n", r->rax);
     printf("  je %s\n", false_label);
+
     emit_push("1");
     printf("  jmp %s\n", end_label);
+    stack_pos -= 8;
+
     printf("%s:\n", false_label);
     emit_push("0");
+
     printf("%s:\n", end_label);
     return;
   }
@@ -486,14 +495,19 @@ static void emit_expr(Expr *expr) {
     emit_pop("rax");
     printf("  cmp %s, 0\n", r->rax);
     printf("  jne %s\n", true_label);
+
     emit_expr(expr->binop.rhs);
     emit_pop("rax");
     printf("  cmp %s, 0\n", r->rax);
     printf("  jne %s\n", true_label);
+
     emit_push("0");
     printf("  jmp %s\n", end_label);
+    stack_pos -= 8;
+
     printf("%s:\n", true_label);
     emit_push("1");
+
     printf("%s:\n", end_label);
     return;
   }
@@ -507,10 +521,17 @@ static void emit_expr(Expr *expr) {
     emit_pop("rax");
     printf("  cmp %s, 0\n", r->rax);
     printf("  je %s\n", else_label);
+
+    int cond_stack_pos = stack_pos;
     emit_expr(expr->cond.then_expr);
     printf("  jmp %s\n", end_label);
+    int end_stack_pos = stack_pos;
+
+    stack_pos = cond_stack_pos;
     printf("%s:\n", else_label);
     emit_expr(expr->cond.else_expr);
+    assert(stack_pos == end_stack_pos);
+
     printf("%s:\n", end_label);
     return;
   }
@@ -1243,6 +1264,7 @@ static void emit_expr_binop_x87(Expr *expr) {
     printf("  setnp dil\n");
     printf("  and al, dil\n");
     printf("  movzx %s, al\n", r->rax);
+    emit_stack_add(32);
     emit_push("rax");
     break;
   }
@@ -1254,6 +1276,7 @@ static void emit_expr_binop_x87(Expr *expr) {
     printf("  setp dil\n");
     printf("  or al, dil\n");
     printf("  movzx %s, al\n", r->rax);
+    emit_stack_add(32);
     emit_push("rax");
     break;
   }
@@ -1263,6 +1286,7 @@ static void emit_expr_binop_x87(Expr *expr) {
     printf("  fstp st(0)\n");
     printf("  setl al\n");
     printf("  movzx %s, al\n", r->rax);
+    emit_stack_add(32);
     emit_push("rax");
     break;
   }
@@ -1272,6 +1296,7 @@ static void emit_expr_binop_x87(Expr *expr) {
     printf("  fstp st(0)\n");
     printf("  setg al\n");
     printf("  movzx %s, al\n", r->rax);
+    emit_stack_add(32);
     emit_push("rax");
     break;
   }
@@ -1281,6 +1306,7 @@ static void emit_expr_binop_x87(Expr *expr) {
     printf("  fstp st(0)\n");
     printf("  setle al\n");
     printf("  movzx %s, al\n", r->rax);
+    emit_stack_add(32);
     emit_push("rax");
     break;
   }
@@ -1290,6 +1316,7 @@ static void emit_expr_binop_x87(Expr *expr) {
     printf("  fstp st(0)\n");
     printf("  setge al\n");
     printf("  movzx %s, al\n", r->rax);
+    emit_stack_add(32);
     emit_push("rax");
     break;
   }
@@ -1306,6 +1333,7 @@ static void emit_stmt(Stmt *stmt) {
     return;
   }
   case ST_EXPR: {
+    int base_stack_pos = stack_pos;
     emit_expr(stmt->expr);
 
     // 式の評価結果としてスタックに一つの値が残っている
@@ -1314,6 +1342,8 @@ static void emit_stmt(Stmt *stmt) {
       int size = get_val_size(stmt->expr->val_type, stmt->expr->range);
       emit_stack_add(align(size, 8));
     }
+    assert(stack_pos == base_stack_pos);
+
     return;
   }
   case ST_COMPOUND: {
@@ -1323,21 +1353,30 @@ static void emit_stmt(Stmt *stmt) {
     return;
   }
   case ST_IF: {
+    int base_stack_pos = stack_pos;
     char *else_label = make_label("if.else");
     char *end_label = make_label("if.end");
     const Reg *r = get_int_reg(stmt->cond->val_type, stmt->cond->range);
     emit_expr(stmt->cond);
     emit_pop("rax");
+    assert(stack_pos == base_stack_pos);
+
     printf("  cmp %s, 0\n", r->rax);
     printf("  je %s\n", else_label);
+
     emit_stmt(stmt->then_stmt);
+    assert(stack_pos == base_stack_pos);
     printf("  jmp %s\n", end_label);
+
     printf("%s:\n", else_label);
     emit_stmt(stmt->else_stmt);
+    assert(stack_pos == base_stack_pos);
+
     printf("%s:\n", end_label);
     return;
   }
   case ST_SWITCH: {
+    int base_stack_pos = stack_pos;
     char *end_label = make_label("switch.end");
     const Reg *r = get_int_reg(stmt->cond->val_type, stmt->cond->range);
     emit_expr(stmt->cond);
@@ -1346,11 +1385,13 @@ static void emit_stmt(Stmt *stmt) {
       emit_expr(case_expr->expr);
       emit_pop("rax");
       emit_pop("rdi");
+      assert(stack_pos == base_stack_pos);
       printf("  cmp %s, %s\n", r->rax, r->rdi);
       printf("  je %s\n", case_expr->label);
       emit_push("rdi");
     }
     emit_pop("rdi");
+    assert(stack_pos == base_stack_pos);
     if (stmt->default_case) {
       printf("  jmp %s\n", stmt->default_case->label);
     } else {
@@ -1359,6 +1400,7 @@ static void emit_stmt(Stmt *stmt) {
     vec_push(break_labels, end_label);
     emit_stmt(stmt->body);
     vec_pop(break_labels);
+    assert(stack_pos == base_stack_pos);
     printf("%s:", end_label);
     return;
   }
@@ -1370,18 +1412,22 @@ static void emit_stmt(Stmt *stmt) {
     return;
   }
   case ST_WHILE: {
+    int base_stack_pos = stack_pos;
     char *cond_label = make_label("while.cond");
     char *end_label = make_label("while.end");
+
     printf("%s:\n", cond_label);
     const Reg *r = get_int_reg(stmt->cond->val_type, stmt->cond->range);
     emit_expr(stmt->cond);
     emit_pop("rax");
+    assert(stack_pos == base_stack_pos);
     printf("  cmp %s, 0\n", r->rax);
     printf("  je %s\n", end_label);
 
     vec_push(break_labels, end_label);
     vec_push(continue_labels, cond_label);
     emit_stmt(stmt->body);
+    assert(stack_pos == base_stack_pos);
     vec_pop(break_labels);
     vec_pop(continue_labels);
 
@@ -1390,6 +1436,7 @@ static void emit_stmt(Stmt *stmt) {
     return;
   }
   case ST_DO_WHILE: {
+    int base_stack_pos = stack_pos;
     char *loop_label = make_label("do_while.loop");
     char *cond_label = make_label("do_while.cond");
     char *end_label = make_label("do_while.end");
@@ -1398,6 +1445,7 @@ static void emit_stmt(Stmt *stmt) {
     vec_push(break_labels, end_label);
     vec_push(continue_labels, cond_label);
     emit_stmt(stmt->body);
+    assert(stack_pos == base_stack_pos);
     vec_pop(break_labels);
     vec_pop(continue_labels);
 
@@ -1405,17 +1453,23 @@ static void emit_stmt(Stmt *stmt) {
     const Reg *r = get_int_reg(stmt->cond->val_type, stmt->cond->range);
     emit_expr(stmt->cond);
     emit_pop("rax");
+    assert(stack_pos == base_stack_pos);
+
     printf("  cmp %s, 0\n", r->rax);
     printf("  jne %s\n", loop_label);
+
     printf("%s:\n", end_label);
     return;
   }
   case ST_FOR: {
+    int base_stack_pos = stack_pos;
     char *cond_label = make_label("for.cond");
     char *inc_label = make_label("for.inc");
     char *end_label = make_label("for.end");
     if (stmt->init != NULL) {
       emit_expr(stmt->init);
+      emit_pop("rax");
+      assert(stack_pos == base_stack_pos);
     }
     printf("%s:\n", cond_label);
     if (stmt->cond != NULL) {
@@ -1424,6 +1478,7 @@ static void emit_stmt(Stmt *stmt) {
       emit_pop("rax");
       printf("  cmp %s, 0\n", r->rax);
       printf("  je %s\n", end_label);
+      assert(stack_pos == base_stack_pos);
     }
 
     vec_push(break_labels, end_label);
@@ -1431,10 +1486,13 @@ static void emit_stmt(Stmt *stmt) {
     emit_stmt(stmt->body);
     vec_pop(break_labels);
     vec_pop(continue_labels);
+    assert(stack_pos == base_stack_pos);
 
     printf("%s:\n", inc_label);
     if (stmt->inc != NULL) {
       emit_expr(stmt->inc);
+      emit_pop("rax");
+      assert(stack_pos == base_stack_pos);
     }
     printf("  jmp %s\n", cond_label);
     printf("%s:\n", end_label);
@@ -1464,6 +1522,7 @@ static void emit_stmt(Stmt *stmt) {
     return;
   }
   case ST_RETURN: {
+    int base_stack_pos = stack_pos;
     if (stmt->expr != NULL) {
       Type *ret_type = func_ctxt->type->func_ret;
       emit_expr(stmt->expr);
@@ -1507,6 +1566,7 @@ static void emit_stmt(Stmt *stmt) {
             break;
           }
         }
+        emit_stack_add(align(size, 8));
         break;
       case ARG_CLASS_INTEGER:
         emit_pop("rax");
@@ -1520,6 +1580,7 @@ static void emit_stmt(Stmt *stmt) {
         break;
       }
     }
+    assert(stack_pos == base_stack_pos);
     printf("  jmp %s\n", epilogue_label);
     return;
   }
@@ -1557,6 +1618,7 @@ static void emit_func(Function *func) {
   stack_pos = 0;
   emit_stack_sub(align(func->stack_size, 16));
 
+  int stack_offset = 0;
   int int_reg_idx = 0;
   int sse_reg_idx = 0;
   if (func->type->func_ret->ty != TY_VOID) {
@@ -1568,6 +1630,7 @@ static void emit_func(Function *func) {
       // 戻り値をメモリで返す場合は、格納先のポインタをpushしておく
       emit_push("rdi");
       int_reg_idx++;
+      stack_offset = 8;
     }
   }
 
@@ -1672,6 +1735,7 @@ static void emit_func(Function *func) {
 
   // エピローグ
   // 最後の式の結果がRAXに残っているのでそれが返り値になる
+  assert(stack_pos == align(func->stack_size, 16) + stack_offset);
   printf("%s:\n", epilogue_label);
   printf("  mov rsp, rbp\n");
   printf("  pop rbp\n");

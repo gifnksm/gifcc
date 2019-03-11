@@ -2432,13 +2432,13 @@ static long double test75_ld(long double ld) { return 2 * ld; }
 static void test75(void) {
   float f = 1;
   CHECK_INT(1, test75_f(f) == 2 * f);
-  // TEST_PRINTF("f = %f", f);
+  TEST_PRINTF("f = %f", f);
   double d = 1;
   CHECK_INT(1, test75_d(d) == 2 * d);
-  // TEST_PRINTF("d = %f", f);
+  TEST_PRINTF("d = %f", f);
   long double ld = 1;
   CHECK_INT(1, test75_ld(ld) == 2 * ld);
-  // TEST_PRINTF("ld = %Lf", ld);
+  TEST_PRINTF("ld = %Lf", ld);
 }
 
 int main(void) {
