@@ -859,7 +859,6 @@ static void emit_expr_call(Expr *expr) {
                 format_type(expr->call.callee->val_type, false));
   }
 
-  int num_push = 0;
   int num_vararg_sse_reg = 0;
   int int_reg_idx = 0;
   int sse_reg_idx = 0;
@@ -883,7 +882,26 @@ static void emit_expr_call(Expr *expr) {
   Vector *arg = expr->call.argument;
   IntVector *arg_class = arg != NULL ? classify_arg(arg, int_reg_idx) : NULL;
 
-  if (arg && vec_len(arg) > 0) {
+  int arg_size = 0;
+  if (arg != NULL && vec_len(arg) > 0) {
+    for (int i = vec_len(arg) - 1; i >= 0; i--) {
+      Expr *expr = vec_get(arg, i);
+      int size = get_val_size(expr->val_type, expr->range);
+      arg_class_t class = int_vec_get(arg_class, i);
+      if (class == ARG_CLASS_MEMORY || class == ARG_CLASS_X87) {
+        arg_size += align(size, 8);
+      }
+    }
+  }
+
+  // 呼び出される関数の rbp が 16 byte 境界に整列するようにする
+  if ((stack_pos + arg_size) % 16 != 0) {
+    assert((stack_pos + arg_size) % 16 == 8);
+    arg_size += 8;
+    emit_stack_sub(8);
+  }
+
+  if (arg != NULL && vec_len(arg) > 0) {
     // メモリ渡しする引数をスタックに積む
     for (int i = vec_len(arg) - 1; i >= 0; i--) {
       arg_class_t class = int_vec_get(arg_class, i);
@@ -924,7 +942,6 @@ static void emit_expr_call(Expr *expr) {
       switch (class) {
       case ARG_CLASS_X87:
       case ARG_CLASS_MEMORY:
-        num_push += (size + 7) / 8;
         continue;
 
       case ARG_CLASS_INTEGER: {
@@ -971,16 +988,18 @@ static void emit_expr_call(Expr *expr) {
   }
   if (ret_class == ARG_CLASS_MEMORY || ret_class == ARG_CLASS_X87) {
     // rdiには戻り値の格納先を設定
-    printf("  lea rdi, [rsp + %d]\n", 8 * num_push);
+    printf("  lea rdi, [rsp + %d]\n", arg_size);
   }
   printf("  mov al, %d\n", num_vararg_sse_reg);
+
+  assert(stack_pos % 16 == 0);
   if (call_direct) {
     printf("  call %s\n", expr->call.callee->global_var.name);
   } else {
     printf("  call r10\n");
   }
-  if (num_push > 0) {
-    emit_stack_add(8 * num_push);
+  if (arg_size > 0) {
+    emit_stack_add(arg_size);
   }
   if (ret_type->ty != TY_VOID) {
     switch (ret_class) {
