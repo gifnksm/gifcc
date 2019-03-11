@@ -5,7 +5,7 @@
 #include <stdio.h>
 #include <string.h>
 
-static const int INVALID_STACK_POS = INT_MIN;
+#define INVALID_STACK_POS INT_MIN
 
 static char *epilogue_label = NULL;
 static Function *func_ctxt = NULL;
