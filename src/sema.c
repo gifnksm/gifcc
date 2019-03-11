@@ -746,8 +746,10 @@ static void walk_expr(Expr *expr) {
     assert(false);
     return;
   case EX_COMMA:
-    walk_expr(expr->binop.lhs);
-    walk_expr(expr->binop.rhs);
+    for (int i = 0; i < vec_len(expr->comma.exprs); i++) {
+      Expr *op = vec_get(expr->comma.exprs, i);
+      walk_expr(op);
+    }
     return;
   case EX_COND:
     walk_expr(expr->cond.cond);

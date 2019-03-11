@@ -1630,9 +1630,30 @@ static Expr *new_expr_binop(Scope *scope, int op, Expr *lhs, Expr *rhs,
   case EX_OR_ASSIGN:
     return new_expr_binop(scope, EX_ASSIGN, lhs,
                           new_expr_binop(scope, EX_OR, lhs, rhs, range), range);
-  case EX_COMMA:
-    val_type = rhs->val_type;
-    break;
+  case EX_COMMA: {
+    if (lhs->ty == EX_COMMA && rhs->ty == EX_COMMA) {
+      vec_append(lhs->comma.exprs, rhs->comma.exprs);
+      lhs->range = range;
+      lhs->val_type = rhs->val_type;
+      return lhs;
+    }
+    if (lhs->ty == EX_COMMA) {
+      vec_push(lhs->comma.exprs, rhs);
+      lhs->range = range;
+      lhs->val_type = rhs->val_type;
+      return lhs;
+    }
+    if (rhs->ty == EX_COMMA) {
+      vec_insert(rhs->comma.exprs, 0, lhs);
+      rhs->range = range;
+      return rhs;
+    }
+    Expr *expr = new_expr(op, rhs->val_type, range);
+    expr->comma.exprs = new_vector();
+    vec_push(expr->comma.exprs, lhs);
+    vec_push(expr->comma.exprs, rhs);
+    return expr;
+  }
   default:
     assert(false);
   }

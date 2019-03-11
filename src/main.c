@@ -338,7 +338,17 @@ static void dump_expr(Expr *expr, int level) {
     dump_binop_expr(expr, "[|=]", level);
     return;
   case EX_COMMA:
-    dump_binop_expr(expr, "[,]", level);
+    dump_range_start(expr->range);
+    dump_indent(level);
+    dump_type(expr->val_type);
+    printf("([,]\n");
+    for (int i = 0; i < vec_len(expr->comma.exprs); i++) {
+      Expr *op = vec_get(expr->comma.exprs, i);
+      dump_expr(op, level + 1);
+    }
+    dump_range_end(expr->range);
+    dump_indent(level);
+    printf(")\n");
     return;
 
   // ternary unary operator

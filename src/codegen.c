@@ -291,12 +291,17 @@ static void emit_lval(Expr *expr) {
     return;
   }
   if (expr->ty == EX_COMMA) {
-    Expr *lhs = expr->binop.lhs;
-    Expr *rhs = expr->binop.rhs;
-    emit_expr(lhs);
-    int lhs_size = get_val_size(lhs->val_type, lhs->range);
-    emit_stack_add(align(lhs_size, 8));
-    emit_lval(rhs);
+    Vector *exprs = expr->comma.exprs;
+    for (int i = 0; i < vec_len(exprs); i++) {
+      Expr *op = vec_get(exprs, i);
+      if (i != vec_len(exprs) - 1) {
+        emit_expr(op);
+        int op_size = get_val_size(op->val_type, op->range);
+        emit_stack_add(align(op_size, 8));
+        continue;
+      }
+      emit_lval(op);
+    }
     return;
   }
 
@@ -453,12 +458,16 @@ static void emit_expr(Expr *expr) {
   }
 
   if (expr->ty == EX_COMMA) {
-    Expr *lhs = expr->binop.lhs;
-    Expr *rhs = expr->binop.rhs;
-    emit_expr(lhs);
-    int lhs_size = get_val_size(lhs->val_type, lhs->range);
-    emit_stack_add(align(lhs_size, 8));
-    emit_expr(rhs);
+    Vector *exprs = expr->comma.exprs;
+    for (int i = 0; i < vec_len(exprs); i++) {
+      Expr *op = vec_get(exprs, i);
+      emit_expr(op);
+      if (i != vec_len(exprs) - 1) {
+        int op_size = get_val_size(op->val_type, op->range);
+        emit_stack_add(align(op_size, 8));
+        continue;
+      }
+    }
     return;
   }
 

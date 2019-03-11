@@ -402,6 +402,11 @@ typedef struct Expr {
       Expr *else_expr;
     } cond;
 
+    // EX_COMMA
+    struct {
+      Vector *exprs;
+    } comma;
+
     // other unary operator
     struct {
       Expr *operand;
