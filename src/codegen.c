@@ -1,20 +1,24 @@
 #include "gifcc.h"
 #include <assert.h>
 #include <inttypes.h>
+#include <limits.h>
 #include <stdio.h>
 #include <string.h>
+
+static const int INVALID_STACK_POS = INT_MIN;
 
 static char *epilogue_label = NULL;
 static Function *func_ctxt = NULL;
 static Vector *break_labels = NULL;
 static Vector *continue_labels = NULL;
+static int stack_pos = INVALID_STACK_POS;
 
-static void gen_expr(Expr *expr);
-static void gen_expr_call(Expr *expr);
-static void gen_expr_binop_int(Expr *expr);
-static void gen_expr_binop_sse(Expr *expr);
-static void gen_expr_binop_x87(Expr *expr);
-static void gen_gvar(GlobalVar *gvar, Vector *gvar_list);
+static void emit_expr(Expr *expr);
+static void emit_expr_call(Expr *expr);
+static void emit_expr_binop_int(Expr *expr);
+static void emit_expr_binop_sse(Expr *expr);
+static void emit_expr_binop_x87(Expr *expr);
+static void emit_gvar(GlobalVar *gvar, Vector *gvar_list);
 
 typedef enum {
   ARG_CLASS_MEMORY,
@@ -169,37 +173,6 @@ char *make_label(const char *s) {
   return strdup(buf);
 }
 
-static void gen_lval(Expr *expr) {
-  if (expr->ty == EX_STACK_VAR) {
-    StackVar *var = expr->stack_var;
-    assert(var != NULL);
-    printf("  lea rax, [rbp - %d]\n",
-           align(func_ctxt->stack_size, 16) - var->offset);
-    printf("  push rax\n");
-    return;
-  }
-  if (expr->ty == EX_GLOBAL_VAR) {
-    printf("  lea rax, %s[rip]\n", expr->global_var.name);
-    printf("  push rax\n");
-    return;
-  }
-  if (expr->ty == EX_INDIRECT) {
-    gen_expr(expr->unop.operand);
-    return;
-  }
-  if (expr->ty == EX_COMMA) {
-    Expr *lhs = expr->binop.lhs;
-    Expr *rhs = expr->binop.rhs;
-    gen_expr(lhs);
-    int lhs_size = get_val_size(lhs->val_type, lhs->range);
-    printf("  add rsp, %d\n", align(lhs_size, 8));
-    gen_lval(rhs);
-    return;
-  }
-
-  range_error(expr->range, "左辺値が変数ではありません");
-}
-
 static char *num2str(Number num, const Range *range) {
   char buf[1024];
   switch (num.type) {
@@ -267,28 +240,77 @@ static int get_incdec_size(Expr *expr) {
   return 1;
 }
 
-static void pop_xmm(int n) {
-  printf("  movsd xmm%d, [rsp]\n", n);
-  printf("  add rsp, 8\n");
+static void emit_stack_sub(int size) {
+  stack_pos += size;
+  printf("  sub rsp, %d \t# rsp = rbp - %d\n", size, stack_pos);
+}
+static void emit_stack_add(int size) {
+  stack_pos -= size;
+  printf("  add rsp, %d \t# rsp = rbp - %d\n", size, stack_pos);
 }
 
-static void push_xmm(int n) {
-  printf("  sub rsp, 8\n");
+static void emit_pop(const char *operand) {
+  stack_pos -= 8;
+  printf("  pop %s \t# rsp = rbp - %d\n", operand, stack_pos);
+}
+static void emit_push(const char *operand) {
+  stack_pos += 8;
+  printf("  push %s \t# rsp = rbp - %d\n", operand, stack_pos);
+}
+
+static void emit_pop_xmm(int n) {
+  printf("  movsd xmm%d, [rsp]\n", n);
+  emit_stack_add(8);
+}
+
+static void emit_push_xmm(int n) {
+  emit_stack_sub(8);
   printf("  movsd [rsp], xmm%d\n", n);
 }
 
-static void gen_expr(Expr *expr) {
+static void emit_lval(Expr *expr) {
+  if (expr->ty == EX_STACK_VAR) {
+    StackVar *var = expr->stack_var;
+    assert(var != NULL);
+    printf("  lea rax, [rbp - %d]\n",
+           align(func_ctxt->stack_size, 16) - var->offset);
+    emit_push("rax");
+    return;
+  }
+  if (expr->ty == EX_GLOBAL_VAR) {
+    printf("  lea rax, %s[rip]\n", expr->global_var.name);
+    emit_push("rax");
+    return;
+  }
+  if (expr->ty == EX_INDIRECT) {
+    emit_expr(expr->unop.operand);
+    return;
+  }
+  if (expr->ty == EX_COMMA) {
+    Expr *lhs = expr->binop.lhs;
+    Expr *rhs = expr->binop.rhs;
+    emit_expr(lhs);
+    int lhs_size = get_val_size(lhs->val_type, lhs->range);
+    emit_stack_add(align(lhs_size, 8));
+    emit_lval(rhs);
+    return;
+  }
+
+  range_error(expr->range, "左辺値が変数ではありません");
+}
+
+static void emit_expr(Expr *expr) {
   if (expr->ty == EX_NUM) {
     if (expr->val_type->ty == TY_VOID) {
       return;
     }
     int size = get_val_size(expr->val_type, expr->range);
     if (size < 4) {
-      printf("  push %s\n", num2str(expr->num, expr->range));
+      emit_push(num2str(expr->num, expr->range));
     } else if (size <= 8) {
       const Reg *r = get_int_reg_for_size(size, expr->range);
       printf("  mov %s, %s\n", r->rax, num2str(expr->num, expr->range));
-      printf("  push rax\n");
+      emit_push("rax");
     } else {
       assert(is_x87_reg_type(expr->val_type));
       assert(size == 16);
@@ -296,7 +318,7 @@ static void gen_expr(Expr *expr) {
       printf("  mov [rsp - 16],  rax\n");
       printf("  mov rax, %lu\n", expr->num.bytes[1]);
       printf("  mov [rsp - 8],  rax\n");
-      printf("  sub rsp, 16\n");
+      emit_stack_sub(16);
     }
     return;
   }
@@ -304,7 +326,7 @@ static void gen_expr(Expr *expr) {
   if (expr->ty == EX_STACK_VAR) {
     StackVar *var = expr->stack_var;
     int size = get_val_size(expr->val_type, expr->range);
-    printf("  sub rsp, %d\n", align(size, 8));
+    emit_stack_sub(align(size, 8));
 
     int src_offset = align(func_ctxt->stack_size, 16) - var->offset;
     int copy_size = 0;
@@ -342,7 +364,7 @@ static void gen_expr(Expr *expr) {
   if (expr->ty == EX_GLOBAL_VAR) {
     const char *name = expr->global_var.name;
     int size = get_val_size(expr->val_type, expr->range);
-    printf("  sub rsp, %d\n", align(size, 8));
+    emit_stack_sub(align(size, 8));
 
     int copy_size = 0;
 
@@ -379,19 +401,19 @@ static void gen_expr(Expr *expr) {
 
   if (expr->ty == EX_STR) {
     printf("  lea rax, %s[rip]\n", expr->str);
-    printf("  push rax\n");
+    emit_push("rax");
     return;
   }
 
   if (expr->ty == EX_CALL) {
-    gen_expr_call(expr);
+    emit_expr_call(expr);
     return;
   }
 
   if (expr->ty == EX_ASSIGN) {
-    gen_expr(expr->binop.rhs);
-    gen_lval(expr->binop.lhs);
-    printf("  pop rax\n");
+    emit_expr(expr->binop.rhs);
+    emit_lval(expr->binop.lhs);
+    emit_pop("rax");
 
     int size = get_val_size(expr->val_type, expr->range);
     int copy_size = 0;
@@ -429,10 +451,10 @@ static void gen_expr(Expr *expr) {
   if (expr->ty == EX_COMMA) {
     Expr *lhs = expr->binop.lhs;
     Expr *rhs = expr->binop.rhs;
-    gen_expr(lhs);
+    emit_expr(lhs);
     int lhs_size = get_val_size(lhs->val_type, lhs->range);
-    printf("  add rsp, %d\n", align(lhs_size, 8));
-    gen_expr(rhs);
+    emit_stack_add(align(lhs_size, 8));
+    emit_expr(rhs);
     return;
   }
 
@@ -440,18 +462,18 @@ static void gen_expr(Expr *expr) {
     const Reg *r = get_int_reg(expr->val_type, expr->range);
     char *false_label = make_label("logand.false");
     char *end_label = make_label("logand.end");
-    gen_expr(expr->binop.lhs);
-    printf("  pop rax\n");
+    emit_expr(expr->binop.lhs);
+    emit_pop("rax");
     printf("  cmp %s, 0\n", r->rax);
     printf("  je %s\n", false_label);
-    gen_expr(expr->binop.rhs);
-    printf("  pop rax\n");
+    emit_expr(expr->binop.rhs);
+    emit_pop("rax");
     printf("  cmp %s, 0\n", r->rax);
     printf("  je %s\n", false_label);
-    printf("  push 1\n");
+    emit_push("1");
     printf("  jmp %s\n", end_label);
     printf("%s:\n", false_label);
-    printf("  push 0\n");
+    emit_push("0");
     printf("%s:\n", end_label);
     return;
   }
@@ -460,18 +482,18 @@ static void gen_expr(Expr *expr) {
     const Reg *r = get_int_reg(expr->val_type, expr->range);
     char *true_label = make_label("logor.true");
     char *end_label = make_label("logor.end");
-    gen_expr(expr->binop.lhs);
-    printf("  pop rax\n");
+    emit_expr(expr->binop.lhs);
+    emit_pop("rax");
     printf("  cmp %s, 0\n", r->rax);
     printf("  jne %s\n", true_label);
-    gen_expr(expr->binop.rhs);
-    printf("  pop rax\n");
+    emit_expr(expr->binop.rhs);
+    emit_pop("rax");
     printf("  cmp %s, 0\n", r->rax);
     printf("  jne %s\n", true_label);
-    printf("  push 0\n");
+    emit_push("0");
     printf("  jmp %s\n", end_label);
     printf("%s:\n", true_label);
-    printf("  push 1\n");
+    emit_push("1");
     printf("%s:\n", end_label);
     return;
   }
@@ -481,31 +503,31 @@ static void gen_expr(Expr *expr) {
         get_int_reg(expr->cond.cond->val_type, expr->cond.cond->range);
     char *else_label = make_label("cond.else");
     char *end_label = make_label("cond.end");
-    gen_expr(expr->cond.cond);
-    printf("  pop rax\n");
+    emit_expr(expr->cond.cond);
+    emit_pop("rax");
     printf("  cmp %s, 0\n", r->rax);
     printf("  je %s\n", else_label);
-    gen_expr(expr->cond.then_expr);
+    emit_expr(expr->cond.then_expr);
     printf("  jmp %s\n", end_label);
     printf("%s:\n", else_label);
-    gen_expr(expr->cond.else_expr);
+    emit_expr(expr->cond.else_expr);
     printf("%s:\n", end_label);
     return;
   }
 
   if (expr->ty == EX_ADDRESS) {
     // 単項の `&`
-    gen_lval(expr->unop.operand);
+    emit_lval(expr->unop.operand);
     return;
   }
   if (expr->ty == EX_INDIRECT) {
     // 単項の `*`
     Expr *operand = expr->unop.operand;
-    gen_expr(operand);
-    printf("  pop rax\n");
+    emit_expr(operand);
+    emit_pop("rax");
 
     int size = get_val_size(expr->val_type, expr->range);
-    printf("  sub rsp, %d\n", align(size, 8));
+    emit_stack_sub(align(size, 8));
 
     int copy_size = 0;
     while (size - copy_size > 0) {
@@ -545,14 +567,14 @@ static void gen_expr(Expr *expr) {
   if (expr->ty == EX_MINUS) {
     // 単項の `-`
     const Reg *r = get_int_reg(expr->val_type, expr->range);
-    gen_expr(expr->unop.operand);
+    emit_expr(expr->unop.operand);
     printf("  neg %s [rsp]\n", r->ptr);
     return;
   }
   if (expr->ty == EX_NOT) {
     // `~`
     const Reg *r = get_int_reg(expr->val_type, expr->range);
-    gen_expr(expr->unop.operand);
+    emit_expr(expr->unop.operand);
     printf("  not %s [rsp]\n", r->ptr);
     return;
   }
@@ -562,11 +584,11 @@ static void gen_expr(Expr *expr) {
 
   if (expr->ty == EX_CAST) {
     Expr *operand = expr->unop.operand;
-    gen_expr(operand);
+    emit_expr(operand);
 
     if (expr->val_type->ty == TY_VOID) {
       int size = get_val_size(operand->val_type, operand->range);
-      printf("  add rsp, %d\n", align(size, 8));
+      emit_stack_add(align(size, 8));
       return;
     }
 
@@ -593,24 +615,24 @@ static void gen_expr(Expr *expr) {
     if (is_sse_reg_type(operand->val_type) && is_int_reg_type(expr->val_type)) {
       const SseOp *op = get_sse_op(operand->val_type, operand->range);
       const Reg *to = get_int_reg(expr->val_type, expr->range);
-      pop_xmm(0);
+      emit_pop_xmm(0);
       printf("  %s %s, xmm0\n", op->cvtt_to_si, to->rax);
-      printf("  push rax\n");
+      emit_push("rax");
       return;
     }
 
     if (is_int_reg_type(operand->val_type) && is_sse_reg_type(expr->val_type)) {
       const SseOp *op = get_sse_op(expr->val_type, expr->range);
       const Reg *from = get_int_reg(operand->val_type, operand->range);
-      printf("  pop rax\n");
+      emit_pop("rax");
       printf("  %s xmm0, %s\n", op->cvtt_from_si, from->rax);
-      push_xmm(0);
+      emit_push_xmm(0);
       return;
     }
 
     if (is_sse_reg_type(operand->val_type) && is_sse_reg_type(expr->val_type)) {
       const SseOp *op = get_sse_op(operand->val_type, expr->range);
-      pop_xmm(0);
+      emit_pop_xmm(0);
       if (expr->val_type->ty == TY_FLOAT) {
         printf("  %s xmm0, xmm0\n", op->cvt_to_ss);
       } else if (expr->val_type->ty == TY_DOUBLE) {
@@ -618,7 +640,7 @@ static void gen_expr(Expr *expr) {
       } else {
         goto CastError;
       }
-      push_xmm(0);
+      emit_push_xmm(0);
       return;
     }
 
@@ -626,14 +648,14 @@ static void gen_expr(Expr *expr) {
       const Reg *from = get_int_reg(operand->val_type, operand->range);
       printf("  fild %s [rsp]\n", from->ptr);
       printf("  fstp TBYTE PTR [rsp - 8]\n");
-      printf("  sub rsp, 8\n");
+      emit_stack_sub(8);
       return;
     }
 
     if (is_x87_reg_type(operand->val_type) && is_int_reg_type(expr->val_type)) {
       printf("  fld TBYTE PTR [rsp]\n");
       printf("  fisttp QWORD PTR [rsp + 8]\n");
-      printf("  add rsp, 8\n");
+      emit_stack_add(8);
       return;
     }
 
@@ -641,7 +663,7 @@ static void gen_expr(Expr *expr) {
       const SseOp *from_op = get_sse_op(operand->val_type, operand->range);
       printf("  fld %s [rsp]\n", from_op->ptr);
       printf("  fstp TBYTE PTR [rsp - 8]\n");
-      printf("  sub rsp, 8\n");
+      emit_stack_sub(8);
       return;
     }
 
@@ -649,7 +671,7 @@ static void gen_expr(Expr *expr) {
       const SseOp *to_op = get_sse_op(expr->val_type, expr->range);
       printf("  fld TBYTE PTR [rsp]\n");
       printf("  fstp %s [rsp + 8]\n", to_op->ptr);
-      printf("  add rsp, 8\n");
+      emit_stack_add(8);
       return;
     }
 
@@ -661,7 +683,7 @@ static void gen_expr(Expr *expr) {
   if (expr->ty == EX_PRE_INC) {
     // 前置の `++`
     const Reg *r = get_int_reg(expr->val_type, expr->range);
-    gen_lval(expr->unop.operand);
+    emit_lval(expr->unop.operand);
     printf("  mov rax, [rsp]\n");
     printf("  mov %s, [rax]\n", r->rdi);
     printf("  add %s, %d\n", r->rdi, get_incdec_size(expr));
@@ -672,7 +694,7 @@ static void gen_expr(Expr *expr) {
   if (expr->ty == EX_PRE_DEC) {
     // 前置の `--`
     const Reg *r = get_int_reg(expr->val_type, expr->range);
-    gen_lval(expr->unop.operand);
+    emit_lval(expr->unop.operand);
     printf("  mov rax, [rsp]\n");
     printf("  mov %s, [rax]\n", r->rdi);
     printf("  sub %s, %d\n", r->rdi, get_incdec_size(expr));
@@ -683,7 +705,7 @@ static void gen_expr(Expr *expr) {
   if (expr->ty == EX_POST_INC) {
     // 後置の `++`
     const Reg *r = get_int_reg(expr->val_type, expr->range);
-    gen_lval(expr->unop.operand);
+    emit_lval(expr->unop.operand);
     printf("  mov rax, [rsp]\n");
     printf("  mov %s, [rax]\n", r->rdi);
     printf("  mov [rsp], rdi\n");
@@ -694,7 +716,7 @@ static void gen_expr(Expr *expr) {
   if (expr->ty == EX_POST_DEC) {
     // 後置の `--`
     const Reg *r = get_int_reg(expr->val_type, expr->range);
-    gen_lval(expr->unop.operand);
+    emit_lval(expr->unop.operand);
     printf("  mov rax, [rsp]\n");
     printf("  mov %s, [rax]\n", r->rdi);
     printf("  mov [rsp], rdi\n");
@@ -706,17 +728,17 @@ static void gen_expr(Expr *expr) {
   // 二項演算子
   const Expr *lhs = expr->binop.lhs;
   if (is_int_reg_type(lhs->val_type)) {
-    gen_expr_binop_int(expr);
+    emit_expr_binop_int(expr);
     return;
   }
 
   if (is_sse_reg_type(lhs->val_type)) {
-    gen_expr_binop_sse(expr);
+    emit_expr_binop_sse(expr);
     return;
   }
 
   if (is_x87_reg_type(lhs->val_type)) {
-    gen_expr_binop_x87(expr);
+    emit_expr_binop_x87(expr);
     return;
   }
 
@@ -795,7 +817,7 @@ static IntVector *classify_arg(const Vector *args, int int_reg_idx) {
   return class;
 }
 
-static void gen_expr_call(Expr *expr) {
+static void emit_expr_call(Expr *expr) {
   assert(expr->ty == EX_CALL);
 
   bool call_direct;
@@ -830,7 +852,7 @@ static void gen_expr_call(Expr *expr) {
         classify_arg_type(ret_type, expr->range, &num_int_reg, &num_sse_reg);
     if (ret_class == ARG_CLASS_MEMORY || ret_class == ARG_CLASS_X87) {
       // 戻り値をメモリで返す場合は、格納先の領域を獲得しておく
-      printf("  sub rsp, %d\n", align(ret_size, 8));
+      emit_stack_sub(align(ret_size, 8));
       int_reg_idx++;
     }
   } else {
@@ -845,7 +867,7 @@ static void gen_expr_call(Expr *expr) {
     for (int i = vec_len(arg) - 1; i >= 0; i--) {
       arg_class_t class = int_vec_get(arg_class, i);
       if (class == ARG_CLASS_MEMORY || class == ARG_CLASS_X87) {
-        gen_expr(vec_get(arg, i));
+        emit_expr(vec_get(arg, i));
       }
     }
     // レジスタ渡しする引数をスタックに積む
@@ -856,10 +878,10 @@ static void gen_expr_call(Expr *expr) {
       case ARG_CLASS_MEMORY:
         continue;
       case ARG_CLASS_INTEGER:
-        gen_expr(vec_get(arg, i));
+        emit_expr(vec_get(arg, i));
         continue;
       case ARG_CLASS_SSE:
-        gen_expr(vec_get(arg, i));
+        emit_expr(vec_get(arg, i));
         continue;
       }
       assert(false);
@@ -867,8 +889,8 @@ static void gen_expr_call(Expr *expr) {
   }
 
   if (!call_direct) {
-    gen_expr(expr->call.callee);
-    printf("  pop r10\n");
+    emit_expr(expr->call.callee);
+    emit_pop("r10");
   }
 
   if (arg && vec_len(arg) > 0) {
@@ -889,22 +911,22 @@ static void gen_expr_call(Expr *expr) {
         for (int j = 0; j < num_reg; j++) {
           switch (int_reg_idx) {
           case 0:
-            printf("  pop rdi\n");
+            emit_pop("rdi");
             break;
           case 1:
-            printf("  pop rsi\n");
+            emit_pop("rsi");
             break;
           case 2:
-            printf("  pop rdx\n");
+            emit_pop("rdx");
             break;
           case 3:
-            printf("  pop rcx\n");
+            emit_pop("rcx");
             break;
           case 4:
-            printf("  pop r8\n");
+            emit_pop("r8");
             break;
           case 5:
-            printf("  pop r9\n");
+            emit_pop("r9");
             break;
           default:
             assert(false);
@@ -915,7 +937,7 @@ static void gen_expr_call(Expr *expr) {
       }
       case ARG_CLASS_SSE: {
         assert(size <= 8);
-        pop_xmm(sse_reg_idx);
+        emit_pop_xmm(sse_reg_idx);
         sse_reg_idx++;
         if (functype->func_has_varargs && i >= vec_len(functype->func_param)) {
           num_vararg_sse_reg++;
@@ -937,7 +959,7 @@ static void gen_expr_call(Expr *expr) {
     printf("  call r10\n");
   }
   if (num_push > 0) {
-    printf("  add rsp, %d\n", 8 * num_push);
+    emit_stack_add(8 * num_push);
   }
   if (ret_type->ty != TY_VOID) {
     switch (ret_class) {
@@ -947,55 +969,55 @@ static void gen_expr_call(Expr *expr) {
       break;
     case ARG_CLASS_INTEGER:
       if (ret_size > 8) {
-        printf("  push rdx\n");
+        emit_push("rdx");
       }
-      printf("  push rax\n");
+      emit_push("rax");
       break;
     case ARG_CLASS_SSE:
       assert(ret_size <= 8);
-      push_xmm(0);
+      emit_push_xmm(0);
       break;
     }
   }
   return;
 }
 
-static void gen_expr_binop_int(Expr *expr) {
+static void emit_expr_binop_int(Expr *expr) {
   assert(is_int_reg_type(expr->binop.lhs->val_type));
 
   const Reg *r = get_int_reg(expr->val_type, expr->range);
-  gen_expr(expr->binop.lhs);
-  gen_expr(expr->binop.rhs);
+  emit_expr(expr->binop.lhs);
+  emit_expr(expr->binop.rhs);
 
   switch (expr->ty) {
   case EX_ADD:
-    printf("  pop rdi\n");
+    emit_pop("rdi");
     printf("  add [rsp], %s\n", r->rdi);
     break;
   case EX_SUB:
-    printf("  pop rdi\n");
+    emit_pop("rdi");
     printf("  sub [rsp], %s\n", r->rdi);
     break;
   case EX_MUL:
-    printf("  pop rdi\n");
-    printf("  pop rax\n");
+    emit_pop("rdi");
+    emit_pop("rax");
     printf("  imul %s, %s\n", r->rax, r->rdi);
-    printf("  push rax\n");
+    emit_push("rax");
     break;
   case EX_DIV:
-    printf("  pop rdi\n");
-    printf("  pop rax\n");
+    emit_pop("rdi");
+    emit_pop("rax");
     printf("  mov %s, 0\n", r->rdx);
     if (is_signed_int_type(expr->binop.lhs->val_type, expr->binop.lhs->range)) {
       printf("  idiv %s\n", r->rdi);
     } else {
       printf("  div %s\n", r->rdi);
     }
-    printf("  push rax\n");
+    emit_push("rax");
     break;
   case EX_MOD:
-    printf("  pop rdi\n");
-    printf("  pop rax\n");
+    emit_pop("rdi");
+    emit_pop("rax");
     printf("  mov %s, 0\n", r->rdx);
     if (is_signed_int_type(expr->binop.lhs->val_type, expr->binop.lhs->range)) {
       printf("  idiv %s\n", r->rdi);
@@ -1003,24 +1025,24 @@ static void gen_expr_binop_int(Expr *expr) {
       printf("  div %s\n", r->rdi);
     }
     printf("  mov %s, %s\n", r->rax, r->rdx);
-    printf("  push rax\n");
+    emit_push("rax");
     break;
   case EX_EQEQ:
-    printf("  pop rdi\n");
+    emit_pop("rdi");
     printf("  cmp [rsp], %s\n", r->rdi);
     printf("  sete al\n");
     printf("  movzx %s, al\n", r->rax);
     printf("  mov [rsp], %s\n", r->rax);
     break;
   case EX_NOTEQ:
-    printf("  pop rdi\n");
+    emit_pop("rdi");
     printf("  cmp [rsp], %s\n", r->rdi);
     printf("  setne al\n");
     printf("  movzx %s, al\n", r->rax);
     printf("  mov [rsp], %s\n", r->rax);
     break;
   case EX_LT:
-    printf("  pop rdi\n");
+    emit_pop("rdi");
     printf("  cmp [rsp], %s\n", r->rdi);
     if (is_signed_int_type(expr->binop.lhs->val_type, expr->binop.lhs->range)) {
       printf("  setl al\n");
@@ -1031,7 +1053,7 @@ static void gen_expr_binop_int(Expr *expr) {
     printf("  mov [rsp], %s\n", r->rax);
     break;
   case EX_GT:
-    printf("  pop rdi\n");
+    emit_pop("rdi");
     printf("  cmp [rsp], %s\n", r->rdi);
     if (is_signed_int_type(expr->binop.lhs->val_type, expr->binop.lhs->range)) {
       printf("  setg al\n");
@@ -1042,7 +1064,7 @@ static void gen_expr_binop_int(Expr *expr) {
     printf("  mov [rsp], %s\n", r->rax);
     break;
   case EX_LTEQ:
-    printf("  pop rdi\n");
+    emit_pop("rdi");
     printf("  cmp [rsp], %s\n", r->rdi);
     if (is_signed_int_type(expr->binop.lhs->val_type, expr->binop.lhs->range)) {
       printf("  setle al\n");
@@ -1053,7 +1075,7 @@ static void gen_expr_binop_int(Expr *expr) {
     printf("  mov [rsp], %s\n", r->rax);
     break;
   case EX_GTEQ:
-    printf("  pop rdi\n");
+    emit_pop("rdi");
     printf("  cmp [rsp], %s\n", r->rdi);
     if (is_signed_int_type(expr->binop.lhs->val_type, expr->binop.lhs->range)) {
       printf("  setge al\n");
@@ -1064,11 +1086,11 @@ static void gen_expr_binop_int(Expr *expr) {
     printf("  mov [rsp], %s\n", r->rax);
     break;
   case EX_LSHIFT:
-    printf("  pop rcx\n");
+    emit_pop("rcx");
     printf("  shl %s [rsp], cl\n", r->ptr);
     break;
   case EX_RSHIFT:
-    printf("  pop rcx\n");
+    emit_pop("rcx");
     if (is_signed_int_type(expr->binop.lhs->val_type, expr->binop.lhs->range)) {
       printf("  sar %s [rsp], cl\n", r->ptr);
     } else {
@@ -1076,15 +1098,15 @@ static void gen_expr_binop_int(Expr *expr) {
     }
     break;
   case EX_AND:
-    printf("  pop rdi\n");
+    emit_pop("rdi");
     printf("  and [rsp], %s\n", r->rdi);
     break;
   case EX_XOR:
-    printf("  pop rdi\n");
+    emit_pop("rdi");
     printf("  xor [rsp], %s\n", r->rdi);
     break;
   case EX_OR:
-    printf("  pop rdi\n");
+    emit_pop("rdi");
     printf("  or [rsp], %s\n", r->rdi);
     break;
   default:
@@ -1094,34 +1116,34 @@ static void gen_expr_binop_int(Expr *expr) {
   return;
 }
 
-static void gen_expr_binop_sse(Expr *expr) {
+static void emit_expr_binop_sse(Expr *expr) {
   Type *type = expr->binop.lhs->val_type;
   assert(is_sse_reg_type(type));
 
   const SseOp *op = get_sse_op(type, expr->range);
 
-  gen_expr(expr->binop.lhs);
-  gen_expr(expr->binop.rhs);
+  emit_expr(expr->binop.lhs);
+  emit_expr(expr->binop.rhs);
 
-  pop_xmm(1); // rhs
-  pop_xmm(0); // lhs
+  emit_pop_xmm(1); // rhs
+  emit_pop_xmm(0); // lhs
 
   switch (expr->ty) {
   case EX_ADD:
     printf("  %s xmm0, xmm1\n", op->add);
-    push_xmm(0);
+    emit_push_xmm(0);
     break;
   case EX_SUB:
     printf("  %s xmm0, xmm1\n", op->sub);
-    push_xmm(0);
+    emit_push_xmm(0);
     break;
   case EX_MUL:
     printf("  %s xmm0, xmm1\n", op->mul);
-    push_xmm(0);
+    emit_push_xmm(0);
     break;
   case EX_DIV:
     printf("  %s xmm0, xmm1\n", op->div);
-    push_xmm(0);
+    emit_push_xmm(0);
     break;
   case EX_EQEQ: {
     const Reg *r = get_int_reg(expr->val_type, expr->range);
@@ -1130,7 +1152,7 @@ static void gen_expr_binop_sse(Expr *expr) {
     printf("  setnp dil\n");
     printf("  and al, dil\n");
     printf("  movzx %s, al\n", r->rax);
-    printf("  push rax\n");
+    emit_push("rax");
     break;
   }
   case EX_NOTEQ: {
@@ -1140,7 +1162,7 @@ static void gen_expr_binop_sse(Expr *expr) {
     printf("  setp dil\n");
     printf("  or al, dil\n");
     printf("  movzx %s, al\n", r->rax);
-    printf("  push rax\n");
+    emit_push("rax");
     break;
   }
   case EX_LT: {
@@ -1148,7 +1170,7 @@ static void gen_expr_binop_sse(Expr *expr) {
     printf("  %s xmm0, xmm1\n", op->comi);
     printf("  setl al\n");
     printf("  movzx %s, al\n", r->rax);
-    printf("  push rax\n");
+    emit_push("rax");
     break;
   }
   case EX_GT: {
@@ -1156,7 +1178,7 @@ static void gen_expr_binop_sse(Expr *expr) {
     printf("  %s xmm0, xmm1\n", op->comi);
     printf("  setg al\n");
     printf("  movzx %s, al\n", r->rax);
-    printf("  push rax\n");
+    emit_push("rax");
     break;
   }
   case EX_LTEQ: {
@@ -1164,7 +1186,7 @@ static void gen_expr_binop_sse(Expr *expr) {
     printf("  %s xmm0, xmm1\n", op->comi);
     printf("  setle al\n");
     printf("  movzx %s, al\n", r->rax);
-    printf("  push rax\n");
+    emit_push("rax");
     break;
   }
   case EX_GTEQ: {
@@ -1172,7 +1194,7 @@ static void gen_expr_binop_sse(Expr *expr) {
     printf("  %s xmm0, xmm1\n", op->comi);
     printf("  setge al\n");
     printf("  movzx %s, al\n", r->rax);
-    printf("  push rax\n");
+    emit_push("rax");
     break;
   }
   default:
@@ -1182,12 +1204,12 @@ static void gen_expr_binop_sse(Expr *expr) {
   return;
 }
 
-static void gen_expr_binop_x87(Expr *expr) {
+static void emit_expr_binop_x87(Expr *expr) {
   Type *type = expr->binop.lhs->val_type;
   assert(is_x87_reg_type(type));
 
-  gen_expr(expr->binop.lhs);
-  gen_expr(expr->binop.rhs);
+  emit_expr(expr->binop.lhs);
+  emit_expr(expr->binop.rhs);
 
   printf("  fld TBYTE PTR [rsp + 16]\n");
   printf("  fld TBYTE PTR [rsp]\n");
@@ -1196,22 +1218,22 @@ static void gen_expr_binop_x87(Expr *expr) {
   case EX_ADD:
     printf("  faddp st(1), st\n");
     printf("  fstp TBYTE PTR [rsp + 16]\n");
-    printf("  add rsp, 16\n");
+    emit_stack_add(16);
     break;
   case EX_SUB:
     printf("  fsubp st(1), st\n");
     printf("  fstp TBYTE PTR [rsp + 16]\n");
-    printf("  add rsp, 16\n");
+    emit_stack_add(16);
     break;
   case EX_MUL:
     printf("  fmulp st(1), st\n");
     printf("  fstp TBYTE PTR [rsp + 16]\n");
-    printf("  add rsp, 16\n");
+    emit_stack_add(16);
     break;
   case EX_DIV:
     printf("  fdivp st(1), st\n");
     printf("  fstp TBYTE PTR [rsp + 16]\n");
-    printf("  add rsp, 16\n");
+    emit_stack_add(16);
     break;
   case EX_EQEQ: {
     const Reg *r = get_int_reg(expr->val_type, expr->range);
@@ -1221,7 +1243,7 @@ static void gen_expr_binop_x87(Expr *expr) {
     printf("  setnp dil\n");
     printf("  and al, dil\n");
     printf("  movzx %s, al\n", r->rax);
-    printf("  push rax\n");
+    emit_push("rax");
     break;
   }
   case EX_NOTEQ: {
@@ -1232,7 +1254,7 @@ static void gen_expr_binop_x87(Expr *expr) {
     printf("  setp dil\n");
     printf("  or al, dil\n");
     printf("  movzx %s, al\n", r->rax);
-    printf("  push rax\n");
+    emit_push("rax");
     break;
   }
   case EX_LT: {
@@ -1241,7 +1263,7 @@ static void gen_expr_binop_x87(Expr *expr) {
     printf("  fstp st(0)\n");
     printf("  setl al\n");
     printf("  movzx %s, al\n", r->rax);
-    printf("  push rax\n");
+    emit_push("rax");
     break;
   }
   case EX_GT: {
@@ -1250,7 +1272,7 @@ static void gen_expr_binop_x87(Expr *expr) {
     printf("  fstp st(0)\n");
     printf("  setg al\n");
     printf("  movzx %s, al\n", r->rax);
-    printf("  push rax\n");
+    emit_push("rax");
     break;
   }
   case EX_LTEQ: {
@@ -1259,7 +1281,7 @@ static void gen_expr_binop_x87(Expr *expr) {
     printf("  fstp st(0)\n");
     printf("  setle al\n");
     printf("  movzx %s, al\n", r->rax);
-    printf("  push rax\n");
+    emit_push("rax");
     break;
   }
   case EX_GTEQ: {
@@ -1268,7 +1290,7 @@ static void gen_expr_binop_x87(Expr *expr) {
     printf("  fstp st(0)\n");
     printf("  setge al\n");
     printf("  movzx %s, al\n", r->rax);
-    printf("  push rax\n");
+    emit_push("rax");
     break;
   }
   default:
@@ -1278,25 +1300,25 @@ static void gen_expr_binop_x87(Expr *expr) {
   return;
 }
 
-static void gen_stmt(Stmt *stmt) {
+static void emit_stmt(Stmt *stmt) {
   switch (stmt->ty) {
   case ST_NULL: {
     return;
   }
   case ST_EXPR: {
-    gen_expr(stmt->expr);
+    emit_expr(stmt->expr);
 
     // 式の評価結果としてスタックに一つの値が残っている
     // はずなので、スタックが溢れないようにポップしておく
     if (stmt->expr->val_type->ty != TY_VOID) {
       int size = get_val_size(stmt->expr->val_type, stmt->expr->range);
-      printf("  add rsp, %d\n", align(size, 8));
+      emit_stack_add(align(size, 8));
     }
     return;
   }
   case ST_COMPOUND: {
     for (int i = 0; i < vec_len(stmt->stmts); i++) {
-      gen_stmt(vec_get(stmt->stmts, i));
+      emit_stmt(vec_get(stmt->stmts, i));
     }
     return;
   }
@@ -1304,38 +1326,38 @@ static void gen_stmt(Stmt *stmt) {
     char *else_label = make_label("if.else");
     char *end_label = make_label("if.end");
     const Reg *r = get_int_reg(stmt->cond->val_type, stmt->cond->range);
-    gen_expr(stmt->cond);
-    printf("  pop rax\n");
+    emit_expr(stmt->cond);
+    emit_pop("rax");
     printf("  cmp %s, 0\n", r->rax);
     printf("  je %s\n", else_label);
-    gen_stmt(stmt->then_stmt);
+    emit_stmt(stmt->then_stmt);
     printf("  jmp %s\n", end_label);
     printf("%s:\n", else_label);
-    gen_stmt(stmt->else_stmt);
+    emit_stmt(stmt->else_stmt);
     printf("%s:\n", end_label);
     return;
   }
   case ST_SWITCH: {
     char *end_label = make_label("switch.end");
     const Reg *r = get_int_reg(stmt->cond->val_type, stmt->cond->range);
-    gen_expr(stmt->cond);
+    emit_expr(stmt->cond);
     for (int i = 0; i < vec_len(stmt->cases); i++) {
       Stmt *case_expr = vec_get(stmt->cases, i);
-      gen_expr(case_expr->expr);
-      printf("  pop rax\n");
-      printf("  pop rdi\n");
+      emit_expr(case_expr->expr);
+      emit_pop("rax");
+      emit_pop("rdi");
       printf("  cmp %s, %s\n", r->rax, r->rdi);
       printf("  je %s\n", case_expr->label);
-      printf("  push rdi\n");
+      emit_push("rdi");
     }
-    printf("  pop rdi\n");
+    emit_pop("rdi");
     if (stmt->default_case) {
       printf("  jmp %s\n", stmt->default_case->label);
     } else {
       printf("  jmp %s\n", end_label);
     }
     vec_push(break_labels, end_label);
-    gen_stmt(stmt->body);
+    emit_stmt(stmt->body);
     vec_pop(break_labels);
     printf("%s:", end_label);
     return;
@@ -1344,7 +1366,7 @@ static void gen_stmt(Stmt *stmt) {
   case ST_DEFAULT:
   case ST_LABEL: {
     printf("%s:\n", stmt->label);
-    gen_stmt(stmt->body);
+    emit_stmt(stmt->body);
     return;
   }
   case ST_WHILE: {
@@ -1352,14 +1374,14 @@ static void gen_stmt(Stmt *stmt) {
     char *end_label = make_label("while.end");
     printf("%s:\n", cond_label);
     const Reg *r = get_int_reg(stmt->cond->val_type, stmt->cond->range);
-    gen_expr(stmt->cond);
-    printf("  pop rax\n");
+    emit_expr(stmt->cond);
+    emit_pop("rax");
     printf("  cmp %s, 0\n", r->rax);
     printf("  je %s\n", end_label);
 
     vec_push(break_labels, end_label);
     vec_push(continue_labels, cond_label);
-    gen_stmt(stmt->body);
+    emit_stmt(stmt->body);
     vec_pop(break_labels);
     vec_pop(continue_labels);
 
@@ -1375,14 +1397,14 @@ static void gen_stmt(Stmt *stmt) {
 
     vec_push(break_labels, end_label);
     vec_push(continue_labels, cond_label);
-    gen_stmt(stmt->body);
+    emit_stmt(stmt->body);
     vec_pop(break_labels);
     vec_pop(continue_labels);
 
     printf("%s:\n", cond_label);
     const Reg *r = get_int_reg(stmt->cond->val_type, stmt->cond->range);
-    gen_expr(stmt->cond);
-    printf("  pop rax\n");
+    emit_expr(stmt->cond);
+    emit_pop("rax");
     printf("  cmp %s, 0\n", r->rax);
     printf("  jne %s\n", loop_label);
     printf("%s:\n", end_label);
@@ -1393,26 +1415,26 @@ static void gen_stmt(Stmt *stmt) {
     char *inc_label = make_label("for.inc");
     char *end_label = make_label("for.end");
     if (stmt->init != NULL) {
-      gen_expr(stmt->init);
+      emit_expr(stmt->init);
     }
     printf("%s:\n", cond_label);
     if (stmt->cond != NULL) {
       const Reg *r = get_int_reg(stmt->cond->val_type, stmt->cond->range);
-      gen_expr(stmt->cond);
-      printf("  pop rax\n");
+      emit_expr(stmt->cond);
+      emit_pop("rax");
       printf("  cmp %s, 0\n", r->rax);
       printf("  je %s\n", end_label);
     }
 
     vec_push(break_labels, end_label);
     vec_push(continue_labels, inc_label);
-    gen_stmt(stmt->body);
+    emit_stmt(stmt->body);
     vec_pop(break_labels);
     vec_pop(continue_labels);
 
     printf("%s:\n", inc_label);
     if (stmt->inc != NULL) {
-      gen_expr(stmt->inc);
+      emit_expr(stmt->inc);
     }
     printf("  jmp %s\n", cond_label);
     printf("%s:\n", end_label);
@@ -1444,7 +1466,7 @@ static void gen_stmt(Stmt *stmt) {
   case ST_RETURN: {
     if (stmt->expr != NULL) {
       Type *ret_type = func_ctxt->type->func_ret;
-      gen_expr(stmt->expr);
+      emit_expr(stmt->expr);
 
       int int_reg_idx = 0;
       int sse_reg_idx = 0;
@@ -1487,14 +1509,14 @@ static void gen_stmt(Stmt *stmt) {
         }
         break;
       case ARG_CLASS_INTEGER:
-        printf("  pop rax\n");
+        emit_pop("rax");
         if (size > 8) {
-          printf("  pop rdx\n");
+          emit_pop("rdx");
         }
         break;
       case ARG_CLASS_SSE:
         assert(size <= 8);
-        pop_xmm(0);
+        emit_pop_xmm(0);
         break;
       }
     }
@@ -1517,7 +1539,7 @@ static IntVector *classify_param(const Vector *params, int int_reg_idx) {
   return class;
 }
 
-static void gen_func(Function *func) {
+static void emit_func(Function *func) {
   epilogue_label = make_label("func.epi");
   func_ctxt = func;
   break_labels = new_vector();
@@ -1532,7 +1554,8 @@ static void gen_func(Function *func) {
   // スタックサイズ分の領域を確保する
   printf("  push rbp\n");
   printf("  mov rbp, rsp\n");
-  printf("  sub rsp, %d\n", align(func->stack_size, 16));
+  stack_pos = 0;
+  emit_stack_sub(align(func->stack_size, 16));
 
   int int_reg_idx = 0;
   int sse_reg_idx = 0;
@@ -1543,7 +1566,7 @@ static void gen_func(Function *func) {
                                           &num_int_reg, &num_sse_reg);
     if (class == ARG_CLASS_MEMORY || class == ARG_CLASS_X87) {
       // 戻り値をメモリで返す場合は、格納先のポインタをpushしておく
-      printf("  push rdi\n");
+      emit_push("rdi");
       int_reg_idx++;
     }
   }
@@ -1640,7 +1663,7 @@ static void gen_func(Function *func) {
     }
   }
 
-  gen_stmt(func->body);
+  emit_stmt(func->body);
 
   // main関数の場合、returnなしに関数末尾まで到達した場合、戻り値は0にする
   if (strcmp(func->name, "main") == 0) {
@@ -1653,10 +1676,11 @@ static void gen_func(Function *func) {
   printf("  mov rsp, rbp\n");
   printf("  pop rbp\n");
   printf("  ret\n");
+  stack_pos = INVALID_STACK_POS;
 }
 
-static void gen_gvar_init(Initializer *init, const Range *range,
-                          Vector *gvar_list) {
+static void emit_gvar_init(Initializer *init, const Range *range,
+                           Vector *gvar_list) {
   if (init->expr != NULL) {
     Expr *expr = init->expr;
     if (expr->ty == EX_NUM) {
@@ -1736,7 +1760,7 @@ static void gen_gvar_init(Initializer *init, const Range *range,
           range,
           "グローバル変数またはコンパウンドリテラル以外へのポインタです");
     } else if (expr->ty == EX_COMPOUND) {
-      gen_gvar_init(expr->compound, expr->range, gvar_list);
+      emit_gvar_init(expr->compound, expr->range, gvar_list);
     } else if (expr->ty == EX_STR) {
       printf("  .quad %s\n", expr->str);
     } else {
@@ -1763,7 +1787,7 @@ static void gen_gvar_init(Initializer *init, const Range *range,
         }
         assert(offset == member->offset);
       }
-      gen_gvar_init(meminit, range, gvar_list);
+      emit_gvar_init(meminit, range, gvar_list);
       offset += get_val_size(meminit->type, range);
     }
     int ty_size = get_val_size(init->type, range);
@@ -1783,7 +1807,7 @@ static void gen_gvar_init(Initializer *init, const Range *range,
         printf("  .zero %d\n", get_val_size(init->type->ptrof, range));
         continue;
       }
-      gen_gvar_init(meminit, range, gvar_list);
+      emit_gvar_init(meminit, range, gvar_list);
     }
     return;
   }
@@ -1791,7 +1815,7 @@ static void gen_gvar_init(Initializer *init, const Range *range,
   assert(false);
 }
 
-static void gen_gvar(GlobalVar *gvar, Vector *gvar_list) {
+static void emit_gvar(GlobalVar *gvar, Vector *gvar_list) {
   Initializer *init = gvar->init;
   if (init == NULL) {
     printf("  .bss\n");
@@ -1806,11 +1830,11 @@ static void gen_gvar(GlobalVar *gvar, Vector *gvar_list) {
       printf(".global %s\n", gvar->name);
     }
     printf("%s:\n", gvar->name);
-    gen_gvar_init(init, gvar->range, gvar_list);
+    emit_gvar_init(init, gvar->range, gvar_list);
   }
 }
 
-static void gen_str(StringLiteral *str) {
+static void emit_str(StringLiteral *str) {
   printf("%s:\n", str->name);
   printf("  .string ");
   print_string_literal(str->val);
@@ -1822,14 +1846,14 @@ void gen(TranslationUnit *tunit) {
 
   printf("  .text\n");
   for (int i = 0; i < vec_len(tunit->func_list); i++) {
-    gen_func(vec_get(tunit->func_list, i));
+    emit_func(vec_get(tunit->func_list, i));
   }
   while (vec_len(tunit->gvar_list) > 0) {
     GlobalVar *gvar = vec_remove(tunit->gvar_list, 0);
-    gen_gvar(gvar, tunit->gvar_list);
+    emit_gvar(gvar, tunit->gvar_list);
   }
   printf("  .section .rodata\n");
   for (int i = 0; i < vec_len(tunit->str_list); i++) {
-    gen_str(vec_get(tunit->str_list, i));
+    emit_str(vec_get(tunit->str_list, i));
   }
 }
