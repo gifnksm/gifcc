@@ -1356,6 +1356,12 @@ static void emit_expr_binop_x87(Expr *expr) {
 }
 
 static void emit_stmt(Stmt *stmt) {
+  const char *filename;
+  int line;
+  int column;
+  range_get_start(stmt->range, &filename, &line, &column);
+  printf("  # %s:%d:%d\n", filename, line, column);
+
   switch (stmt->ty) {
   case ST_NULL: {
     return;
@@ -1753,6 +1759,8 @@ static void emit_func(Function *func) {
       }
     }
   }
+
+  printf("  # %s body\n", func->name);
 
   emit_stmt(func->body);
 
