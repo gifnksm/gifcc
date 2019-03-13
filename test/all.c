@@ -2442,7 +2442,16 @@ static void test75(void) {
   TEST_PRINTF("ld = %Lf", ld);
 }
 
-// static int test76_sum(int n, ...) {
+typedef struct Test76_S {
+  char n[3];
+} Test76_S;
+static int test76_f(Test76_S s) { return s.n[0] + s.n[1] + s.n[2]; }
+static void test76(void) {
+  Test76_S s = {{1, 2, 3}};
+  CHECK_INT(6, test76_f(s));
+}
+
+// static int test77_sum(int n, ...) {
 //   int sum = 0;
 //   va_list ap;
 //   va_start(ap, n);
@@ -2455,7 +2464,7 @@ static void test75(void) {
 //   return sum;
 // }
 
-static void test76(void) {
+static void test77(void) {
   // CHECK_INT(15, test76_sum(5, 1, 2, 3, 4, 5));
   // CHECK_INT(0, test76_sum(0));
   // CHECK_INT(55, test76_sum(10, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10));
@@ -2478,7 +2487,7 @@ int main(void) {
       TEST(test61), TEST(test62), TEST(test63), TEST(test64), TEST(test65),
       TEST(test66), TEST(test67), TEST(test68), TEST(test69), TEST(test70),
       TEST(test71), TEST(test72), TEST(test73), TEST(test74), TEST(test75),
-      TEST(test76), {NULL, NULL},
+      TEST(test76), TEST(test77), {NULL, NULL},
   };
   RUN_TEST(test_list);
 

@@ -1738,18 +1738,59 @@ static void emit_func(Function *func) {
         continue;
       }
       case ARG_CLASS_INTEGER: {
-        const Reg *r = size > 8 ? &Reg8 : get_int_reg(var->type, var->range);
+        int rest_size = size;
         int num_reg = (size + 7) / 8;
         for (int j = 0; j < num_reg; j++) {
-          printf("  mov [rbp - %d], %s\n", dst_offset - j * 8,
-                 get_int_arg_reg(r, int_reg_idx));
+          int copy_size = 0;
+          while (rest_size > 0) {
+            if (rest_size >= 8) {
+              printf("  mov [rbp - %d], %s\n", dst_offset - j * 8 - copy_size,
+                     get_int_arg_reg(&Reg8, int_reg_idx));
+              rest_size -= 8;
+              copy_size += 8;
+              break;
+            }
+            if (rest_size >= 4) {
+              printf("  mov [rbp - %d], %s\n", dst_offset - j * 8 - copy_size,
+                     get_int_arg_reg(&Reg4, int_reg_idx));
+              rest_size -= 4;
+              copy_size += 4;
+              if (rest_size > 0) {
+                printf("  shr %s, 32\n", get_int_arg_reg(&Reg8, int_reg_idx));
+              }
+              continue;
+            }
+            if (rest_size >= 2) {
+              printf("  mov [rbp - %d], %s\n", dst_offset - j * 8 - copy_size,
+                     get_int_arg_reg(&Reg2, int_reg_idx));
+              rest_size -= 2;
+              copy_size += 2;
+              if (rest_size > 0) {
+                printf("  shr %s, 16\n", get_int_arg_reg(&Reg8, int_reg_idx));
+              }
+              continue;
+            }
+
+            assert(rest_size == 1);
+            printf("  mov [rbp - %d], %s\n", dst_offset - j * 8 - copy_size,
+                   get_int_arg_reg(&Reg1, int_reg_idx));
+            rest_size -= 1;
+            copy_size += 1;
+            assert(rest_size == 0);
+          }
           int_reg_idx++;
+          continue;
         }
         continue;
       }
       case ARG_CLASS_SSE: {
         assert(size <= 8);
-        printf("  movsd [rbp - %d], xmm%d\n", dst_offset, sse_reg_idx);
+        if (size == 8) {
+          printf("  movsd [rbp - %d], xmm%d\n", dst_offset, sse_reg_idx);
+        } else {
+          assert(size == 4);
+          printf("  movss [rbp - %d], xmm%d\n", dst_offset, sse_reg_idx);
+        }
         sse_reg_idx++;
         continue;
       }
