@@ -1338,7 +1338,7 @@ static bool try_include(Reader *reader, const char *base_path,
   char *abs_path = format("%s/%s", base_path, rel_path);
   FILE *fp = fopen(abs_path, "r");
   if (fp != NULL) {
-    reader_add_file(reader, fp, rel_path);
+    reader_add_file(reader, fp, abs_path);
     return true;
   }
   return false;
