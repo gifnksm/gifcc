@@ -228,6 +228,7 @@ static char *num2str(Number num, const Range *range) {
   case TY_FUNC:
   case TY_STRUCT:
   case TY_UNION:
+  case TY_BUILTIN:
     range_error(range, "不正な型の数値です: %d", num.type);
   }
   return strdup(buf);
@@ -755,6 +756,22 @@ static void emit_expr(Expr *expr) {
     return;
   }
 
+  if (expr->ty == EX_BUILTIN_FUNC) {
+    range_error(expr->range, "internal compiler error");
+  }
+  if (expr->ty == EX_BUILTIN_VA_START) {
+    range_error(expr->range, "not implemented");
+  }
+  if (expr->ty == EX_BUILTIN_VA_ARG) {
+    range_error(expr->range, "not implemented");
+  }
+  if (expr->ty == EX_BUILTIN_VA_END) {
+    range_error(expr->range, "not implemented");
+  }
+  if (expr->ty == EX_BUILTIN_VA_COPY) {
+    range_error(expr->range, "not implemented");
+  }
+
   // 二項演算子
   const Expr *lhs = expr->binop.lhs;
   if (is_int_reg_type(lhs->val_type)) {
@@ -772,8 +789,8 @@ static void emit_expr(Expr *expr) {
     return;
   }
 
-  range_error(expr->range, "不正な型の演算です: %s",
-              format_type(expr->val_type, false));
+  range_error(expr->range, "不正な型の演算です: %s, op=%d",
+              format_type(expr->val_type, false), expr->ty);
 }
 
 static arg_class_t classify_arg_type(const Type *type, const Range *range,
@@ -830,6 +847,7 @@ static arg_class_t classify_arg_type(const Type *type, const Range *range,
     return ARG_CLASS_X87;
   case TY_FUNC:
   case TY_VOID:
+  case TY_BUILTIN:
     break;
   }
   range_error(range, "不正な型の引数です: %s", format_type(type, false));
@@ -1835,6 +1853,7 @@ static void emit_gvar_init(Initializer *init, const Range *range,
       case TY_FUNC:
       case TY_STRUCT:
       case TY_UNION:
+      case TY_BUILTIN:
         range_error(range, "int型ではありません");
       }
     } else if (expr->ty == EX_ADDRESS) {

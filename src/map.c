@@ -15,25 +15,25 @@ Map *new_map(void) {
 
 int map_size(const Map *map) { return vec_len(map->keys); }
 
-void *map_get_by_index(Map *map, int n, char **key) {
+void *map_get_by_index(Map *map, int n, const char **key) {
   assert(n < map_size(map));
   if (key != NULL) {
     *key = vec_get(map->keys, n);
   }
   return vec_get(map->vals, n);
 }
-void map_set_by_index(Map *map, int n, char *key, void *val) {
+void map_set_by_index(Map *map, int n, const char *key, void *val) {
   assert(n < map_size(map));
-  vec_set(map->keys, n, key);
+  vec_set(map->keys, n, (void *)key);
   vec_set(map->vals, n, val);
 }
 
-void map_put(Map *map, char *key, void *val) {
-  vec_push(map->keys, key);
+void map_put(Map *map, const char *key, void *val) {
+  vec_push(map->keys, (void *)key);
   vec_push(map->vals, val);
 }
 
-void *map_get(Map *map, char *key) {
+void *map_get(Map *map, const char *key) {
   for (int i = vec_len(map->keys) - 1; i >= 0; i--) {
     const char *map_key = vec_get(map->keys, i);
     if (map_key == NULL) {
@@ -46,7 +46,7 @@ void *map_get(Map *map, char *key) {
   return NULL;
 }
 
-bool map_remove(Map *map, char *key) {
+bool map_remove(Map *map, const char *key) {
   bool removed = false;
   for (int i = 0; i < map_size(map); i++) {
     const char *map_key = vec_get(map->keys, i);

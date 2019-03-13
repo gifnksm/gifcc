@@ -84,6 +84,7 @@ static void dump_number(Number num) {
   case TY_FUNC:
   case TY_STRUCT:
   case TY_UNION:
+  case TY_BUILTIN:
     assert(false);
   }
 }
@@ -364,8 +365,63 @@ static void dump_expr(Expr *expr, int level) {
     dump_indent(level);
     printf(")\n");
     return;
+
+  // compiler builtins
+  case EX_BUILTIN_FUNC:
+    dump_range_start(expr->range);
+    dump_indent(level);
+    dump_type(expr->val_type);
+    printf("(BUILTIN_FUNC %s)\n", expr->builtin_func.name);
+    return;
+
+  case EX_BUILTIN_VA_START:
+    dump_range_start(expr->range);
+    dump_indent(level);
+    dump_type(expr->val_type);
+    printf("(BUILTIN_VA_START\n");
+    dump_expr(expr->builtin_va_start.ap, level + 1);
+    dump_expr(expr->builtin_va_start.last, level + 1);
+    dump_range_end(expr->range);
+    dump_indent(level);
+    printf(")\n");
+    return;
+  case EX_BUILTIN_VA_ARG:
+    dump_range_start(expr->range);
+    dump_indent(level);
+    dump_type(expr->val_type);
+    printf("(BUILTIN_VA_ARG\n");
+    dump_expr(expr->builtin_va_arg.ap, level + 1);
+    dump_range_start(expr->range);
+    dump_indent(level);
+    dump_type(expr->builtin_va_arg.type);
+    printf("\n");
+    dump_range_end(expr->range);
+    dump_indent(level);
+    printf(")\n");
+    return;
+  case EX_BUILTIN_VA_END:
+    dump_range_start(expr->range);
+    dump_indent(level);
+    dump_type(expr->val_type);
+    printf("(BUILTIN_VA_END\n");
+    dump_expr(expr->builtin_va_end.ap, level + 1);
+    dump_range_end(expr->range);
+    dump_indent(level);
+    printf(")\n");
+    return;
+  case EX_BUILTIN_VA_COPY:
+    dump_range_start(expr->range);
+    dump_indent(level);
+    dump_type(expr->val_type);
+    printf("(BUILTIN_VA_COPY\n");
+    dump_expr(expr->builtin_va_copy.dest, level + 1);
+    dump_expr(expr->builtin_va_copy.src, level + 1);
+    dump_range_end(expr->range);
+    dump_indent(level);
+    printf(")\n");
+    return;
   }
-  error("未知のノードです: %d\n", expr->ty);
+  error("未知のノードです: %d", expr->ty);
 }
 
 static void dump_stmt(Stmt *stmt, int level) {
@@ -544,7 +600,7 @@ static void dump_init(Initializer *init, const Range *range, int level) {
     dump_type(init->type);
     printf("{\n");
     for (int i = 0; i < map_size(init->members); i++) {
-      char *name;
+      const char *name;
       Initializer *val = map_get_by_index(init->members, i, &name);
       dump_range_start(range);
       dump_indent(level + 1);

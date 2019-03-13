@@ -1,3 +1,4 @@
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -2441,6 +2442,25 @@ static void test75(void) {
   TEST_PRINTF("ld = %Lf", ld);
 }
 
+// static int test76_sum(int n, ...) {
+//   int sum = 0;
+//   va_list ap;
+//   va_start(ap, n);
+
+//   for (int i = 0; i < n; i++) {
+//     sum += va_arg(ap, int);
+//   }
+
+//   va_end(ap);
+//   return sum;
+// }
+
+static void test76(void) {
+  // CHECK_INT(15, test76_sum(5, 1, 2, 3, 4, 5));
+  // CHECK_INT(0, test76_sum(0));
+  // CHECK_INT(55, test76_sum(10, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10));
+}
+
 int main(void) {
   Test test_list[] = {
       TEST(test01), TEST(test02), TEST(test03), TEST(test04), TEST(test05),
@@ -2458,7 +2478,7 @@ int main(void) {
       TEST(test61), TEST(test62), TEST(test63), TEST(test64), TEST(test65),
       TEST(test66), TEST(test67), TEST(test68), TEST(test69), TEST(test70),
       TEST(test71), TEST(test72), TEST(test73), TEST(test74), TEST(test75),
-      {NULL, NULL},
+      TEST(test76), {NULL, NULL},
   };
   RUN_TEST(test_list);
 

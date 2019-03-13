@@ -59,6 +59,7 @@ Number new_number(type_t ty, unsigned long long val) {
   case TY_ARRAY:
   case TY_VOID:
   case TY_FUNC:
+  case TY_BUILTIN:
     break;
   }
   assert(false);
@@ -123,6 +124,7 @@ Number new_number_float(type_t ty, long double val) {
   case TY_ARRAY:
   case TY_VOID:
   case TY_FUNC:
+  case TY_BUILTIN:
     break;
   }
   assert(false);

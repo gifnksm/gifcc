@@ -23,11 +23,20 @@ typedef struct FuncCtxt {
   Map *label_map;
 } FuncCtxt;
 
+typedef enum {
+  DECL_STACK_VAR,
+  DECL_GLOBAL_VAR,
+  DECL_NUMBER,
+  DECL_BUILTIN_FUNC,
+} decl_t;
+
 typedef struct Decl {
+  decl_t kind;
   Type *type;
   StackVar *stack_var;
   GlobalVar *global_var;
   Number *num_val;
+  builtin_func_handler_t *builtin_func;
 } Decl;
 
 typedef struct Scope {
@@ -72,32 +81,32 @@ typedef enum {
 
 static const StorageClassSpecifier EMPTY_STORAGE_CLASS_SPECIFIER = {};
 static const TypeSpecifier EMPTY_TYPE_SPECIFIER = {};
-static const TypeQualifier EMPTY_TYPE_QUALIFIER = {};
-static const TypeQualifier CONST_TYPE_QUALIFIER = {.is_const = true};
 static const FunctionSpecifier EMPTY_FUNCTION_SPECIFIER = {};
 
 static Initializer *new_initializer(Type *type);
 static GlobalCtxt *new_global_ctxt(void);
 static FuncCtxt *new_func_ctxt(char *name, Type *type);
 static Scope *new_scope(GlobalCtxt *gcx, FuncCtxt *fcx, Scope *outer);
-static Scope *new_global_scope(GlobalCtxt *gcx);
+static Scope *new_global_scope(GlobalCtxt *gcx, const Tokenizer *tokenizer);
 static Scope *new_func_scope(Scope *global, FuncCtxt *fcx);
 static Scope *new_inner_scope(Scope *outer);
-static Member *new_member(char *name, Type *type, int offset,
-                          const Range *range);
 static VarDef *register_var(Scope *scope, Token *name, Type *type,
                             const Range *range, StorageClassSpecifier scs);
 static VarDef *register_func(Scope *scope, Token *name, Type *type);
+static void register_extern(Scope *scope, Token *name, Type *type);
 static StackVar *register_stack_var(Scope *scope, Token *name, Type *type,
                                     const Range *range);
 static GlobalVar *register_global_var(Scope *scope, Token *name, Type *type,
                                       const Range *range,
                                       StorageClassSpecifier scs);
-static void register_member(Type *type, char *member_name, Type *member_type,
-                            const Range *range);
-static bool register_decl(Scope *scope, char *name, Type *type, StackVar *svar,
-                          GlobalVar *gvar, Number *num_val);
-static Decl *get_decl(Scope *scope, char *name);
+static void register_number(Scope *scope, Token *name, Type *type,
+                            Number *number);
+static void register_builtin_func(Scope *scope, const char *name,
+                                  builtin_func_handler_t *handler);
+static bool register_decl(Scope *scope, decl_t kind, const char *name,
+                          Type *type, StackVar *svar, GlobalVar *gvar,
+                          Number *num_val, builtin_func_handler_t *handler);
+static Decl *get_decl(Scope *scope, const char *name);
 static bool register_tag(Scope *scope, char *tag, Type *type);
 static Type *get_tag(Scope *scope, char *tag);
 static bool register_typedef(Scope *scope, char *name, Type *type);
@@ -123,10 +132,18 @@ static Expr *coerce_func2ptr(Scope *scope, Expr *expr);
 static bool is_null_ptr_const(Expr *expr);
 static Expr *new_expr(int ty, Type *val_type, const Range *range);
 static Expr *new_expr_num(Number val, const Range *range);
-static Expr *new_expr_ident(Scope *scope, char *name, const Range *range);
+static Expr *new_expr_ident(Scope *scope, Token *ident);
 static Expr *new_expr_str(Scope *scope, const char *val, const Range *range);
 static Expr *new_expr_call(Scope *scope, Expr *callee, Vector *argument,
                            const Range *range);
+static Expr *new_expr_builtin_va_start(Scope *scope, Expr *callee,
+                                       Vector *argument, const Range *range);
+static Expr *new_expr_builtin_va_arg(Scope *scope, Expr *callee,
+                                     Vector *argument, const Range *range);
+static Expr *new_expr_builtin_va_end(Scope *scope, Expr *callee,
+                                     Vector *argument, const Range *range);
+static Expr *new_expr_builtin_va_copy(Scope *scope, Expr *callee,
+                                      Vector *argument, const Range *range);
 static Expr *new_expr_postfix(Scope *scope, int ty, Expr *operand,
                               const Range *range);
 static Expr *new_expr_cast(Scope *scope, Type *val_type, Expr *operand,
@@ -141,9 +158,9 @@ static Expr *new_expr_cond(Scope *scope, Expr *cond, Expr *then_expr,
                            Expr *else_expr, const Range *range);
 static Expr *new_expr_index(Scope *scope, Expr *array, Expr *index,
                             const Range *range);
-static Expr *new_expr_dot(Scope *scope, Expr *operand, char *name,
+static Expr *new_expr_dot(Scope *scope, Expr *operand, const char *name,
                           const Range *range);
-static Expr *new_expr_arrow(Scope *scope, Expr *operand, char *name,
+static Expr *new_expr_arrow(Scope *scope, Expr *operand, const char *name,
                             const Range *range);
 static Stmt *new_stmt(int ty, const Range *range);
 static Stmt *new_stmt_expr(Expr *expr, const Range *range);
@@ -161,6 +178,15 @@ static Stmt *new_stmt_for(Expr *init, Expr *cond, Expr *inc, Stmt *body,
 static Stmt *new_stmt_goto(char *name, const Range *range);
 static Stmt *new_stmt_return(Scope *scope, Expr *expr, const Range *range);
 static Stmt *new_stmt_compound(Vector *stmts, const Range *range);
+
+static Expr *builtin_va_start_handler(Scope *scope, Expr *callee,
+                                      Vector *argument, const Range *range);
+static Expr *builtin_va_arg_handler(Scope *scope, Expr *callee,
+                                    Vector *argument, const Range *range);
+static Expr *builtin_va_end_handler(Scope *scope, Expr *callee,
+                                    Vector *argument, const Range *range);
+static Expr *builtin_va_copy_handler(Scope *scope, Expr *callee,
+                                     Vector *argument, const Range *range);
 
 // expression
 static Number read_integer(Token *token);
@@ -238,7 +264,7 @@ static Function *function_definition(Tokenizer *tokenizer, Scope *global_scope,
                                      Type *type, char *name,
                                      StorageClassSpecifier scs,
                                      FunctionSpecifier fs, const Range *start);
-static GlobalVar *new_global_variable(Type *type, char *name,
+static GlobalVar *new_global_variable(Type *type, const char *name,
                                       const Range *range,
                                       StorageClassSpecifier scs);
 static TranslationUnit *translation_unit(Tokenizer *tokenizer);
@@ -314,8 +340,20 @@ static Scope *new_scope(GlobalCtxt *gcx, FuncCtxt *fcx, Scope *outer) {
   return scope;
 }
 
-static Scope *new_global_scope(GlobalCtxt *gcx) {
-  return new_scope(gcx, NULL, NULL);
+static Scope *new_global_scope(GlobalCtxt *gcx, const Tokenizer *tokenizer) {
+  Scope *scope = new_scope(gcx, NULL, NULL);
+
+  const Reader *reader = token_get_reader(tokenizer);
+  const Range *range = range_builtin(reader);
+
+  register_typedef(scope, "__builtin_va_list", new_type_builtin_va_list(range));
+
+  register_builtin_func(scope, "__builtin_va_start", builtin_va_start_handler);
+  register_builtin_func(scope, "__builtin_va_arg", builtin_va_arg_handler);
+  register_builtin_func(scope, "__builtin_va_end", builtin_va_end_handler);
+  register_builtin_func(scope, "__builtin_va_copy", builtin_va_copy_handler);
+
+  return scope;
 }
 
 static Scope *new_func_scope(Scope *global, FuncCtxt *fcx) {
@@ -326,21 +364,9 @@ static Scope *new_inner_scope(Scope *outer) {
   return new_scope(outer->global_ctxt, outer->func_ctxt, outer);
 }
 
-Scope *new_pp_scope(void) {
+Scope *new_pp_scope(const Tokenizer *tokenizer) {
   GlobalCtxt *gcx = new_global_ctxt();
-  return new_global_scope(gcx);
-}
-
-static Member *new_member(char *name, Type *type, int offset,
-                          const Range *range) {
-  if (type->ty == TY_VOID) {
-    range_error(range, "void型のメンバーです: %s", name);
-  }
-  Member *member = NEW(Member);
-  member->name = name;
-  member->type = type;
-  member->offset = offset;
-  return member;
+  return new_global_scope(gcx, tokenizer);
 }
 
 static VarDef *register_var(Scope *scope, Token *name, Type *type,
@@ -375,7 +401,8 @@ static VarDef *register_var(Scope *scope, Token *name, Type *type,
 }
 
 static VarDef *register_func(Scope *scope, Token *name, Type *type) {
-  (void)register_decl(scope, name->ident, type, NULL, NULL, NULL);
+  (void)register_decl(scope, DECL_GLOBAL_VAR, name->ident, type, NULL, NULL,
+                      NULL, NULL);
 
   VarDef *def = NEW(VarDef);
   def->type = DEF_FUNC;
@@ -386,6 +413,11 @@ static VarDef *register_func(Scope *scope, Token *name, Type *type) {
   def->func = NULL;
 
   return def;
+}
+
+static void register_extern(Scope *scope, Token *name, Type *type) {
+  (void)register_decl(scope, DECL_GLOBAL_VAR, name->ident, type, NULL, NULL,
+                      NULL, NULL);
 }
 
 static StackVar *register_stack_var(Scope *scope, Token *name, Type *type,
@@ -403,7 +435,8 @@ static StackVar *register_stack_var(Scope *scope, Token *name, Type *type,
   var->range = range;
   vec_push(fcx->var_list, var);
 
-  if (!register_decl(scope, name->ident, type, var, NULL, NULL)) {
+  if (!register_decl(scope, DECL_STACK_VAR, name->ident, type, var, NULL, NULL,
+                     NULL)) {
     range_error(range, "同じ名前のローカル変数が複数あります: %s", name->ident);
   }
 
@@ -414,7 +447,8 @@ static GlobalVar *register_global_var(Scope *scope, Token *name, Type *type,
                                       const Range *range,
                                       StorageClassSpecifier scs) {
   GlobalVar *gvar = new_global_variable(type, name->ident, range, scs);
-  if (!register_decl(scope, name->ident, type, NULL, gvar, NULL)) {
+  if (!register_decl(scope, DECL_GLOBAL_VAR, name->ident, type, NULL, gvar,
+                     NULL, NULL)) {
     Decl *decl = get_decl(scope, name->ident);
     if (decl->global_var == NULL) {
       decl->global_var = gvar;
@@ -425,69 +459,39 @@ static GlobalVar *register_global_var(Scope *scope, Token *name, Type *type,
   return gvar;
 }
 
-static void register_member(Type *type, char *member_name, Type *member_type,
-                            const Range *range) {
-  assert(type->ty == TY_STRUCT || type->ty == TY_UNION);
-
-  StructBody *body = type->struct_body;
-
-  int offset;
-  if (type->ty == TY_STRUCT) {
-    body->member_size =
-        align(body->member_size, get_val_align(member_type, range));
-    offset = body->member_size;
-    body->member_size += get_val_size(member_type, range);
-  } else {
-    if (get_val_size(member_type, range) > body->member_size) {
-      body->member_size = get_val_size(member_type, range);
-    }
-    offset = 0;
-  }
-
-  if (body->member_align < get_val_align(member_type, range)) {
-    body->member_align = get_val_align(member_type, range);
-  }
-
-  Member *member = new_member(member_name, member_type, offset, range);
-  vec_push(body->member_list, member);
-  if (member_name == NULL) {
-    assert(member_type->ty == TY_STRUCT || member_type->ty == TY_UNION);
-    StructBody *member_body = member_type->struct_body;
-    Map *inner_members = member_body->member_name_map;
-    for (int i = 0; i < map_size(inner_members); i++) {
-      Member *inner = map_get_by_index(inner_members, i, NULL);
-      Member *inner_member =
-          new_member(inner->name, inner->type, offset + inner->offset, range);
-      if (map_get(body->member_name_map, inner_member->name)) {
-        range_error(range, "同じ名前のメンバ変数が複数あります: %s",
-                    inner_member->name);
-      }
-      map_put(body->member_name_map, inner_member->name, inner_member);
-    }
-  } else {
-    if (map_get(body->member_name_map, member->name)) {
-      range_error(range, "同じ名前のメンバ変数が複数あります: %s",
-                  member->name);
-    }
-    map_put(body->member_name_map, member->name, member);
+static void register_number(Scope *scope, Token *name, Type *type,
+                            Number *number) {
+  if (!register_decl(scope, DECL_NUMBER, name->ident, type, NULL, NULL, number,
+                     NULL)) {
+    range_error(name->range, "定義済みの識別子です: %s", name->ident);
   }
 }
 
-static bool register_decl(Scope *scope, char *name, Type *type, StackVar *svar,
-                          GlobalVar *gvar, Number *num_val) {
+static void register_builtin_func(Scope *scope, const char *name,
+                                  builtin_func_handler_t *handler) {
+  Type *type = new_type(TY_BUILTIN, EMPTY_TYPE_QUALIFIER);
+  (void)register_decl(scope, DECL_BUILTIN_FUNC, name, type, NULL, NULL, NULL,
+                      handler);
+}
+
+static bool register_decl(Scope *scope, decl_t kind, const char *name,
+                          Type *type, StackVar *svar, GlobalVar *gvar,
+                          Number *num_val, builtin_func_handler_t *handler) {
   if (map_get(scope->decl_map, name)) {
     return false;
   }
   Decl *decl = NEW(Decl);
+  decl->kind = kind;
   decl->type = type;
   decl->stack_var = svar;
   decl->global_var = gvar;
   decl->num_val = num_val;
+  decl->builtin_func = handler;
   map_put(scope->decl_map, name, decl);
   return true;
 }
 
-static Decl *get_decl(Scope *scope, char *name) {
+static Decl *get_decl(Scope *scope, const char *name) {
   while (scope != NULL) {
     Decl *decl = map_get(scope->decl_map, name);
     if (decl) {
@@ -567,6 +571,7 @@ static Type *integer_promoted(Scope *scope, Expr **e) {
   case TY_FUNC:
   case TY_STRUCT:
   case TY_UNION:
+  case TY_BUILTIN:
     break;
   }
   return (*e)->val_type;
@@ -1085,6 +1090,9 @@ int get_val_size(const Type *ty, const Range *range) {
     return align(ty->struct_body->member_size, ty->struct_body->member_align);
   case TY_ENUM:
     return sizeof(int);
+  case TY_BUILTIN:
+    range_error(range, "ビルトイン型の値サイズを取得しようとしました: %s",
+                format_type(ty, false));
   }
   range_error(range, "不明な型のサイズを取得しようとしました: %s",
               format_type(ty, false));
@@ -1141,6 +1149,10 @@ int get_val_align(const Type *ty, const Range *range) {
     return ty->struct_body->member_align;
   case TY_ENUM:
     return alignof(int);
+  case TY_BUILTIN:
+    range_error(range,
+                "ビルトイン型の値のアラインメントを取得しようとしました: %s",
+                format_type(ty, false));
   }
   range_error(range, "不明な型の値アラインメントを取得しようとしました: %s",
               format_type(ty, false));
@@ -1200,7 +1212,11 @@ static Expr *new_expr_num(Number val, const Range *range) {
   return expr;
 }
 
-static Expr *new_expr_ident(Scope *scope, char *name, const Range *range) {
+static Expr *new_expr_ident(Scope *scope, Token *ident) {
+  assert(ident->ty == TK_IDENT);
+  const char *name = ident->ident;
+  const Range *range = ident->range;
+
   int ty;
   Type *type;
   if (strcmp(name, "__func__") == 0) {
@@ -1213,37 +1229,55 @@ static Expr *new_expr_ident(Scope *scope, char *name, const Range *range) {
   StackVar *svar = NULL;
   GlobalVar *gvar = NULL;
   Number *num_val = NULL;
+  builtin_func_handler_t *builtin_func = NULL;
   if (decl != NULL) {
-    if (decl->stack_var != NULL) {
+    switch (decl->kind) {
+    case DECL_STACK_VAR:
       ty = EX_STACK_VAR;
       type = decl->type;
       svar = decl->stack_var;
-    } else if (decl->num_val != NULL) {
-      ty = EX_NUM;
-      type = decl->type;
-      num_val = decl->num_val;
-    } else {
+      break;
+    case DECL_GLOBAL_VAR:
       ty = EX_GLOBAL_VAR;
       type = decl->type;
       gvar = decl->global_var;
+      break;
+    case DECL_NUMBER:
+      ty = EX_NUM;
+      type = decl->type;
+      num_val = decl->num_val;
+      break;
+    case DECL_BUILTIN_FUNC:
+      ty = EX_BUILTIN_FUNC;
+      type = new_type(TY_BUILTIN, EMPTY_TYPE_QUALIFIER);
+      builtin_func = decl->builtin_func;
+      break;
     }
   } else {
     range_warn(range, "未定義の識別子です: %s", name);
     ty = EX_GLOBAL_VAR;
     type = new_type(TY_S_INT, EMPTY_TYPE_QUALIFIER);
-    gvar =
-        new_global_variable(type, name, range, EMPTY_STORAGE_CLASS_SPECIFIER);
+    gvar = register_global_var(scope, ident, type, ident->range,
+                               EMPTY_STORAGE_CLASS_SPECIFIER);
   }
 
   Expr *expr = new_expr(ty, type, range);
-  if (ty == EX_STACK_VAR) {
+  switch (ty) {
+  case EX_STACK_VAR:
     expr->stack_var = svar;
-  } else if (ty == EX_GLOBAL_VAR) {
+    break;
+  case EX_GLOBAL_VAR:
     expr->global_var.name = gvar != NULL ? gvar->name : name;
     expr->global_var.def = gvar;
-  } else if (ty == EX_NUM) {
+    break;
+  case EX_NUM:
     expr->num = *num_val;
-  } else {
+    break;
+  case EX_BUILTIN_FUNC:
+    expr->builtin_func.name = name;
+    expr->builtin_func.handler = builtin_func;
+    break;
+  default:
     assert(false);
   }
   return expr;
@@ -1264,6 +1298,10 @@ static Expr *new_expr_str(Scope *scope, const char *val, const Range *range) {
 
 static Expr *new_expr_call(Scope *scope, Expr *callee, Vector *argument,
                            const Range *range) {
+  if (callee->ty == EX_BUILTIN_FUNC) {
+    return callee->builtin_func.handler(scope, callee, argument, range);
+  }
+
   callee = coerce_array2ptr(scope, callee);
 
   Type *func_type;
@@ -1278,6 +1316,7 @@ static Expr *new_expr_call(Scope *scope, Expr *callee, Vector *argument,
     func_type = new_type_func(new_type(TY_S_INT, EMPTY_TYPE_QUALIFIER), NULL,
                               false, EMPTY_TYPE_QUALIFIER);
   }
+
   ret_type = func_type->func_ret;
 
   int narg = 0;
@@ -1321,6 +1360,126 @@ static Expr *new_expr_call(Scope *scope, Expr *callee, Vector *argument,
   Expr *expr = new_expr(EX_CALL, ret_type, range);
   expr->call.callee = callee;
   expr->call.argument = argument;
+  return expr;
+}
+
+static Expr *new_expr_builtin_va_start(Scope *scope,
+                                       Expr *callee __attribute__((unused)),
+                                       Vector *argument, const Range *range) {
+  int narg = argument != NULL ? vec_len(argument) : 0;
+
+  if (argument == NULL || vec_len(argument) != 2) {
+    range_error(range,
+                "関数の引数の個数が一致しません: argument=%d, parameter=%d",
+                narg, 2);
+  }
+
+  Type *va_list_type = get_typedef(scope, "__builtin_va_list");
+  ;
+
+  Expr *ap = vec_get(argument, 0);
+  Expr *last = vec_get(argument, 1);
+
+  ap = new_expr_cast(scope, va_list_type, ap, range);
+  ap = coerce_array2ptr(scope, ap);
+  ap = coerce_func2ptr(scope, ap);
+
+  Type *type = new_type(TY_VOID, EMPTY_TYPE_QUALIFIER);
+  Expr *expr = new_expr(EX_BUILTIN_VA_START, type, range);
+  expr->builtin_va_start.ap = ap;
+  expr->builtin_va_start.last = last;
+  return expr;
+}
+
+static Expr *new_expr_builtin_va_arg(Scope *scope __attribute__((unused)),
+                                     Expr *callee __attribute__((unused)),
+                                     Vector *argument __attribute__((unused)),
+                                     const Range *range) {
+  int narg = argument != NULL ? vec_len(argument) : 0;
+
+  if (argument == NULL || vec_len(argument) != 2) {
+    range_error(range,
+                "関数の引数の個数が一致しません: argument=%d, parameter=%d",
+                narg, 2);
+  }
+
+  Type *va_list_type = get_typedef(scope, "__builtin_va_list");
+  ;
+
+  Expr *ap = vec_get(argument, 0);
+  Expr *type_expr = vec_get(argument, 1);
+
+  ap = new_expr_cast(scope, va_list_type, ap, range);
+  ap = coerce_array2ptr(scope, ap);
+  ap = coerce_func2ptr(scope, ap);
+
+  if (!is_ptr_type(type_expr->val_type)) {
+    range_error(range, "ポインタ型ではありません: %s",
+                format_type(type_expr->val_type, false));
+  }
+
+  Type *type = type_expr->val_type->ptrof;
+  Expr *expr = new_expr(EX_BUILTIN_VA_ARG, type, range);
+  expr->builtin_va_arg.ap = ap;
+  expr->builtin_va_arg.type = type;
+  return expr;
+}
+
+static Expr *new_expr_builtin_va_end(Scope *scope __attribute__((unused)),
+                                     Expr *callee __attribute__((unused)),
+                                     Vector *argument __attribute__((unused)),
+                                     const Range *range) {
+  int narg = argument != NULL ? vec_len(argument) : 0;
+
+  if (argument == NULL || vec_len(argument) != 1) {
+    range_error(range,
+                "関数の引数の個数が一致しません: argument=%d, parameter=%d",
+                narg, 2);
+  }
+
+  Type *va_list_type = get_typedef(scope, "__builtin_va_list");
+
+  Expr *ap = vec_get(argument, 0);
+
+  ap = new_expr_cast(scope, va_list_type, ap, range);
+  ap = coerce_array2ptr(scope, ap);
+  ap = coerce_func2ptr(scope, ap);
+
+  Type *type = new_type(TY_VOID, EMPTY_TYPE_QUALIFIER);
+  Expr *expr = new_expr(EX_BUILTIN_VA_END, type, range);
+  expr->builtin_va_end.ap = ap;
+  return expr;
+}
+
+static Expr *new_expr_builtin_va_copy(Scope *scope __attribute__((unused)),
+                                      Expr *callee __attribute__((unused)),
+                                      Vector *argument __attribute__((unused)),
+                                      const Range *range) {
+  int narg = argument != NULL ? vec_len(argument) : 0;
+
+  if (argument == NULL || vec_len(argument) != 2) {
+    range_error(range,
+                "関数の引数の個数が一致しません: argument=%d, parameter=%d",
+                narg, 2);
+  }
+
+  Type *va_list_type = get_typedef(scope, "__builtin_va_list");
+
+  Expr *dest = vec_get(argument, 0);
+  Expr *src = vec_get(argument, 1);
+
+  dest = new_expr_cast(scope, va_list_type, dest, range);
+  dest = coerce_array2ptr(scope, dest);
+  dest = coerce_func2ptr(scope, dest);
+
+  src = new_expr_cast(scope, va_list_type, src, range);
+  src = coerce_array2ptr(scope, src);
+  src = coerce_func2ptr(scope, src);
+
+  Type *type = new_type(TY_VOID, EMPTY_TYPE_QUALIFIER);
+  Expr *expr = new_expr(EX_BUILTIN_VA_START, type, range);
+  expr->builtin_va_copy.dest = dest;
+  expr->builtin_va_copy.src = src;
   return expr;
 }
 
@@ -1723,7 +1882,7 @@ static Expr *new_expr_index(Scope *scope, Expr *array, Expr *index,
                         range);
 }
 
-static Expr *new_expr_dot(Scope *scope, Expr *operand, char *name,
+static Expr *new_expr_dot(Scope *scope, Expr *operand, const char *name,
                           const Range *range) {
   if (operand->val_type->ty != TY_STRUCT && operand->val_type->ty != TY_UNION) {
     range_error(range, "構造体または共用体以外のメンバへのアクセスです");
@@ -1732,7 +1891,7 @@ static Expr *new_expr_dot(Scope *scope, Expr *operand, char *name,
       scope, new_expr_unary(scope, EX_ADDRESS, operand, range), name, range);
 }
 
-static Expr *new_expr_arrow(Scope *scope, Expr *operand, char *name,
+static Expr *new_expr_arrow(Scope *scope, Expr *operand, const char *name,
                             const Range *range) {
   operand = coerce_array2ptr(scope, operand);
   operand = coerce_func2ptr(scope, operand);
@@ -1860,6 +2019,24 @@ static Stmt *new_stmt_compound(Vector *stmts, const Range *range) {
   return stmt;
 }
 
+static Expr *builtin_va_start_handler(Scope *scope, Expr *callee,
+                                      Vector *argument, const Range *range) {
+  return new_expr_builtin_va_start(scope, callee, argument, range);
+}
+
+static Expr *builtin_va_arg_handler(Scope *scope, Expr *callee,
+                                    Vector *argument, const Range *range) {
+  return new_expr_builtin_va_arg(scope, callee, argument, range);
+}
+static Expr *builtin_va_end_handler(Scope *scope, Expr *callee,
+                                    Vector *argument, const Range *range) {
+  return new_expr_builtin_va_end(scope, callee, argument, range);
+}
+static Expr *builtin_va_copy_handler(Scope *scope, Expr *callee,
+                                     Vector *argument, const Range *range) {
+  return new_expr_builtin_va_copy(scope, callee, argument, range);
+}
+
 static Number read_float(Token *token) {
   assert(token->ty == TK_NUM);
   char *suffix = NULL;
@@ -1981,7 +2158,7 @@ static Expr *primary_expression(Tokenizer *tokenizer, Scope *scope) {
   }
 
   if ((token = token_consume(tokenizer, TK_IDENT)) != NULL) {
-    return new_expr_ident(scope, token->ident, token->range);
+    return new_expr_ident(scope, token);
   }
   if ((token = token_consume(tokenizer, TK_STR)) != NULL) {
     return new_expr_str(scope, token->str, token->range);
@@ -2270,7 +2447,7 @@ static Vector *declaration(Tokenizer *tokenizer, Scope *scope) {
   if (scs.is_typedef) {
     register_typedef(scope, name->ident, type);
   } else if (scs.is_extern) {
-    register_decl(scope, name->ident, type, NULL, NULL, NULL);
+    register_extern(scope, name, type);
   } else {
     if (is_func_type(type)) {
       VarDef *def = register_func(scope, name, type);
@@ -2294,7 +2471,7 @@ static Vector *declaration(Tokenizer *tokenizer, Scope *scope) {
     if (scs.is_typedef) {
       register_typedef(scope, name->ident, type);
     } else if (scs.is_extern) {
-      register_decl(scope, name->ident, type, NULL, NULL, NULL);
+      register_extern(scope, name, type);
     } else {
       if (is_func_type(type)) {
         (void)register_func(scope, name, type);
@@ -2399,13 +2576,14 @@ static void struct_declaration(Scope *scope, Tokenizer *tokenizer, Type *type) {
   if (token_peek(tokenizer)->ty != ';') {
     declarator(scope, tokenizer, base_type, &member_name, &member_type, &range);
   }
-  register_member(type, member_name != NULL ? member_name->ident : NULL,
-                  member_type, range);
+  register_struct_member(type, member_name != NULL ? member_name->ident : NULL,
+                         member_type, range);
 
   while (token_consume(tokenizer, ',')) {
     declarator(scope, tokenizer, base_type, &member_name, &member_type, &range);
-    register_member(type, member_name != NULL ? member_name->ident : NULL,
-                    member_type, range);
+    register_struct_member(type,
+                           member_name != NULL ? member_name->ident : NULL,
+                           member_type, range);
   }
   token_expect(tokenizer, ';');
 }
@@ -2478,9 +2656,8 @@ static void enumerator(Scope *scope, Tokenizer *tokenizer, Type *type,
   Number *number = NEW(Number);
   number->type = TY_ENUM;
   number->enum_val = *val;
-  if (!register_decl(scope, ident->ident, type, NULL, NULL, number)) {
-    range_error(ident->range, "定義済みの識別子です: %s", ident->ident);
-  }
+  register_number(scope, ident, type, number);
+
   (*val)++;
 }
 
@@ -2906,6 +3083,7 @@ static void initializer_inner(Tokenizer *tokenizer, Scope *scope, Type *type,
       break;
     case TY_VOID:
     case TY_FUNC:
+    case TY_BUILTIN:
       range_error(token->range, "初期化できない型です: %s",
                   format_type(type, false));
     }
@@ -3059,8 +3237,7 @@ static Stmt *statement(Tokenizer *tokenizer, Scope *scope) {
             if (def->init == NULL) {
               continue;
             }
-            Expr *dest =
-                new_expr_ident(inner, def->name->ident, def->name->range);
+            Expr *dest = new_expr_ident(inner, def->name);
             gen_init(inner, &init, def->init, dest, dest->val_type);
           }
           }
@@ -3181,7 +3358,7 @@ static void gen_init(Scope *scope, Expr **expr, Initializer *init, Expr *dest,
     StructBody *body = type->struct_body;
     for (int i = 0; i < vec_len(body->member_list); i++) {
       Member *member = vec_get(body->member_list, i);
-      char *name = member->name;
+      const char *name = member->name;
       Initializer *meminit =
           init != NULL ? map_get_by_index(init->members, i, &name) : NULL;
       Expr *mem =
@@ -3194,7 +3371,7 @@ static void gen_init(Scope *scope, Expr **expr, Initializer *init, Expr *dest,
     StructBody *body = type->struct_body;
     if (init != NULL) {
       for (int i = 0; i < map_size(init->members); i++) {
-        char *name;
+        const char *name;
         Initializer *meminit = map_get_by_index(init->members, i, &name);
         Expr *mem =
             name != NULL ? new_expr_dot(scope, dest, name, dest->range) : dest;
@@ -3215,6 +3392,7 @@ static void gen_init(Scope *scope, Expr **expr, Initializer *init, Expr *dest,
   }
   case TY_VOID:
   case TY_FUNC:
+  case TY_BUILTIN:
     break;
   }
 
@@ -3247,8 +3425,7 @@ static Stmt *compound_statement(Tokenizer *tokenizer, Scope *scope) {
             continue;
           }
 
-          Expr *dest =
-              new_expr_ident(scope, def->name->ident, def->name->range);
+          Expr *dest = new_expr_ident(scope, def->name);
           Expr *expr = NULL;
           gen_init(scope, &expr, def->init, dest, dest->val_type);
           if (expr != NULL) {
@@ -3306,7 +3483,7 @@ static Function *function_definition(Tokenizer *tokenizer, Scope *global_scope,
   return func;
 }
 
-static GlobalVar *new_global_variable(Type *type, char *name,
+static GlobalVar *new_global_variable(Type *type, const char *name,
                                       const Range *range,
                                       StorageClassSpecifier scs) {
   GlobalVar *gvar = NEW(GlobalVar);
@@ -3320,7 +3497,7 @@ static GlobalVar *new_global_variable(Type *type, char *name,
 
 static TranslationUnit *translation_unit(Tokenizer *tokenizer) {
   GlobalCtxt *gcx = new_global_ctxt();
-  Scope *scope = new_global_scope(gcx);
+  Scope *scope = new_global_scope(gcx, tokenizer);
 
   Map *gvar_map = new_map();
 

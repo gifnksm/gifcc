@@ -1,5 +1,8 @@
 #include "gifcc.h"
 
+const TypeQualifier EMPTY_TYPE_QUALIFIER = {};
+const TypeQualifier CONST_TYPE_QUALIFIER = {.is_const = true};
+
 Type *new_type(int ty, TypeQualifier tq) {
   Type *type = NEW(Type);
   type->ty = ty;
@@ -70,11 +73,89 @@ Type *new_type_enum(const char *tag, TypeQualifier tq) {
   return type;
 }
 
+Type *new_type_builtin_va_list(const Range *range) {
+  Type *elem = new_type(TY_STRUCT, EMPTY_TYPE_QUALIFIER);
+  elem->tag = "__builtin_va_elem";
+  elem->struct_body = NEW(StructBody);
+  init_struct_body(elem->struct_body);
+
+  Type *ty_offset = new_type(TY_U_INT, EMPTY_TYPE_QUALIFIER);
+  Type *ty_area = new_type_ptr(new_type(TY_VOID, EMPTY_TYPE_QUALIFIER),
+                               EMPTY_TYPE_QUALIFIER);
+
+  register_struct_member(elem, "gp_offset", ty_offset, range);
+  register_struct_member(elem, "fp_offset", ty_offset, range);
+  register_struct_member(elem, "overflow_arg_area", ty_area, range);
+  register_struct_member(elem, "reg_save_area", ty_area, range);
+
+  return new_type_array(elem, new_number_int(1), EMPTY_TYPE_QUALIFIER);
+}
+
 void init_struct_body(StructBody *body) {
   body->member_name_map = new_map();
   body->member_list = new_vector();
   body->member_size = 0;
   body->member_align = 0;
+}
+
+static Member *new_member(char *name, Type *type, int offset,
+                          const Range *range) {
+  if (type->ty == TY_VOID) {
+    range_error(range, "void型のメンバーです: %s", name);
+  }
+  Member *member = NEW(Member);
+  member->name = name;
+  member->type = type;
+  member->offset = offset;
+  return member;
+}
+
+void register_struct_member(Type *type, char *member_name, Type *member_type,
+                            const Range *range) {
+  assert(type->ty == TY_STRUCT || type->ty == TY_UNION);
+
+  StructBody *body = type->struct_body;
+
+  int offset;
+  if (type->ty == TY_STRUCT) {
+    body->member_size =
+        align(body->member_size, get_val_align(member_type, range));
+    offset = body->member_size;
+    body->member_size += get_val_size(member_type, range);
+  } else {
+    if (get_val_size(member_type, range) > body->member_size) {
+      body->member_size = get_val_size(member_type, range);
+    }
+    offset = 0;
+  }
+
+  if (body->member_align < get_val_align(member_type, range)) {
+    body->member_align = get_val_align(member_type, range);
+  }
+
+  Member *member = new_member(member_name, member_type, offset, range);
+  vec_push(body->member_list, member);
+  if (member_name == NULL) {
+    assert(member_type->ty == TY_STRUCT || member_type->ty == TY_UNION);
+    StructBody *member_body = member_type->struct_body;
+    Map *inner_members = member_body->member_name_map;
+    for (int i = 0; i < map_size(inner_members); i++) {
+      Member *inner = map_get_by_index(inner_members, i, NULL);
+      Member *inner_member =
+          new_member(inner->name, inner->type, offset + inner->offset, range);
+      if (map_get(body->member_name_map, inner_member->name)) {
+        range_error(range, "同じ名前のメンバ変数が複数あります: %s",
+                    inner_member->name);
+      }
+      map_put(body->member_name_map, inner_member->name, inner_member);
+    }
+  } else {
+    if (map_get(body->member_name_map, member->name)) {
+      range_error(range, "同じ名前のメンバ変数が複数あります: %s",
+                  member->name);
+    }
+    map_put(body->member_name_map, member->name, member);
+  }
 }
 
 bool is_sametype(Type *ty1, Type *ty2) {
@@ -111,6 +192,7 @@ bool is_integer_type(Type *ty) {
   case TY_FUNC:
   case TY_STRUCT:
   case TY_UNION:
+  case TY_BUILTIN:
     return false;
   }
   assert(false);
@@ -141,6 +223,7 @@ bool is_float_type(Type *ty) {
   case TY_FUNC:
   case TY_STRUCT:
   case TY_UNION:
+  case TY_BUILTIN:
     return false;
   }
   assert(false);
@@ -176,6 +259,7 @@ int get_int_type_rank(Type *ty, const Range *range) {
   case TY_FUNC:
   case TY_STRUCT:
   case TY_UNION:
+  case TY_BUILTIN:
     break;
   }
   range_error(range, "整数型ではない型です: %s", format_type(ty, false));
@@ -208,6 +292,7 @@ bool is_signed_int_type(Type *ty, const Range *range) {
   case TY_FUNC:
   case TY_STRUCT:
   case TY_UNION:
+  case TY_BUILTIN:
     break;
   }
   range_error(range, "整数型ではない型です: %s", format_type(ty, false));
@@ -347,6 +432,9 @@ char *format_type(const Type *type, bool detail) {
     } else {
       type_str = format("enum %s", type->tag);
     }
+    break;
+  case TY_BUILTIN:
+    type_str = "<builitin>";
     break;
   }
 

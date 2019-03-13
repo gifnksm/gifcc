@@ -147,6 +147,7 @@ typedef struct Range Range;
     case TY_FUNC:                                                              \
     case TY_STRUCT:                                                            \
     case TY_UNION:                                                             \
+    case TY_BUILTIN:                                                           \
       abort();                                                                 \
     }                                                                          \
   } while (false);
@@ -174,6 +175,7 @@ typedef enum {
   TY_STRUCT,
   TY_UNION,
   TY_ENUM,
+  TY_BUILTIN,
 } type_t;
 
 #define TY_SIZE_T TY_U_LONG
@@ -273,6 +275,13 @@ typedef enum {
 
   // ternary operator
   EX_COND,
+
+  // compiler builtins
+  EX_BUILTIN_FUNC,
+  EX_BUILTIN_VA_START,
+  EX_BUILTIN_VA_ARG,
+  EX_BUILTIN_VA_END,
+  EX_BUILTIN_VA_COPY,
 } expr_t;
 
 typedef enum {
@@ -339,14 +348,14 @@ typedef struct Initializer {
 } Initializer;
 
 typedef struct StackVar {
-  char *name;
+  const char *name;
   int offset;
   Type *type;
   const Range *range;
 } StackVar;
 
 typedef struct GlobalVar {
-  char *name;
+  const char *name;
   Type *type;
   const Range *range;
   StorageClassSpecifier storage_class;
@@ -364,6 +373,10 @@ typedef struct StringLiteral {
   const char *name;
   const char *val;
 } StringLiteral;
+
+typedef struct Scope Scope;
+typedef Expr *builtin_func_handler_t(Scope *scope, Expr *callee,
+                                     Vector *argument, const Range *range);
 
 typedef struct Expr {
   expr_t ty;
@@ -406,6 +419,35 @@ typedef struct Expr {
     struct {
       Vector *exprs;
     } comma;
+
+    // EX_BUILTIN_FUNC
+    struct {
+      const char *name;
+      builtin_func_handler_t *handler;
+    } builtin_func;
+
+    // EX_BUILTIN_VA_START
+    struct {
+      Expr *ap;
+      Expr *last;
+    } builtin_va_start;
+
+    // EX_BUILTIN_VA_ARG
+    struct {
+      Expr *ap;
+      Type *type;
+    } builtin_va_arg;
+
+    // EX_BUILTIN_VA_END
+    struct {
+      Expr *ap;
+    } builtin_va_end;
+
+    // EX_BUILTIN_VA_COPY
+    struct {
+      Expr *dest;
+      Expr *src;
+    } builtin_va_copy;
 
     // other unary operator
     struct {
@@ -531,11 +573,11 @@ Set *set_intersection(const Set *a, const Set *b);
 // map.c
 Map *new_map(void);
 int map_size(const Map *map);
-void *map_get_by_index(Map *map, int n, char **key);
-void map_set_by_index(Map *map, int n, char *key, void *val);
-void map_put(Map *map, char *key, void *val);
-void *map_get(Map *map, char *key);
-bool map_remove(Map *map, char *key);
+void *map_get_by_index(Map *map, int n, const char **key);
+void map_set_by_index(Map *map, int n, const char *key, void *val);
+void map_put(Map *map, const char *key, void *val);
+void *map_get(Map *map, const char *key);
+bool map_remove(Map *map, const char *key);
 
 // util.c
 void print_string_literal(const char *str);
@@ -625,6 +667,8 @@ const char *token_kind_to_str(int kind);
 const Reader *token_get_reader(const Tokenizer *tokenizer);
 
 // type.c
+extern const TypeQualifier EMPTY_TYPE_QUALIFIER;
+extern const TypeQualifier CONST_TYPE_QUALIFIER;
 Type *new_type(int ty, TypeQualifier tq);
 Type *clone_type(Type *type);
 Type *new_type_ptr(Type *base_type, TypeQualifier tq);
@@ -635,7 +679,10 @@ Type *new_type_func(Type *ret_type, Vector *func_param, bool has_varargs,
 Type *new_type_struct(type_t ty, const char *tag, TypeQualifier tq);
 Type *new_type_opaque_struct(type_t ty, const char *tag, TypeQualifier tq);
 Type *new_type_enum(const char *tag, TypeQualifier tq);
+Type *new_type_builtin_va_list(const Range *range);
 void init_struct_body(StructBody *body);
+void register_struct_member(Type *type, char *member_name, Type *member_type,
+                            const Range *range);
 bool is_sametype(Type *ty1, Type *ty2);
 bool is_integer_type(Type *ty);
 bool is_float_type(Type *ty);
@@ -648,7 +695,7 @@ bool is_func_type(Type *ty);
 char *format_type(const Type *type, bool detail);
 
 // parse.c
-Scope *new_pp_scope(void);
+Scope *new_pp_scope(const Tokenizer *tokenizer);
 int get_val_size(const Type *ty, const Range *range);
 int get_val_align(const Type *ty, const Range *range);
 Expr *constant_expression(Tokenizer *tokenizer, Scope *scope);

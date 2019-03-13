@@ -117,6 +117,7 @@ static void eval_unop(Expr *expr) {
   case TY_FUNC:
   case TY_STRUCT:
   case TY_UNION:
+  case TY_BUILTIN:
     break;
   }
   range_error(expr->range, "不正な型の演算です: %d, %d, %d", op, type,
@@ -196,6 +197,7 @@ static void eval_cast(Expr *expr) {
   case TY_FUNC:
   case TY_STRUCT:
   case TY_UNION:
+  case TY_BUILTIN:
     break;
   }
 }
@@ -349,6 +351,7 @@ static void eval_binop(Expr *expr) {
   case TY_FUNC:
   case TY_STRUCT:
   case TY_UNION:
+  case TY_BUILTIN:
     break;
   }
   range_error(expr->range, "不正な型の演算です: %d, %d, %d, %d", op, type,
@@ -485,6 +488,7 @@ static void eval_binop_comp(Expr *expr) {
   case TY_FUNC:
   case TY_STRUCT:
   case TY_UNION:
+  case TY_BUILTIN:
     break;
   }
   range_error(expr->range, "不正な型の演算です: %d, %d, %d, %d", op, type,
@@ -580,6 +584,7 @@ static void eval_binop_shift(Expr *expr) {
   case TY_FUNC:
   case TY_STRUCT:
   case TY_UNION:
+  case TY_BUILTIN:
     break;
   }
   range_error(expr->range, "不正な型の演算です: %d, %d, %d", op, type,
@@ -771,6 +776,23 @@ static void walk_expr(Expr *expr) {
     walk_expr(expr->cond.then_expr);
     walk_expr(expr->cond.else_expr);
     return;
+  case EX_BUILTIN_FUNC:
+    return;
+
+  case EX_BUILTIN_VA_START:
+    walk_expr(expr->builtin_va_start.ap);
+    walk_expr(expr->builtin_va_start.last);
+    return;
+  case EX_BUILTIN_VA_ARG:
+    walk_expr(expr->builtin_va_arg.ap);
+    return;
+  case EX_BUILTIN_VA_END:
+    walk_expr(expr->builtin_va_end.ap);
+    return;
+  case EX_BUILTIN_VA_COPY:
+    walk_expr(expr->builtin_va_copy.dest);
+    walk_expr(expr->builtin_va_copy.src);
+    return;
   }
 }
 
@@ -852,7 +874,7 @@ static void walk_initializer(Initializer *init) {
 
   if (init->members != NULL) {
     for (int i = 0; i < map_size(init->members); i++) {
-      char *name;
+      const char *name;
       Initializer *meminit = map_get_by_index(init->members, i, &name);
       walk_initializer(meminit);
     }

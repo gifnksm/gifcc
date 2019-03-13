@@ -890,8 +890,8 @@ static bool pp_read_if_cond(Tokenizer *tokenizer) {
     }
   }
 
-  Scope *scope = new_pp_scope();
   Tokenizer *sub_tokenizer = tokenizer_from_tokens(NULL, tokens);
+  Scope *scope = new_pp_scope(sub_tokenizer);
   Expr *expr = constant_expression(sub_tokenizer, scope);
   if (token_peek(sub_tokenizer)->ty != TK_EOF) {
     range_error(token_peek(sub_tokenizer)->range, "改行がありません");
