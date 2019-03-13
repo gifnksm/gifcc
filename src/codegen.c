@@ -155,6 +155,26 @@ static const Reg *get_int_reg(Type *type, const Range *range) {
   return get_int_reg_for_size(get_val_size(type, range), range);
 }
 
+static const char *get_int_arg_reg(const Reg *r, int idx) {
+  switch (idx) {
+  case 0:
+    return r->rdi;
+  case 1:
+    return r->rsi;
+  case 2:
+    return r->rdx;
+  case 3:
+    return r->rcx;
+  case 4:
+    return r->r8;
+  case 5:
+    return r->r9;
+  default:
+    break;
+  }
+  assert(false);
+}
+
 static const SseOp *get_sse_op(Type *type, const Range *range) {
   switch (type->ty) {
   case TY_FLOAT:
@@ -974,28 +994,7 @@ static void emit_expr_call(Expr *expr) {
       case ARG_CLASS_INTEGER: {
         int num_reg = (size + 7) / 8;
         for (int j = 0; j < num_reg; j++) {
-          switch (int_reg_idx) {
-          case 0:
-            emit_pop("rdi");
-            break;
-          case 1:
-            emit_pop("rsi");
-            break;
-          case 2:
-            emit_pop("rdx");
-            break;
-          case 3:
-            emit_pop("rcx");
-            break;
-          case 4:
-            emit_pop("r8");
-            break;
-          case 5:
-            emit_pop("r9");
-            break;
-          default:
-            assert(false);
-          }
+          emit_pop(get_int_arg_reg(&Reg8, int_reg_idx));
           int_reg_idx++;
         }
         continue;
@@ -1742,28 +1741,8 @@ static void emit_func(Function *func) {
         const Reg *r = size > 8 ? &Reg8 : get_int_reg(var->type, var->range);
         int num_reg = (size + 7) / 8;
         for (int j = 0; j < num_reg; j++) {
-          switch (int_reg_idx) {
-          case 0:
-            printf("  mov [rbp - %d], %s\n", dst_offset - j * 8, r->rdi);
-            break;
-          case 1:
-            printf("  mov [rbp - %d], %s\n", dst_offset - j * 8, r->rsi);
-            break;
-          case 2:
-            printf("  mov [rbp - %d], %s\n", dst_offset - j * 8, r->rdx);
-            break;
-          case 3:
-            printf("  mov [rbp - %d], %s\n", dst_offset - j * 8, r->rcx);
-            break;
-          case 4:
-            printf("  mov [rbp - %d], %s\n", dst_offset - j * 8, r->r8);
-            break;
-          case 5:
-            printf("  mov [rbp - %d], %s\n", dst_offset - j * 8, r->r9);
-            break;
-          default:
-            assert(false);
-          }
+          printf("  mov [rbp - %d], %s\n", dst_offset - j * 8,
+                 get_int_arg_reg(r, int_reg_idx));
           int_reg_idx++;
         }
         continue;
