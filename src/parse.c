@@ -1404,7 +1404,6 @@ static Expr *new_expr_builtin_va_arg(Scope *scope __attribute__((unused)),
   }
 
   Type *va_list_type = get_typedef(scope, "__builtin_va_list");
-  ;
 
   Expr *ap = vec_get(argument, 0);
   Expr *type_expr = vec_get(argument, 1);

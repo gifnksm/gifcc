@@ -326,7 +326,7 @@ static void emit_lval(Expr *expr) {
     return;
   }
 
-  range_error(expr->range, "左辺値が変数ではありません");
+  range_error(expr->range, "左辺値が変数ではありません: %d", expr->ty);
 }
 
 static void emit_expr(Expr *expr) {
@@ -1393,14 +1393,17 @@ static void emit_stmt(Stmt *stmt) {
       int size = get_val_size(stmt->expr->val_type, stmt->expr->range);
       emit_stack_add(align(size, 8));
     }
-    assert(stack_pos == base_stack_pos);
-
+    range_assert(stmt->range, stack_pos == base_stack_pos,
+                 "stack position mismatch");
     return;
   }
   case ST_COMPOUND: {
+    int base_stack_pos = stack_pos;
     for (int i = 0; i < vec_len(stmt->stmts); i++) {
       emit_stmt(vec_get(stmt->stmts, i));
     }
+    range_assert(stmt->range, stack_pos == base_stack_pos,
+                 "stack position mismatch");
     return;
   }
   case ST_IF: {
@@ -1410,18 +1413,21 @@ static void emit_stmt(Stmt *stmt) {
     const Reg *r = get_int_reg(stmt->cond->val_type, stmt->cond->range);
     emit_expr(stmt->cond);
     emit_pop("rax");
-    assert(stack_pos == base_stack_pos);
+    range_assert(stmt->range, stack_pos == base_stack_pos,
+                 "stack position mismatch");
 
     printf("  cmp %s, 0\n", r->rax);
     printf("  je %s\n", else_label);
 
     emit_stmt(stmt->then_stmt);
-    assert(stack_pos == base_stack_pos);
+    range_assert(stmt->range, stack_pos == base_stack_pos,
+                 "stack position mismatch");
     printf("  jmp %s\n", end_label);
 
     printf("%s:\n", else_label);
     emit_stmt(stmt->else_stmt);
-    assert(stack_pos == base_stack_pos);
+    range_assert(stmt->range, stack_pos == base_stack_pos,
+                 "stack position mismatch");
 
     printf("%s:\n", end_label);
     return;
@@ -1436,13 +1442,15 @@ static void emit_stmt(Stmt *stmt) {
       emit_expr(case_expr->expr);
       emit_pop("rax");
       emit_pop("rdi");
-      assert(stack_pos == base_stack_pos);
+      range_assert(stmt->range, stack_pos == base_stack_pos,
+                   "stack position mismatch");
       printf("  cmp %s, %s\n", r->rax, r->rdi);
       printf("  je %s\n", case_expr->label);
       emit_push("rdi");
     }
     emit_pop("rdi");
-    assert(stack_pos == base_stack_pos);
+    range_assert(stmt->range, stack_pos == base_stack_pos,
+                 "stack position mismatch");
     if (stmt->default_case) {
       printf("  jmp %s\n", stmt->default_case->label);
     } else {
@@ -1451,7 +1459,8 @@ static void emit_stmt(Stmt *stmt) {
     vec_push(break_labels, end_label);
     emit_stmt(stmt->body);
     vec_pop(break_labels);
-    assert(stack_pos == base_stack_pos);
+    range_assert(stmt->range, stack_pos == base_stack_pos,
+                 "stack position mismatch");
     printf("%s:", end_label);
     return;
   }
@@ -1471,14 +1480,16 @@ static void emit_stmt(Stmt *stmt) {
     const Reg *r = get_int_reg(stmt->cond->val_type, stmt->cond->range);
     emit_expr(stmt->cond);
     emit_pop("rax");
-    assert(stack_pos == base_stack_pos);
+    range_assert(stmt->range, stack_pos == base_stack_pos,
+                 "stack position mismatch");
     printf("  cmp %s, 0\n", r->rax);
     printf("  je %s\n", end_label);
 
     vec_push(break_labels, end_label);
     vec_push(continue_labels, cond_label);
     emit_stmt(stmt->body);
-    assert(stack_pos == base_stack_pos);
+    range_assert(stmt->range, stack_pos == base_stack_pos,
+                 "stack position mismatch");
     vec_pop(break_labels);
     vec_pop(continue_labels);
 
@@ -1496,7 +1507,8 @@ static void emit_stmt(Stmt *stmt) {
     vec_push(break_labels, end_label);
     vec_push(continue_labels, cond_label);
     emit_stmt(stmt->body);
-    assert(stack_pos == base_stack_pos);
+    range_assert(stmt->range, stack_pos == base_stack_pos,
+                 "stack position mismatch");
     vec_pop(break_labels);
     vec_pop(continue_labels);
 
@@ -1504,7 +1516,8 @@ static void emit_stmt(Stmt *stmt) {
     const Reg *r = get_int_reg(stmt->cond->val_type, stmt->cond->range);
     emit_expr(stmt->cond);
     emit_pop("rax");
-    assert(stack_pos == base_stack_pos);
+    range_assert(stmt->range, stack_pos == base_stack_pos,
+                 "stack position mismatch");
 
     printf("  cmp %s, 0\n", r->rax);
     printf("  jne %s\n", loop_label);
@@ -1520,7 +1533,8 @@ static void emit_stmt(Stmt *stmt) {
     if (stmt->init != NULL) {
       emit_expr(stmt->init);
       emit_pop("rax");
-      assert(stack_pos == base_stack_pos);
+      range_assert(stmt->range, stack_pos == base_stack_pos,
+                   "stack position mismatch");
     }
     printf("%s:\n", cond_label);
     if (stmt->cond != NULL) {
@@ -1529,7 +1543,8 @@ static void emit_stmt(Stmt *stmt) {
       emit_pop("rax");
       printf("  cmp %s, 0\n", r->rax);
       printf("  je %s\n", end_label);
-      assert(stack_pos == base_stack_pos);
+      range_assert(stmt->range, stack_pos == base_stack_pos,
+                   "stack position mismatch");
     }
 
     vec_push(break_labels, end_label);
@@ -1537,13 +1552,15 @@ static void emit_stmt(Stmt *stmt) {
     emit_stmt(stmt->body);
     vec_pop(break_labels);
     vec_pop(continue_labels);
-    assert(stack_pos == base_stack_pos);
+    range_assert(stmt->range, stack_pos == base_stack_pos,
+                 "stack position mismatch");
 
     printf("%s:\n", inc_label);
     if (stmt->inc != NULL) {
       emit_expr(stmt->inc);
       emit_pop("rax");
-      assert(stack_pos == base_stack_pos);
+      range_assert(stmt->range, stack_pos == base_stack_pos,
+                   "stack position mismatch");
     }
     printf("  jmp %s\n", cond_label);
     printf("%s:\n", end_label);
@@ -1631,7 +1648,8 @@ static void emit_stmt(Stmt *stmt) {
         break;
       }
     }
-    assert(stack_pos == base_stack_pos);
+    range_assert(stmt->range, stack_pos == base_stack_pos,
+                 "stack position mismatch");
     printf("  jmp %s\n", epilogue_label);
     return;
   }
