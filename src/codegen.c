@@ -329,6 +329,43 @@ static void emit_lval(Expr *expr) {
   range_error(expr->range, "左辺値が変数ではありません: %d", expr->ty);
 }
 
+static void emit_assign(Type *type, const Range *range, Expr *dest, Expr *src) {
+  emit_expr(src);
+  emit_lval(dest);
+  emit_pop("rax");
+
+  int size = get_val_size(type, range);
+  int copy_size = 0;
+  while (size - copy_size > 0) {
+    switch (size - copy_size) {
+    case 1:
+      printf("  mov %s, [rsp + %d]\n", Reg1.rdi, copy_size);
+      printf("  mov [rax + %d], %s\n", copy_size, Reg1.rdi);
+      copy_size += 1;
+      break;
+    case 2:
+    case 3:
+      printf("  mov %s, [rsp + %d]\n", Reg2.rdi, copy_size);
+      printf("  mov [rax + %d], %s\n", copy_size, Reg2.rdi);
+      copy_size += 2;
+      break;
+    case 4:
+    case 5:
+    case 6:
+    case 7:
+      printf("  mov %s, [rsp + %d]\n", Reg4.rdi, copy_size);
+      printf("  mov [rax + %d], %s\n", copy_size, Reg4.rdi);
+      copy_size += 4;
+      break;
+    default:
+      printf("  mov %s, [rsp + %d]\n", Reg8.rdi, copy_size);
+      printf("  mov [rax + %d], %s\n", copy_size, Reg8.rdi);
+      copy_size += 8;
+      break;
+    }
+  }
+}
+
 static void emit_expr(Expr *expr) {
   if (expr->ty == EX_NUM) {
     if (expr->val_type->ty == TY_VOID) {
@@ -441,40 +478,7 @@ static void emit_expr(Expr *expr) {
   }
 
   if (expr->ty == EX_ASSIGN) {
-    emit_expr(expr->binop.rhs);
-    emit_lval(expr->binop.lhs);
-    emit_pop("rax");
-
-    int size = get_val_size(expr->val_type, expr->range);
-    int copy_size = 0;
-    while (size - copy_size > 0) {
-      switch (size - copy_size) {
-      case 1:
-        printf("  mov %s, [rsp + %d]\n", Reg1.rdi, copy_size);
-        printf("  mov [rax + %d], %s\n", copy_size, Reg1.rdi);
-        copy_size += 1;
-        break;
-      case 2:
-      case 3:
-        printf("  mov %s, [rsp + %d]\n", Reg2.rdi, copy_size);
-        printf("  mov [rax + %d], %s\n", copy_size, Reg2.rdi);
-        copy_size += 2;
-        break;
-      case 4:
-      case 5:
-      case 6:
-      case 7:
-        printf("  mov %s, [rsp + %d]\n", Reg4.rdi, copy_size);
-        printf("  mov [rax + %d], %s\n", copy_size, Reg4.rdi);
-        copy_size += 4;
-        break;
-      default:
-        printf("  mov %s, [rsp + %d]\n", Reg8.rdi, copy_size);
-        printf("  mov [rax + %d], %s\n", copy_size, Reg8.rdi);
-        copy_size += 8;
-        break;
-      }
-    }
+    emit_assign(expr->val_type, expr->range, expr->binop.lhs, expr->binop.rhs);
     return;
   }
 
@@ -789,7 +793,12 @@ static void emit_expr(Expr *expr) {
     range_error(expr->range, "not implemented");
   }
   if (expr->ty == EX_BUILTIN_VA_COPY) {
-    range_error(expr->range, "not implemented");
+    Type *type = new_type_builtin_va_list(expr->range);
+    int size = get_val_size(type, expr->range);
+    emit_assign(type, expr->range, expr->builtin_va_copy.dest,
+                expr->builtin_va_copy.src);
+    emit_stack_add(align(size, 8));
+    return;
   }
 
   // 二項演算子

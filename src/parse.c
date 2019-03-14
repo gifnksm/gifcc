@@ -1462,23 +1462,20 @@ static Expr *new_expr_builtin_va_copy(Scope *scope __attribute__((unused)),
                 narg, 2);
   }
 
-  Type *va_list_type = get_typedef(scope, "__builtin_va_list");
-
   Expr *dest = vec_get(argument, 0);
   Expr *src = vec_get(argument, 1);
 
-  dest = new_expr_cast(scope, va_list_type, dest, range);
   dest = coerce_array2ptr(scope, dest);
   dest = coerce_func2ptr(scope, dest);
 
-  src = new_expr_cast(scope, va_list_type, src, range);
   src = coerce_array2ptr(scope, src);
   src = coerce_func2ptr(scope, src);
 
   Type *type = new_type(TY_VOID, EMPTY_TYPE_QUALIFIER);
-  Expr *expr = new_expr(EX_BUILTIN_VA_START, type, range);
-  expr->builtin_va_copy.dest = dest;
-  expr->builtin_va_copy.src = src;
+  Expr *expr = new_expr(EX_BUILTIN_VA_COPY, type, range);
+  Expr *idx = new_expr_num(new_number_int(0), expr->range);
+  expr->builtin_va_copy.dest = new_expr_index(scope, dest, idx, dest->range);
+  expr->builtin_va_copy.src = new_expr_index(scope, src, idx, src->range);
   return expr;
 }
 
