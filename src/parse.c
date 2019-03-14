@@ -3458,21 +3458,13 @@ static Function *function_definition(Tokenizer *tokenizer, Scope *global_scope,
 
   Stmt *body = compound_statement(tokenizer, scope);
 
-  int stack_size = 0;
-  for (int i = 0; i < vec_len(fcx->var_list); i++) {
-    StackVar *svar = vec_get(fcx->var_list, i);
-    stack_size = align(stack_size, get_val_align(svar->type, svar->range));
-    svar->offset = stack_size;
-    stack_size += get_val_size(svar->type, svar->range);
-  }
-
   Function *func = NEW(Function);
   func->name = name;
   func->type = type;
   func->storage_class = scs;
   func->func = fs;
   func->range = range_join(start, body->range);
-  func->stack_size = stack_size;
+  func->var_list = fcx->var_list;
   func->label_map = fcx->label_map;
   func->body = body;
 

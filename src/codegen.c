@@ -12,6 +12,7 @@ static Function *func_ctxt = NULL;
 static Vector *break_labels = NULL;
 static Vector *continue_labels = NULL;
 static int stack_pos = INVALID_STACK_POS;
+static int retval_pos = INVALID_STACK_POS;
 
 static void emit_expr(Expr *expr);
 static void emit_expr_call(Expr *expr);
@@ -297,8 +298,7 @@ static void emit_lval(Expr *expr) {
   if (expr->ty == EX_STACK_VAR) {
     StackVar *var = expr->stack_var;
     assert(var != NULL);
-    printf("  lea rax, [rbp - %d]\n",
-           align(func_ctxt->stack_size, 16) - var->offset);
+    printf("  lea rax, [rbp - %d]\n", var->offset);
     emit_push("rax");
     return;
   }
@@ -395,7 +395,7 @@ static void emit_expr(Expr *expr) {
     int size = get_val_size(expr->val_type, expr->range);
     emit_stack_sub(align(size, 8));
 
-    int src_offset = align(func_ctxt->stack_size, 16) - var->offset;
+    int src_offset = var->offset;
     int copy_size = 0;
     while (size - copy_size > 0) {
       switch (size - copy_size) {
@@ -1613,7 +1613,7 @@ static void emit_stmt(Stmt *stmt) {
       case ARG_CLASS_MEMORY:
       case ARG_CLASS_X87:
         // 戻り値を格納するアドレス
-        printf("  mov rax, [rbp - %d]\n", align(func_ctxt->stack_size, 16) + 8);
+        printf("  mov rax, [rbp - %d]\n", retval_pos);
         int copy_size = 0;
         while (size - copy_size > 0) {
           switch (size - copy_size) {
@@ -1683,6 +1683,19 @@ static void emit_func(Function *func) {
   func_ctxt = func;
   break_labels = new_vector();
   continue_labels = new_vector();
+  retval_pos = INVALID_STACK_POS;
+
+  int stack_size = 0;
+  for (int i = 0; i < vec_len(func->var_list); i++) {
+    StackVar *svar = vec_get(func->var_list, i);
+    stack_size = align(stack_size, get_val_align(svar->type, svar->range));
+    svar->offset = stack_size;
+    stack_size += get_val_size(svar->type, svar->range);
+  }
+  for (int i = 0; i < vec_len(func->var_list); i++) {
+    StackVar *svar = vec_get(func->var_list, i);
+    svar->offset = align(stack_size, 16) - svar->offset;
+  }
 
   if (!func->storage_class.is_static) {
     printf(".global %s\n", func->name);
@@ -1694,7 +1707,7 @@ static void emit_func(Function *func) {
   printf("  push rbp\n");
   printf("  mov rbp, rsp\n");
   stack_pos = 0;
-  emit_stack_sub(align(func->stack_size, 16));
+  emit_stack_sub(align(stack_size, 16));
 
   int stack_offset = 0;
   int int_reg_idx = 0;
@@ -1709,6 +1722,7 @@ static void emit_func(Function *func) {
       emit_push("rdi");
       int_reg_idx++;
       stack_offset = 8;
+      retval_pos = stack_pos;
     }
   }
 
@@ -1723,7 +1737,7 @@ static void emit_func(Function *func) {
       assert(var != NULL);
       arg_class_t class = int_vec_get(param_class, i);
       int size = get_val_size(param->type, param->range);
-      int dst_offset = align(func_ctxt->stack_size, 16) - var->offset;
+      int dst_offset = var->offset;
 
       switch (class) {
       case ARG_CLASS_MEMORY:
@@ -1836,7 +1850,7 @@ static void emit_func(Function *func) {
 
   // エピローグ
   // 最後の式の結果がRAXに残っているのでそれが返り値になる
-  assert(stack_pos == align(func->stack_size, 16) + stack_offset);
+  assert(stack_pos == align(stack_size, 16) + stack_offset);
   printf("%s:\n", epilogue_label);
   printf("  mov rsp, rbp\n");
   printf("  pop rbp\n");

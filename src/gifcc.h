@@ -509,7 +509,7 @@ typedef struct Function {
   const Range *range;
   StorageClassSpecifier storage_class;
   FunctionSpecifier func;
-  int stack_size;
+  Vector *var_list;
   Map *label_map;
   Stmt *body;
 } Function;
