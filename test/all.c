@@ -2451,23 +2451,51 @@ static void test76(void) {
   CHECK_INT(6, test76_f(s));
 }
 
-// static int test77_sum(int n, ...) {
-//   int sum = 0;
-//   va_list ap;
-//   va_start(ap, n);
+static int test77_sum(int n, ...) {
+  int sum = 0;
+  va_list ap;
+  va_start(ap, n);
 
-//   for (int i = 0; i < n; i++) {
-//     sum += va_arg(ap, int);
-//   }
+  TEST_PRINTF("overflow_arg_area: %p", ((int **)ap)[1]);
+  TEST_PRINTF("reg_save_area: %p", ((int **)ap)[2]);
 
-//   va_end(ap);
-//   return sum;
-// }
+  for (int i = 0; i < n; i++) {
+    int x = va_arg(ap, int);
+    TEST_PRINTF("%d: %d", i, x);
+    TEST_PRINTF("gp_offset: %d, fp_offset: %d", ((int *)ap)[0], ((int *)ap)[1]);
+    sum += x;
+  }
+
+  va_end(ap);
+  return sum;
+}
+
+static int test77_sum2(int n, ...) {
+  int sum = 0;
+  va_list ap, aq;
+
+  va_start(ap, n);
+  va_copy(aq, ap);
+
+  for (int i = 0; i < n; i++) {
+    sum += va_arg(ap, int);
+  }
+
+  va_end(ap);
+
+  for (int i = 0; i < n; i++) {
+    sum += va_arg(aq, int);
+  }
+
+  va_end(aq);
+  return sum;
+}
 
 static void test77(void) {
-  // CHECK_INT(15, test76_sum(5, 1, 2, 3, 4, 5));
-  // CHECK_INT(0, test76_sum(0));
-  // CHECK_INT(55, test76_sum(10, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10));
+  CHECK_INT(15, test77_sum(5, 1, 2, 3, 4, 5));
+  CHECK_INT(0, test77_sum(0));
+  CHECK_INT(55, test77_sum(10, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10));
+  CHECK_INT(55, test77_sum(10, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10));
 }
 
 int main(void) {

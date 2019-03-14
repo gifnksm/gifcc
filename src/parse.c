@@ -1374,13 +1374,9 @@ static Expr *new_expr_builtin_va_start(Scope *scope,
                 narg, 2);
   }
 
-  Type *va_list_type = get_typedef(scope, "__builtin_va_list");
-  ;
-
   Expr *ap = vec_get(argument, 0);
   Expr *last = vec_get(argument, 1);
 
-  ap = new_expr_cast(scope, va_list_type, ap, range);
   ap = coerce_array2ptr(scope, ap);
   ap = coerce_func2ptr(scope, ap);
 
@@ -1403,12 +1399,9 @@ static Expr *new_expr_builtin_va_arg(Scope *scope __attribute__((unused)),
                 narg, 2);
   }
 
-  Type *va_list_type = get_typedef(scope, "__builtin_va_list");
-
   Expr *ap = vec_get(argument, 0);
   Expr *type_expr = vec_get(argument, 1);
 
-  ap = new_expr_cast(scope, va_list_type, ap, range);
   ap = coerce_array2ptr(scope, ap);
   ap = coerce_func2ptr(scope, ap);
 
@@ -1436,11 +1429,8 @@ static Expr *new_expr_builtin_va_end(Scope *scope __attribute__((unused)),
                 narg, 2);
   }
 
-  Type *va_list_type = get_typedef(scope, "__builtin_va_list");
-
   Expr *ap = vec_get(argument, 0);
 
-  ap = new_expr_cast(scope, va_list_type, ap, range);
   ap = coerce_array2ptr(scope, ap);
   ap = coerce_func2ptr(scope, ap);
 

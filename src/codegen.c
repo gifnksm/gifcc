@@ -7,20 +7,6 @@
 
 #define INVALID_STACK_POS INT_MIN
 
-static char *epilogue_label = NULL;
-static Function *func_ctxt = NULL;
-static Vector *break_labels = NULL;
-static Vector *continue_labels = NULL;
-static int stack_pos = INVALID_STACK_POS;
-static int retval_pos = INVALID_STACK_POS;
-
-static void emit_expr(Expr *expr);
-static void emit_expr_call(Expr *expr);
-static void emit_expr_binop_int(Expr *expr);
-static void emit_expr_binop_sse(Expr *expr);
-static void emit_expr_binop_x87(Expr *expr);
-static void emit_gvar(GlobalVar *gvar, Vector *gvar_list);
-
 typedef enum {
   ARG_CLASS_MEMORY,
   ARG_CLASS_INTEGER,
@@ -127,6 +113,29 @@ const SseOp SseOpSD = {
     .cvt_to_sd = NULL,
     .cvtt_from_si = "cvtsi2sd",
 };
+
+const int NUM_INT_REG = 6;
+const int NUM_SSE_REG = 8;
+
+static char *epilogue_label = NULL;
+static Function *func_ctxt = NULL;
+static Vector *break_labels = NULL;
+static Vector *continue_labels = NULL;
+static int stack_pos = INVALID_STACK_POS;
+static int retval_pos = INVALID_STACK_POS;
+static int reg_save_area_pos = INVALID_STACK_POS;
+static int reg_gp_offset = INVALID_STACK_POS;
+static int reg_fp_offset = INVALID_STACK_POS;
+static int overflow_arg_area_offset = INVALID_STACK_POS;
+
+static void emit_expr(Expr *expr);
+static arg_class_t classify_arg_type(const Type *type, const Range *range,
+                                     int *num_int, int *num_sse);
+static void emit_expr_call(Expr *expr);
+static void emit_expr_binop_int(Expr *expr);
+static void emit_expr_binop_sse(Expr *expr);
+static void emit_expr_binop_x87(Expr *expr);
+static void emit_gvar(GlobalVar *gvar, Vector *gvar_list);
 
 static bool is_int_reg_type(Type *type) {
   return is_ptr_type(type) || is_integer_type(type);
@@ -784,13 +793,105 @@ static void emit_expr(Expr *expr) {
     range_error(expr->range, "internal compiler error");
   }
   if (expr->ty == EX_BUILTIN_VA_START) {
-    range_error(expr->range, "not implemented");
+    Expr *ap = expr->builtin_va_start.ap;
+    range_assert(expr->range, is_ptr_type(ap->val_type),
+                 "va_list is not pointer");
+    emit_expr(ap);
+    emit_pop("rax");
+    const char *gp_offset = "[rax]";
+    const char *fp_offset = "[rax + 4]";
+    const char *overflow_arg_area = "[rax + 8]";
+    const char *reg_save_area = "[rax + 16]";
+    printf("  mov DWORD PTR %s, %d\n", gp_offset, reg_gp_offset);
+    printf("  mov DWORD PTR %s, %d\n", fp_offset, reg_fp_offset);
+    printf("  lea rdi, [rbp + %d]\n", overflow_arg_area_offset);
+    printf("  mov %s, rdi\n", overflow_arg_area);
+    printf("  lea rdi, [rbp - %d]\n", reg_save_area_pos);
+    printf("  mov %s, rdi\n", reg_save_area);
+    return;
   }
   if (expr->ty == EX_BUILTIN_VA_ARG) {
-    range_error(expr->range, "not implemented");
+    int num_int = 0;
+    int num_sse = 0;
+
+    Type *type = expr->builtin_va_arg.type;
+
+    Expr *ap = expr->builtin_va_arg.ap;
+    arg_class_t class =
+        classify_arg_type(type, expr->range, &num_int, &num_sse);
+
+    emit_expr(ap);
+    emit_pop("rcx");
+    const char *gp_offset = "[rcx]";
+    // const char *fp_offset = "[rcx + 4]";
+    const char *overflow_arg_area = "[rcx + 8]";
+    const char *reg_save_area = "[rcx + 16]";
+    const char *stack_label = NULL;
+    const char *fetch_label = make_label("va_arg.fetch");
+    int size = get_val_size(type, expr->range);
+    switch (class) {
+    case ARG_CLASS_MEMORY:
+    case ARG_CLASS_X87:
+      // do nothing
+      break;
+    case ARG_CLASS_INTEGER:
+      stack_label = make_label("va_arg.stack");
+      printf("  mov %s, %s\n", Reg4.rax, gp_offset);
+      printf("  cmp %s, %d\n", Reg4.rax, 8 * NUM_INT_REG - align(size, 8));
+      printf("  ja %s\n", stack_label);
+      printf("  lea %s, [rax + %d]\n", Reg4.rdx, align(size, 8));
+      printf("  add rax, %s\n", reg_save_area);
+      printf("  mov %s, %s\n", gp_offset, Reg4.rdx);
+      printf("  jmp %s\n", fetch_label);
+      break;
+    case ARG_CLASS_SSE:
+      stack_label = make_label("va_arg.stack");
+      range_error(expr->range, "not implemented");
+      break;
+    }
+    if (stack_label != NULL) {
+      printf("%s:\n", stack_label);
+    }
+    printf("  mov rax, %s\n", overflow_arg_area);
+    printf("  lea rdx, [rax + %d]\n", align(size, 8));
+    printf("  mov %s, rdx\n", overflow_arg_area);
+
+    printf("%s:\n", fetch_label);
+    emit_stack_sub(align(size, 8));
+    int copy_size = 0;
+    while (size - copy_size > 0) {
+      switch (size - copy_size) {
+      case 1:
+        printf("  mov %s, [rax + %d]\n", Reg1.rdx, copy_size);
+        printf("  mov [rsp + %d], %s\n", copy_size, Reg1.rdx);
+        copy_size += 1;
+        break;
+      case 2:
+      case 3:
+        printf("  mov %s, [rax + %d]\n", Reg2.rdx, copy_size);
+        printf("  mov [rsp + %d], %s\n", copy_size, Reg2.rdx);
+        copy_size += 2;
+        break;
+      case 4:
+      case 5:
+      case 6:
+      case 7:
+        printf("  mov %s, [rax + %d]\n", Reg4.rdx, copy_size);
+        printf("  mov [rsp + %d], %s\n", copy_size, Reg4.rdx);
+        copy_size += 4;
+        break;
+      default:
+        printf("  mov %s, [rax + %d]\n", Reg8.rdx, copy_size);
+        printf("  mov [rsp + %d], %s\n", copy_size, Reg8.rdx);
+        copy_size += 8;
+        break;
+      }
+    }
+    return;
   }
   if (expr->ty == EX_BUILTIN_VA_END) {
-    range_error(expr->range, "not implemented");
+    // nothing to do
+    return;
   }
   if (expr->ty == EX_BUILTIN_VA_COPY) {
     Type *type = new_type_builtin_va_list(expr->range);
@@ -824,8 +925,6 @@ static void emit_expr(Expr *expr) {
 
 static arg_class_t classify_arg_type(const Type *type, const Range *range,
                                      int *num_int, int *num_sse) {
-  const int NUM_INT_REG = 6;
-  const int NUM_SSE_REG = 8;
   switch (type->ty) {
   case TY_BOOL:
   case TY_CHAR:
@@ -1684,18 +1783,9 @@ static void emit_func(Function *func) {
   break_labels = new_vector();
   continue_labels = new_vector();
   retval_pos = INVALID_STACK_POS;
-
-  int stack_size = 0;
-  for (int i = 0; i < vec_len(func->var_list); i++) {
-    StackVar *svar = vec_get(func->var_list, i);
-    stack_size = align(stack_size, get_val_align(svar->type, svar->range));
-    svar->offset = stack_size;
-    stack_size += get_val_size(svar->type, svar->range);
-  }
-  for (int i = 0; i < vec_len(func->var_list); i++) {
-    StackVar *svar = vec_get(func->var_list, i);
-    svar->offset = align(stack_size, 16) - svar->offset;
-  }
+  reg_save_area_pos = INVALID_STACK_POS;
+  reg_gp_offset = INVALID_STACK_POS;
+  reg_fp_offset = INVALID_STACK_POS;
 
   if (!func->storage_class.is_static) {
     printf(".global %s\n", func->name);
@@ -1706,10 +1796,54 @@ static void emit_func(Function *func) {
   // スタックサイズ分の領域を確保する
   printf("  push rbp\n");
   printf("  mov rbp, rsp\n");
-  stack_pos = 0;
-  emit_stack_sub(align(stack_size, 16));
 
-  int stack_offset = 0;
+  // ローカル変数の領域確保
+  int stack_size = 0;
+  for (int i = 0; i < vec_len(func->var_list); i++) {
+    StackVar *svar = vec_get(func->var_list, i);
+    stack_size = align(stack_size, get_val_align(svar->type, svar->range));
+    svar->offset = stack_size;
+    stack_size += get_val_size(svar->type, svar->range);
+  }
+  for (int i = 0; i < vec_len(func->var_list); i++) {
+    StackVar *svar = vec_get(func->var_list, i);
+    svar->offset = align(stack_size, 16) - svar->offset;
+
+    const char *filename;
+    int line;
+    int column;
+    range_get_start(svar->range, &filename, &line, &column);
+    printf("  # %s:%d:%d\n", filename, line, column);
+    printf("  # [rbp - %d]: svar %s (%s:%d:%d)\n", svar->offset, svar->name,
+           filename, line, column);
+  }
+
+  stack_pos = 0;
+  int reg_save_area_size = 0;
+  if (func->type->func_has_varargs) {
+    reg_save_area_size += 8 * NUM_INT_REG + 16 * NUM_SSE_REG;
+  }
+  emit_stack_sub(align(stack_size, 16) + align(reg_save_area_size, 16));
+  if (func->type->func_has_varargs) {
+    reg_save_area_pos = stack_pos;
+    printf("  # [rbp - %d]: reg_save_area\n", stack_pos);
+
+    for (int i = 0; i < NUM_INT_REG; i++) {
+      printf("  mov [rbp - %d], %s\n", stack_pos - 8 * i,
+             get_int_arg_reg(&Reg8, i));
+    }
+    const char *end_label = make_label("skip_float_reg");
+    printf("  test al, al\n");
+    printf("  je %s\n", end_label);
+    for (int i = 0; i < NUM_SSE_REG; i++) {
+      printf("  movaps [rbp - %d], xmm%d\n",
+             stack_pos - 8 * NUM_INT_REG + 16 * i, i);
+    }
+    printf("%s:\n", end_label);
+  }
+
+  int arg_stack_offset = 16;
+  int ret_stack_offset = 0;
   int int_reg_idx = 0;
   int sse_reg_idx = 0;
   if (func->type->func_ret->ty != TY_VOID) {
@@ -1721,14 +1855,13 @@ static void emit_func(Function *func) {
       // 戻り値をメモリで返す場合は、格納先のポインタをpushしておく
       emit_push("rdi");
       int_reg_idx++;
-      stack_offset = 8;
+      ret_stack_offset = 8;
       retval_pos = stack_pos;
     }
   }
 
   // 引数をスタックへコピー
   if (func->type->func_param != NULL) {
-    int stack_offset = 16;
     IntVector *param_class =
         classify_param(func->type->func_param, int_reg_idx);
     for (int i = 0; i < vec_len(func->type->func_param); i++) {
@@ -1747,14 +1880,14 @@ static void emit_func(Function *func) {
           switch (size - copy_size) {
           case 1:
             printf("  mov %s, [rbp + %d]\n", Reg1.rax,
-                   stack_offset + copy_size);
+                   arg_stack_offset + copy_size);
             printf("  mov [rbp - %d], %s\n", dst_offset - copy_size, Reg1.rax);
             copy_size += 1;
             break;
           case 2:
           case 3:
             printf("  mov %s, [rbp + %d]\n", Reg2.rax,
-                   stack_offset + copy_size);
+                   arg_stack_offset + copy_size);
             printf("  mov [rbp - %d], %s\n", dst_offset - copy_size, Reg2.rax);
             copy_size += 2;
             break;
@@ -1763,19 +1896,19 @@ static void emit_func(Function *func) {
           case 6:
           case 7:
             printf("  mov %s, [rbp + %d]\n", Reg4.rax,
-                   stack_offset + copy_size);
+                   arg_stack_offset + copy_size);
             printf("  mov [rbp - %d], %s\n", dst_offset - copy_size, Reg4.rax);
             copy_size += 4;
             break;
           default:
             printf("  mov %s, [rbp + %d]\n", Reg8.rax,
-                   stack_offset + copy_size);
+                   arg_stack_offset + copy_size);
             printf("  mov [rbp - %d], %s\n", dst_offset - copy_size, Reg8.rax);
             copy_size += 8;
             break;
           }
         }
-        stack_offset += align(size, 8);
+        arg_stack_offset += align(size, 8);
         continue;
       }
       case ARG_CLASS_INTEGER: {
@@ -1839,6 +1972,13 @@ static void emit_func(Function *func) {
     }
   }
 
+  reg_gp_offset = 8 * int_reg_idx;
+  reg_fp_offset = 8 * NUM_INT_REG + 16 * sse_reg_idx;
+  overflow_arg_area_offset = arg_stack_offset;
+
+  printf("  # reg_gp_offset: %d\n", reg_gp_offset);
+  printf("  # reg_fp_offset: %d\n", reg_fp_offset);
+  printf("  # overflow_arg_area: [rbp + %d]\n", overflow_arg_area_offset);
   printf("  # %s body\n", func->name);
 
   emit_stmt(func->body);
@@ -1850,7 +1990,8 @@ static void emit_func(Function *func) {
 
   // エピローグ
   // 最後の式の結果がRAXに残っているのでそれが返り値になる
-  assert(stack_pos == align(stack_size, 16) + stack_offset);
+  assert(stack_pos == align(stack_size, 16) + align(reg_save_area_size, 16) +
+                          ret_stack_offset);
   printf("%s:\n", epilogue_label);
   printf("  mov rsp, rbp\n");
   printf("  pop rbp\n");
