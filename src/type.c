@@ -411,13 +411,9 @@ char *format_type(const Type *type, bool detail) {
       if (body->member_list != NULL) {
         type_str = format("%s {", type_str);
         for (int i = 0; i < vec_len(body->member_list); i++) {
-          if (i > 0) {
-            type_str = format("%s;", type_str);
-          }
           Member *member = vec_get(body->member_list, i);
-          type_str = format("%s%s %s", type_str,
+          type_str = format("%s %s %s;", type_str,
                             format_type(member->type, true), member->name);
-          printf(" %s", member->name);
         }
         type_str = format("%s }", type_str);
       } else {
