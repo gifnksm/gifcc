@@ -2144,6 +2144,9 @@ static void emit_gvar_init(Initializer *init, const Range *range,
         printf("  .long %d\n", expr->num.enum_val);
         break;
       case TY_LDOUBLE:
+        printf("  .quad %lu\n", expr->num.bytes[0]);
+        printf("  .quad %lu\n", expr->num.bytes[1]);
+        break;
       case TY_VOID:
       case TY_ARRAY:
       case TY_FUNC:
