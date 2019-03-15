@@ -15,6 +15,7 @@ typedef enum {
 } arg_class_t;
 
 typedef struct {
+  int size;
   const char *ptr;
   const char *rax;
   const char *rdi;
@@ -28,6 +29,7 @@ typedef struct {
 } Reg;
 
 const Reg Reg8 = {
+    .size = 8,
     .ptr = "QWORD PTR",
     .rax = "rax",
     .rdi = "rdi",
@@ -40,6 +42,7 @@ const Reg Reg8 = {
     .r11 = "r11",
 };
 const Reg Reg4 = {
+    .size = 4,
     .ptr = "DWORD PTR",
     .rax = "eax",
     .rdi = "edi",
@@ -52,6 +55,7 @@ const Reg Reg4 = {
     .r11 = "r11d",
 };
 const Reg Reg2 = {
+    .size = 2,
     .ptr = "WORD PTR",
     .rax = "ax",
     .rdi = "di",
@@ -64,6 +68,7 @@ const Reg Reg2 = {
     .r11 = "r11w",
 };
 const Reg Reg1 = {
+    .size = 1,
     .ptr = "BYTE PTR",
     .rax = "al",
     .rdi = "dil",
@@ -145,7 +150,22 @@ static bool is_sse_reg_type(Type *type) {
 }
 static bool is_x87_reg_type(Type *type) { return type->ty == TY_LDOUBLE; }
 
-static const Reg *get_int_reg_for_size(size_t size, const Range *range) {
+static const Reg *get_int_reg_for_copy(int size) {
+  assert(size > 0);
+  if (size >= 8) {
+    return &Reg8;
+  }
+  if (size >= 4) {
+    return &Reg4;
+  }
+  if (size >= 2) {
+    return &Reg2;
+  }
+  assert(size == 1);
+  return &Reg1;
+}
+
+static const Reg *get_int_reg_for_size(int size, const Range *range) {
   switch (size) {
   case 8:
     return &Reg8;
@@ -353,32 +373,10 @@ static void emit_assign(Type *type, const Range *range, Expr *dest, Expr *src) {
   int size = get_val_size(type, range);
   int copy_size = 0;
   while (size - copy_size > 0) {
-    switch (size - copy_size) {
-    case 1:
-      printf("  mov %s, [rsp + %d]\n", Reg1.rdi, copy_size);
-      printf("  mov [rax + %d], %s\n", copy_size, Reg1.rdi);
-      copy_size += 1;
-      break;
-    case 2:
-    case 3:
-      printf("  mov %s, [rsp + %d]\n", Reg2.rdi, copy_size);
-      printf("  mov [rax + %d], %s\n", copy_size, Reg2.rdi);
-      copy_size += 2;
-      break;
-    case 4:
-    case 5:
-    case 6:
-    case 7:
-      printf("  mov %s, [rsp + %d]\n", Reg4.rdi, copy_size);
-      printf("  mov [rax + %d], %s\n", copy_size, Reg4.rdi);
-      copy_size += 4;
-      break;
-    default:
-      printf("  mov %s, [rsp + %d]\n", Reg8.rdi, copy_size);
-      printf("  mov [rax + %d], %s\n", copy_size, Reg8.rdi);
-      copy_size += 8;
-      break;
-    }
+    const Reg *r = get_int_reg_for_copy(size - copy_size);
+    printf("  mov %s, [rsp + %d]\n", r->rdi, copy_size);
+    printf("  mov [rax + %d], %s\n", copy_size, r->rdi);
+    copy_size += r->size;
   }
 }
 
@@ -414,32 +412,10 @@ static void emit_expr(Expr *expr) {
     int src_offset = var->offset;
     int copy_size = 0;
     while (size - copy_size > 0) {
-      switch (size - copy_size) {
-      case 1:
-        printf("  mov %s, [rbp - %d]\n", Reg1.rax, src_offset - copy_size);
-        printf("  mov [rsp + %d], %s\n", copy_size, Reg1.rax);
-        copy_size += 1;
-        break;
-      case 2:
-      case 3:
-        printf("  mov %s, [rbp - %d]\n", Reg2.rax, src_offset - copy_size);
-        printf("  mov [rsp + %d], %s\n", copy_size, Reg2.rax);
-        copy_size += 2;
-        break;
-      case 4:
-      case 5:
-      case 6:
-      case 7:
-        printf("  mov %s, [rbp - %d]\n", Reg4.rax, src_offset - copy_size);
-        printf("  mov [rsp + %d], %s\n", copy_size, Reg4.rax);
-        copy_size += 4;
-        break;
-      default:
-        printf("  mov %s, [rbp - %d]\n", Reg8.rax, src_offset - copy_size);
-        printf("  mov [rsp + %d], %s\n", copy_size, Reg8.rax);
-        copy_size += 8;
-        break;
-      }
+      const Reg *r = get_int_reg_for_copy(size - copy_size);
+      printf("  mov %s, [rbp - %d]\n", r->rax, src_offset - copy_size);
+      printf("  mov [rsp + %d], %s\n", copy_size, r->rax);
+      copy_size += r->size;
     }
     return;
   }
@@ -452,32 +428,10 @@ static void emit_expr(Expr *expr) {
     int copy_size = 0;
 
     while (size - copy_size > 0) {
-      switch (size - copy_size) {
-      case 1:
-        printf("  mov %s, %s[rip + %d]\n", Reg1.rax, name, copy_size);
-        printf("  mov [rsp + %d], %s\n", copy_size, Reg1.rax);
-        copy_size += 1;
-        break;
-      case 2:
-      case 3:
-        printf("  mov %s, %s[rip + %d]\n", Reg2.rax, name, copy_size);
-        printf("  mov [rsp + %d], %s\n", copy_size, Reg2.rax);
-        copy_size += 2;
-        break;
-      case 4:
-      case 5:
-      case 6:
-      case 7:
-        printf("  mov %s, %s[rip + %d]\n", Reg4.rax, name, copy_size);
-        printf("  mov [rsp + %d], %s\n", copy_size, Reg4.rax);
-        copy_size += 4;
-        break;
-      default:
-        printf("  mov %s, %s[rip + %d]\n", Reg8.rax, name, copy_size);
-        printf("  mov [rsp + %d], %s\n", copy_size, Reg8.rax);
-        copy_size += 8;
-        break;
-      }
+      const Reg *r = get_int_reg_for_copy(size - copy_size);
+      printf("  mov %s, %s[rip + %d]\n", r->rax, name, copy_size);
+      printf("  mov [rsp + %d], %s\n", copy_size, r->rax);
+      copy_size += r->size;
     }
     return;
   }
@@ -509,69 +463,17 @@ static void emit_expr(Expr *expr) {
 
     int copy_size = 0;
     while (mem_size - copy_size > 0) {
-      switch (mem_size - copy_size) {
-      case 1:
-        printf("  mov %s, [rsp + %d]\n", Reg1.rax, offset + copy_size);
-        printf("  mov [rsp - %d], %s\n", align(mem_size, 8) - copy_size,
-               Reg1.rax);
-        copy_size += 1;
-        break;
-      case 2:
-      case 3:
-        printf("  mov %s, [rsp + %d]\n", Reg2.rax, offset + copy_size);
-        printf("  mov [rsp - %d], %s\n", align(mem_size, 8) - copy_size,
-               Reg2.rax);
-        copy_size += 2;
-        break;
-      case 4:
-      case 5:
-      case 6:
-      case 7:
-        printf("  mov %s, [rsp + %d]\n", Reg4.rax, offset + copy_size);
-        printf("  mov [rsp - %d], %s\n", align(mem_size, 8) - copy_size,
-               Reg4.rax);
-        copy_size += 4;
-        break;
-      default:
-        printf("  mov %s, [rsp + %d]\n", Reg8.rax, offset + copy_size);
-        printf("  mov [rsp - %d], %s\n", align(mem_size, 8) - copy_size,
-               Reg8.rax);
-        copy_size += 8;
-        break;
-      }
+      const Reg *r = get_int_reg_for_copy(mem_size - copy_size);
+      printf("  mov %s, [rsp + %d]\n", r->rax, offset + copy_size);
+      printf("  mov [rsp - %d], %s\n", align(mem_size, 8) - copy_size, r->rax);
+      copy_size += r->size;
     }
     copy_size = 0;
     while (mem_size - copy_size > 0) {
-      switch (mem_size - copy_size) {
-      case 1:
-        printf("  mov %s, [rsp - %d]\n", Reg1.rax,
-               align(mem_size, 8) - copy_size);
-        printf("  mov [rsp + %d], %s\n", size_diff + copy_size, Reg1.rax);
-        copy_size += 1;
-        break;
-      case 2:
-      case 3:
-        printf("  mov %s, [rsp - %d]\n", Reg2.rax,
-               align(mem_size, 8) - copy_size);
-        printf("  mov [rsp + %d], %s\n", size_diff + copy_size, Reg2.rax);
-        copy_size += 2;
-        break;
-      case 4:
-      case 5:
-      case 6:
-      case 7:
-        printf("  mov %s, [rsp - %d]\n", Reg4.rax,
-               align(mem_size, 8) - copy_size);
-        printf("  mov [rsp + %d], %s\n", size_diff + copy_size, Reg4.rax);
-        copy_size += 4;
-        break;
-      default:
-        printf("  mov %s, [rsp - %d]\n", Reg8.rax,
-               align(mem_size, 8) - copy_size);
-        printf("  mov [rsp + %d], %s\n", size_diff + copy_size, Reg8.rax);
-        copy_size += 8;
-        break;
-      }
+      const Reg *r = get_int_reg_for_copy(mem_size - copy_size);
+      printf("  mov %s, [rsp - %d]\n", r->rax, align(mem_size, 8) - copy_size);
+      printf("  mov [rsp + %d], %s\n", size_diff + copy_size, r->rax);
+      copy_size += r->size;
     }
     emit_stack_add(size_diff);
     return;
@@ -681,32 +583,10 @@ static void emit_expr(Expr *expr) {
 
     int copy_size = 0;
     while (size - copy_size > 0) {
-      switch (size - copy_size) {
-      case 1:
-        printf("  mov %s, [rax + %d]\n", Reg1.rdi, copy_size);
-        printf("  mov [rsp + %d], %s\n", copy_size, Reg1.rdi);
-        copy_size += 1;
-        break;
-      case 2:
-      case 3:
-        printf("  mov %s, [rax + %d]\n", Reg2.rdi, copy_size);
-        printf("  mov [rsp + %d], %s\n", copy_size, Reg2.rdi);
-        copy_size += 2;
-        break;
-      case 4:
-      case 5:
-      case 6:
-      case 7:
-        printf("  mov %s, [rax + %d]\n", Reg4.rdi, copy_size);
-        printf("  mov [rsp + %d], %s\n", copy_size, Reg4.rdi);
-        copy_size += 4;
-        break;
-      default:
-        printf("  mov %s, [rax + %d]\n", Reg8.rdi, copy_size);
-        printf("  mov [rsp + %d], %s\n", copy_size, Reg8.rdi);
-        copy_size += 8;
-        break;
-      }
+      const Reg *r = get_int_reg_for_copy(size - copy_size);
+      printf("  mov %s, [rax + %d]\n", r->rdi, copy_size);
+      printf("  mov [rsp + %d], %s\n", copy_size, r->rdi);
+      copy_size += r->size;
     }
     return;
   }
@@ -954,32 +834,10 @@ static void emit_expr(Expr *expr) {
     emit_stack_sub(align(size, 8));
     int copy_size = 0;
     while (size - copy_size > 0) {
-      switch (size - copy_size) {
-      case 1:
-        printf("  mov %s, [rax + %d]\n", Reg1.rdx, copy_size);
-        printf("  mov [rsp + %d], %s\n", copy_size, Reg1.rdx);
-        copy_size += 1;
-        break;
-      case 2:
-      case 3:
-        printf("  mov %s, [rax + %d]\n", Reg2.rdx, copy_size);
-        printf("  mov [rsp + %d], %s\n", copy_size, Reg2.rdx);
-        copy_size += 2;
-        break;
-      case 4:
-      case 5:
-      case 6:
-      case 7:
-        printf("  mov %s, [rax + %d]\n", Reg4.rdx, copy_size);
-        printf("  mov [rsp + %d], %s\n", copy_size, Reg4.rdx);
-        copy_size += 4;
-        break;
-      default:
-        printf("  mov %s, [rax + %d]\n", Reg8.rdx, copy_size);
-        printf("  mov [rsp + %d], %s\n", copy_size, Reg8.rdx);
-        copy_size += 8;
-        break;
-      }
+      const Reg *r = get_int_reg_for_copy(size - copy_size);
+      printf("  mov %s, [rax + %d]\n", r->rdx, copy_size);
+      printf("  mov [rsp + %d], %s\n", copy_size, r->rdx);
+      copy_size += r->size;
     }
     return;
   }
@@ -1809,32 +1667,10 @@ static void emit_stmt(Stmt *stmt) {
         printf("  mov rax, [rbp - %d]\n", retval_pos);
         int copy_size = 0;
         while (size - copy_size > 0) {
-          switch (size - copy_size) {
-          case 1:
-            printf("  mov %s, [rsp + %d]\n", Reg1.rdi, copy_size);
-            printf("  mov [rax + %d], %s\n", copy_size, Reg1.rdi);
-            copy_size += 1;
-            break;
-          case 2:
-          case 3:
-            printf("  mov %s, [rsp + %d]\n", Reg2.rdi, copy_size);
-            printf("  mov [rax + %d], %s\n", copy_size, Reg2.rdi);
-            copy_size += 2;
-            break;
-          case 4:
-          case 5:
-          case 6:
-          case 7:
-            printf("  mov %s, [rsp + %d]\n", Reg4.rdi, copy_size);
-            printf("  mov [rax + %d], %s\n", copy_size, Reg4.rdi);
-            copy_size += 4;
-            break;
-          default:
-            printf("  mov %s, [rsp + %d]\n", Reg8.rdi, copy_size);
-            printf("  mov [rax + %d], %s\n", copy_size, Reg8.rdi);
-            copy_size += 8;
-            break;
-          }
+          const Reg *r = get_int_reg_for_copy(size - copy_size);
+          printf("  mov %s, [rsp + %d]\n", r->rdi, copy_size);
+          printf("  mov [rax + %d], %s\n", copy_size, r->rdi);
+          copy_size += r->size;
         }
         emit_stack_add(align(size, 8));
         break;
@@ -1971,36 +1807,11 @@ static void emit_func(Function *func) {
       case ARG_CLASS_X87: {
         int copy_size = 0;
         while (size - copy_size > 0) {
-          switch (size - copy_size) {
-          case 1:
-            printf("  mov %s, [rbp + %d]\n", Reg1.rax,
-                   arg_stack_offset + copy_size);
-            printf("  mov [rbp - %d], %s\n", dst_offset - copy_size, Reg1.rax);
-            copy_size += 1;
-            break;
-          case 2:
-          case 3:
-            printf("  mov %s, [rbp + %d]\n", Reg2.rax,
-                   arg_stack_offset + copy_size);
-            printf("  mov [rbp - %d], %s\n", dst_offset - copy_size, Reg2.rax);
-            copy_size += 2;
-            break;
-          case 4:
-          case 5:
-          case 6:
-          case 7:
-            printf("  mov %s, [rbp + %d]\n", Reg4.rax,
-                   arg_stack_offset + copy_size);
-            printf("  mov [rbp - %d], %s\n", dst_offset - copy_size, Reg4.rax);
-            copy_size += 4;
-            break;
-          default:
-            printf("  mov %s, [rbp + %d]\n", Reg8.rax,
-                   arg_stack_offset + copy_size);
-            printf("  mov [rbp - %d], %s\n", dst_offset - copy_size, Reg8.rax);
-            copy_size += 8;
-            break;
-          }
+          const Reg *r = get_int_reg_for_copy(size - copy_size);
+          printf("  mov %s, [rbp + %d]\n", r->rax,
+                 arg_stack_offset + copy_size);
+          printf("  mov [rbp - %d], %s\n", dst_offset - copy_size, r->rax);
+          copy_size += r->size;
         }
         arg_stack_offset += align(size, 8);
         continue;
