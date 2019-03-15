@@ -2537,6 +2537,8 @@ static Test78_S test78_f(void) { return (Test78_S){1, 2, 3}; }
 
 static void test78(void) {
   CHECK_INT(6, test78_f().a + test78_f().b + test78_f().c);
+  Test78_S s = test78_f();
+  CHECK_INT(6, s.a + s.b + s.c);
 }
 
 int main(void) {

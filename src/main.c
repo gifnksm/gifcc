@@ -172,8 +172,7 @@ static void dump_expr(Expr *expr, int level) {
     dump_range_start(expr->range);
     dump_indent(level);
     dump_type(expr->val_type);
-    printf("(STACK_VAR %s@%d)\n", expr->stack_var->name,
-           expr->stack_var->offset);
+    printf("(STACK_VAR %s)\n", expr->stack_var->name);
     return;
   case EX_GLOBAL_VAR:
     dump_range_start(expr->range);
