@@ -133,7 +133,7 @@ static void dump_range_end(const Range *range) {
   printf("%s:%d:%d\t", filename, line, column);
 }
 static void dump_indent(int level) { printf("%*s", 2 * level, ""); }
-void dump_type(Type *ty) { printf("<%s>", format_type(ty, true)); }
+static void dump_type(Type *ty) { printf("<%s>", format_type(ty, true)); }
 static void dump_expr(Expr *expr, int level);
 static void dump_init(Initializer *init, const Range *range, int level);
 static void dump_unop_expr(Expr *expr, char *label, int level) {

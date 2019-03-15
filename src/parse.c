@@ -1725,10 +1725,22 @@ static Expr *new_expr_binop(Scope *scope, int op, Expr *lhs, Expr *rhs,
     }
     break;
   case EX_LOG_AND: {
+    lhs =
+        new_expr_binop(scope, EX_NOTEQ, lhs,
+                       new_expr_num(new_number_int(0), lhs->range), lhs->range);
+    rhs =
+        new_expr_binop(scope, EX_NOTEQ, rhs,
+                       new_expr_num(new_number_int(0), rhs->range), rhs->range);
     val_type = new_type(TY_S_INT, EMPTY_TYPE_QUALIFIER);
     break;
   }
   case EX_LOG_OR:
+    lhs =
+        new_expr_binop(scope, EX_NOTEQ, lhs,
+                       new_expr_num(new_number_int(0), lhs->range), lhs->range);
+    rhs =
+        new_expr_binop(scope, EX_NOTEQ, rhs,
+                       new_expr_num(new_number_int(0), rhs->range), rhs->range);
     val_type = new_type(TY_S_INT, EMPTY_TYPE_QUALIFIER);
     break;
   case EX_ASSIGN:

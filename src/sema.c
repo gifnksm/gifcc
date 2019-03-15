@@ -392,13 +392,18 @@ static void eval_binop_comp(Expr *expr) {
 
   Number lnum = lhs->num;
   Number rnum = rhs->num;
-  assert(lnum.type == rnum.type);
+  range_assert(expr->range, lnum.type == rnum.type,
+               "invalid number types: lhs=<%s:%d> rhs=<%s:%d>, op=%d",
+               format_type(lhs->val_type, false), lnum.type,
+               format_type(rhs->val_type, false), rnum.type, expr->ty);
+  range_assert(expr->range, expr->val_type->ty == TY_S_INT,
+               "expr type is not int: %s", format_type(expr->val_type, false));
 
   type_t type = lnum.type;
   expr_t op = expr->ty;
 
   expr->ty = EX_NUM;
-  expr->num = (Number){.type = type};
+  expr->num = (Number){.type = TY_S_INT};
 
   int *r = &expr->num.s_int_val;
 
