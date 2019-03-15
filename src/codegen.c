@@ -823,7 +823,7 @@ static void emit_expr(Expr *expr) {
     emit_expr(ap);
     emit_pop("rcx");
     const char *gp_offset = "[rcx]";
-    // const char *fp_offset = "[rcx + 4]";
+    const char *fp_offset = "[rcx + 4]";
     const char *overflow_arg_area = "[rcx + 8]";
     const char *reg_save_area = "[rcx + 16]";
     const char *stack_label = NULL;
@@ -846,7 +846,15 @@ static void emit_expr(Expr *expr) {
       break;
     case ARG_CLASS_SSE:
       stack_label = make_label("va_arg.stack");
-      range_error(expr->range, "not implemented");
+      printf("  mov %s, %s\n", Reg4.rax, fp_offset);
+      printf("  cmp %s, %d\n", Reg4.rax,
+             8 * NUM_INT_REG + 16 * NUM_SSE_REG - align(size, 16));
+      printf("  ja %s\n", stack_label);
+      printf("  lea %s, [rax + %d]\n", Reg4.rdx, align(size, 16));
+      printf("  add rax, %s\n", reg_save_area);
+      printf("  mov %s, %s\n", fp_offset, Reg4.rdx);
+      printf("  jmp %s\n", fetch_label);
+      break;
       break;
     }
     if (stack_label != NULL) {
@@ -1837,7 +1845,7 @@ static void emit_func(Function *func) {
     printf("  je %s\n", end_label);
     for (int i = 0; i < NUM_SSE_REG; i++) {
       printf("  movaps [rbp - %d], xmm%d\n",
-             stack_pos - 8 * NUM_INT_REG + 16 * i, i);
+             stack_pos - 8 * NUM_INT_REG - 16 * i, i);
     }
     printf("%s:\n", end_label);
   }

@@ -2470,6 +2470,14 @@ static int test77_sum(int n, ...) {
   return sum;
 }
 
+static int test77_sum_va(int n, va_list ap) {
+  int sum = 0;
+  for (int i = 0; i < n; i++) {
+    sum += va_arg(ap, int);
+  }
+  return sum;
+}
+
 static int test77_sum2(int n, ...) {
   int sum = 0;
   va_list ap, aq;
@@ -2482,20 +2490,39 @@ static int test77_sum2(int n, ...) {
   }
 
   va_end(ap);
-
-  for (int i = 0; i < n; i++) {
-    sum += va_arg(aq, int);
-  }
-
+  sum += test77_sum_va(n, aq);
   va_end(aq);
   return sum;
+}
+
+static double test77_sum_double(int n, ...) {
+  va_list ap;
+  va_start(ap, n);
+  double sum = 0;
+  for (int i = 0; i < n; i++) {
+    sum += va_arg(ap, double);
+  }
+  return sum;
+}
+
+static void test77_vprintf(const char *fmt, ...) {
+  va_list ap;
+  va_start(ap, fmt);
+  vprintf(fmt, ap);
+  va_end(ap);
 }
 
 static void test77(void) {
   CHECK_INT(15, test77_sum(5, 1, 2, 3, 4, 5));
   CHECK_INT(0, test77_sum(0));
   CHECK_INT(55, test77_sum(10, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10));
-  CHECK_INT(55, test77_sum(10, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10));
+  CHECK_INT(110, test77_sum2(10, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10));
+  CHECK_INT(110, test77_sum2(10, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10));
+  CHECK_INT(7, test77_sum_double(5, 0.5, 1.0, 1.5, 2.0, 2.5));
+  CHECK_INT(27, test77_sum_double(10, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0,
+                                  4.5, 5.0));
+  test77_vprintf("    %d %d %s %s %d %d %s %f %f %f\n", 1, 3, "foo", "bar", 8,
+                 10, "baz", 1.8, 2.0, 3.0);
 }
 
 int main(void) {
