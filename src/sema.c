@@ -642,6 +642,9 @@ static void walk_expr(Expr *expr) {
   case EX_POST_DEC:
     walk_expr(expr->unop.operand);
     return;
+  case EX_DOT:
+    walk_expr(expr->dot.operand);
+    return;
 
   case EX_ADD:
   case EX_SUB:
@@ -794,6 +797,7 @@ static void walk_expr(Expr *expr) {
     walk_expr(expr->builtin_va_copy.src);
     return;
   }
+  range_error(expr->range, "Unknown expr type %d", expr->ty);
 }
 
 static void walk_stmt(Stmt *stmt) {

@@ -249,6 +249,19 @@ static void dump_expr(Expr *expr, int level) {
   case EX_POST_DEC:
     dump_unop_expr(expr, "[--(POST)]", level);
     return;
+  case EX_DOT:
+    dump_range_start(expr->range);
+    dump_indent(level);
+    dump_type(expr->val_type);
+    printf("(DOT\n");
+    dump_expr(expr->dot.operand, level + 1);
+    dump_range_end(expr->range);
+    dump_indent(level);
+    printf("%s\n", expr->dot.member->name);
+    dump_range_end(expr->range);
+    dump_indent(level);
+    printf(")\n");
+    return;
 
   // binary operator
   case EX_ADD:

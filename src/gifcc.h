@@ -240,6 +240,7 @@ typedef enum {
   EX_CALL,
   EX_POST_INC,
   EX_POST_DEC,
+  EX_DOT,
 
   // binary operator
   EX_ADD,
@@ -407,6 +408,12 @@ typedef struct Expr {
       Expr *callee;
       Vector *argument;
     } call;
+
+    // EX_DOT
+    struct {
+      Expr *operand;
+      Member *member;
+    } dot;
 
     // EX_COND
     struct {

@@ -158,8 +158,7 @@ static Expr *new_expr_cond(Scope *scope, Expr *cond, Expr *then_expr,
                            Expr *else_expr, const Range *range);
 static Expr *new_expr_index(Scope *scope, Expr *array, Expr *index,
                             const Range *range);
-static Expr *new_expr_dot(Scope *scope, Expr *operand, const char *name,
-                          const Range *range);
+static Expr *new_expr_dot(Expr *operand, const char *name, const Range *range);
 static Expr *new_expr_arrow(Scope *scope, Expr *operand, const char *name,
                             const Range *range);
 static Stmt *new_stmt(int ty, const Range *range);
@@ -1868,13 +1867,19 @@ static Expr *new_expr_index(Scope *scope, Expr *array, Expr *index,
                         range);
 }
 
-static Expr *new_expr_dot(Scope *scope, Expr *operand, const char *name,
-                          const Range *range) {
+static Expr *new_expr_dot(Expr *operand, const char *name, const Range *range) {
   if (operand->val_type->ty != TY_STRUCT && operand->val_type->ty != TY_UNION) {
     range_error(range, "構造体または共用体以外のメンバへのアクセスです");
   }
-  return new_expr_arrow(
-      scope, new_expr_unary(scope, EX_ADDRESS, operand, range), name, range);
+
+  StructBody *body = operand->val_type->struct_body;
+  Member *member =
+      body->member_name_map ? map_get(body->member_name_map, name) : NULL;
+
+  Expr *expr = new_expr(EX_DOT, member->type, range);
+  expr->dot.operand = operand;
+  expr->dot.member = member;
+  return expr;
 }
 
 static Expr *new_expr_arrow(Scope *scope, Expr *operand, const char *name,
@@ -2185,7 +2190,7 @@ static Expr *postfix_expression(Tokenizer *tokenizer, Scope *scope) {
 
     if (token_consume(tokenizer, '.')) {
       Token *member = token_expect(tokenizer, TK_IDENT);
-      expr = new_expr_dot(scope, expr, member->ident,
+      expr = new_expr_dot(expr, member->ident,
                           range_join(expr->range, member->range));
       continue;
     }
@@ -3347,8 +3352,7 @@ static void gen_init(Scope *scope, Expr **expr, Initializer *init, Expr *dest,
       const char *name = member->name;
       Initializer *meminit =
           init != NULL ? map_get_by_index(init->members, i, &name) : NULL;
-      Expr *mem =
-          name != NULL ? new_expr_dot(scope, dest, name, dest->range) : dest;
+      Expr *mem = name != NULL ? new_expr_dot(dest, name, dest->range) : dest;
       gen_init(scope, expr, meminit, mem, member->type);
     }
     return;
@@ -3359,8 +3363,7 @@ static void gen_init(Scope *scope, Expr **expr, Initializer *init, Expr *dest,
       for (int i = 0; i < map_size(init->members); i++) {
         const char *name;
         Initializer *meminit = map_get_by_index(init->members, i, &name);
-        Expr *mem =
-            name != NULL ? new_expr_dot(scope, dest, name, dest->range) : dest;
+        Expr *mem = name != NULL ? new_expr_dot(dest, name, dest->range) : dest;
         Type *type = meminit->type;
         gen_init(scope, expr, meminit, mem, type);
       }
@@ -3368,7 +3371,7 @@ static void gen_init(Scope *scope, Expr **expr, Initializer *init, Expr *dest,
       if (vec_len(body->member_list) > 0) {
         Member *member = vec_get(body->member_list, 0);
         Expr *mem = member->name != NULL
-                        ? new_expr_dot(scope, dest, member->name, dest->range)
+                        ? new_expr_dot(dest, member->name, dest->range)
                         : dest;
         Type *type = member->type;
         gen_init(scope, expr, NULL, mem, type);

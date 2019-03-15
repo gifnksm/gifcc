@@ -320,6 +320,13 @@ static void emit_lval(Expr *expr) {
     emit_expr(expr->unop.operand);
     return;
   }
+  if (expr->ty == EX_DOT) {
+    emit_lval(expr->dot.operand);
+    emit_pop("rax");
+    printf("  lea rax, [rax + %d]\n", expr->dot.member->offset);
+    emit_push("rax");
+    return;
+  }
   if (expr->ty == EX_COMMA) {
     Vector *exprs = expr->comma.exprs;
     for (int i = 0; i < vec_len(exprs); i++) {
@@ -488,6 +495,85 @@ static void emit_expr(Expr *expr) {
 
   if (expr->ty == EX_ASSIGN) {
     emit_assign(expr->val_type, expr->range, expr->binop.lhs, expr->binop.rhs);
+    return;
+  }
+
+  if (expr->ty == EX_DOT) {
+    Expr *operand = expr->dot.operand;
+    Member *member = expr->dot.member;
+    int size = get_val_size(operand->val_type, operand->range);
+    int offset = member->offset;
+    int mem_size = get_val_size(member->type, expr->range);
+    int size_diff = align(size, 8) - align(mem_size, 8);
+    emit_expr(expr->dot.operand);
+
+    int copy_size = 0;
+    while (mem_size - copy_size > 0) {
+      switch (mem_size - copy_size) {
+      case 1:
+        printf("  mov %s, [rsp + %d]\n", Reg1.rax, offset + copy_size);
+        printf("  mov [rsp - %d], %s\n", align(mem_size, 8) - copy_size,
+               Reg1.rax);
+        copy_size += 1;
+        break;
+      case 2:
+      case 3:
+        printf("  mov %s, [rsp + %d]\n", Reg2.rax, offset + copy_size);
+        printf("  mov [rsp - %d], %s\n", align(mem_size, 8) - copy_size,
+               Reg2.rax);
+        copy_size += 2;
+        break;
+      case 4:
+      case 5:
+      case 6:
+      case 7:
+        printf("  mov %s, [rsp + %d]\n", Reg4.rax, offset + copy_size);
+        printf("  mov [rsp - %d], %s\n", align(mem_size, 8) - copy_size,
+               Reg4.rax);
+        copy_size += 4;
+        break;
+      default:
+        printf("  mov %s, [rsp + %d]\n", Reg8.rax, offset + copy_size);
+        printf("  mov [rsp - %d], %s\n", align(mem_size, 8) - copy_size,
+               Reg8.rax);
+        copy_size += 8;
+        break;
+      }
+    }
+    copy_size = 0;
+    while (mem_size - copy_size > 0) {
+      switch (mem_size - copy_size) {
+      case 1:
+        printf("  mov %s, [rsp - %d]\n", Reg1.rax,
+               align(mem_size, 8) - copy_size);
+        printf("  mov [rsp + %d], %s\n", size_diff + copy_size, Reg1.rax);
+        copy_size += 1;
+        break;
+      case 2:
+      case 3:
+        printf("  mov %s, [rsp - %d]\n", Reg2.rax,
+               align(mem_size, 8) - copy_size);
+        printf("  mov [rsp + %d], %s\n", size_diff + copy_size, Reg2.rax);
+        copy_size += 2;
+        break;
+      case 4:
+      case 5:
+      case 6:
+      case 7:
+        printf("  mov %s, [rsp - %d]\n", Reg4.rax,
+               align(mem_size, 8) - copy_size);
+        printf("  mov [rsp + %d], %s\n", size_diff + copy_size, Reg4.rax);
+        copy_size += 4;
+        break;
+      default:
+        printf("  mov %s, [rsp - %d]\n", Reg8.rax,
+               align(mem_size, 8) - copy_size);
+        printf("  mov [rsp + %d], %s\n", size_diff + copy_size, Reg8.rax);
+        copy_size += 8;
+        break;
+      }
+    }
+    emit_stack_add(size_diff);
     return;
   }
 

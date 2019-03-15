@@ -928,6 +928,8 @@ static void test26(void) {
   s.x = 3;
   s.y = 5;
 
+  CHECK_INT(3, s.x);
+  CHECK_INT(5, s.y);
   CHECK_INT(8, s.x + s.y);
 
   struct {
@@ -2523,6 +2525,18 @@ static void test77(void) {
                                   4.5, 5.0));
   test77_vprintf("    %d %d %s %s %d %d %s %f %f %f\n", 1, 3, "foo", "bar", 8,
                  10, "baz", 1.8, 2.0, 3.0);
+}
+
+typedef struct Test78_S {
+  int a;
+  int b;
+  int c;
+} Test78_S;
+
+static Test78_S test78_f(void) { return (Test78_S){1, 2, 3}; }
+
+static void test78(void) {
+  CHECK_INT(6, test78_f().a + test78_f().b + test78_f().c);
 }
 
 int main(void) {
