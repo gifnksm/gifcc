@@ -903,17 +903,17 @@ static arg_class_t classify_arg_type(const Type *type, const Range *range,
     int size = get_val_size(type, range);
     if (size > 16) {
       return ARG_CLASS_MEMORY;
-    } else {
-      if (size > 8 && *num_int + 2 <= NUM_INT_REG) {
-        (*num_int) += 2;
-        return ARG_CLASS_INTEGER;
-      }
-      if (size <= 8 && *num_int + 1 <= NUM_INT_REG) {
-        (*num_int)++;
-        return ARG_CLASS_INTEGER;
-      }
-      return ARG_CLASS_MEMORY;
     }
+    if (size > 8 && *num_int + 2 <= NUM_INT_REG) {
+      (*num_int) += 2;
+      return ARG_CLASS_INTEGER;
+    }
+    if (size <= 8 && *num_int + 1 <= NUM_INT_REG) {
+      (*num_int)++;
+      return ARG_CLASS_INTEGER;
+    }
+    return ARG_CLASS_MEMORY;
+
     break;
   }
   case TY_FLOAT:
