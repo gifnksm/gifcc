@@ -88,7 +88,7 @@ static const LongToken LONG_PUNCT_TOKENS[] = {
     {"/=", TK_DIV_ASSIGN}, {"%=", TK_MOD_ASSIGN}, {"->", TK_ARROW},
     {"...", TK_ELIPSIS},   {"##", TK_HASH_HASH},  {NULL, '\0'},
 };
-static const char *SHORT_PUNCT_TOKENS = "=!<>&|^+-*/%();?:~{}[],.#";
+static const char *SHORT_PUNCT_TOKENS = "=!<>&|^+-*/%();?:~{}[],.#\\";
 
 static bool do_read_token(Tokenizer *tokenizer, Token **token, bool skip_eol,
                           bool check_pp_cond);
