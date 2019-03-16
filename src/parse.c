@@ -2964,7 +2964,7 @@ static void array_initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
   }
 
   Token *str;
-  if ((str = token_consume(tokenizer, TK_STR)) != NULL) {
+  if (!brace_root && (str = token_consume(tokenizer, TK_STR)) != NULL) {
     if (type->ptrof->ty != TY_CHAR && type->ptrof->ty != TY_S_CHAR &&
         type->ptrof->ty != TY_U_CHAR) {
       range_error(str->range,
