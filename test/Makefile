@@ -1,4 +1,4 @@
-OUTDIR=../target/test/$(STAGE)
+OUTDIR=../target/$(STAGE)/test
 GIFCC=../target/$(STAGE)/gifcc
 
 HEADERS=$(wildcard *.h)

@@ -6,9 +6,9 @@ SRCS=$(wildcard src/*.c)
 STAGE1_OBJS=$(patsubst src/%.c,$(OUTDIR)/stage1/%.o,$(SRCS))
 STAGE1_DEPS=$(patsubst src/%.c,$(OUTDIR)/stage1/%.d,$(SRCS))
 
-STAGE2_TOKEN=$(patsubst src/%.c,$(OUTDIR)/stage2/%.token,$(SRCS))
-STAGE2_AST=$(patsubst src/%.c,$(OUTDIR)/stage2/%.ast,$(SRCS))
-STAGE2_SEMA=$(patsubst src/%.c,$(OUTDIR)/stage2/%.sema,$(SRCS))
+STAGE2_TOKENS=$(patsubst src/%.c,$(OUTDIR)/stage2/%.token,$(SRCS))
+STAGE2_ASTS=$(patsubst src/%.c,$(OUTDIR)/stage2/%.ast,$(SRCS))
+STAGE2_SEMAS=$(patsubst src/%.c,$(OUTDIR)/stage2/%.sema,$(SRCS))
 STAGE2_ASMS=$(patsubst src/%.c,$(OUTDIR)/stage2/%.s,$(SRCS))
 STAGE2_OBJS=$(patsubst src/%.c,$(OUTDIR)/stage2/%.o,$(SRCS))
 
@@ -35,33 +35,50 @@ endif
 
 all: stage1
 .PHONY: all
-
-test:
+test: gcc-test stage1-test
 .PHONY: test
-test-full:
+test-full: test stage1-test-full
 .PHONY: test-full
 
-stage1: $(STAGE1_GIFCC)
+stage1: $(STAGE1_GIFCC) target/stage1/
 .PHONY: stage1
 
-stage2: $(STAGE2_GIFCC) $(STAGE2_TOKEN) $(STAGE2_AST) $(STAGE2_SEMA)
+stage2: $(STAGE2_GIFCC) $(STAGE2_TOKENS) $(STAGE2_ASTS) $(STAGE2_SEMAS) $(STAGE2_ASMS) target/stage2/
 .PHONY: stage2
 
-stage1-test-gifcc: $(STAGE1_GIFCC)
-	$< --test
-.PHONY: stage1-test-gifcc
-test: stage1-test-gifcc
+gcc-test:
+.PHONY: gcc-test
 
-stage1-test-compile: $(STAGE1_GIFCC)
-	$(MAKE) -C test STAGE=stage1 gcc-run
-	$(MAKE) -C test STAGE=stage1 run
-.PHONY: stage1-test-compile
-test: stage1-test-compile
+gcc-test-compile:
+	$(MAKE) -C test gcc-run STAGE=gcc
+.PHONY: gcc-test-compile
+gcc-test: gcc-test-compile
 
-stage1-test-c-testsuite: $(STAGE1_GIFCC)
-	./scripts/run_c-testsuite stage1
-.PHONY: stage1-test-c-testsuite
-test-full: stage1-test-c-testsuite
+define stage-test
+stage$(1)-test:
+.PHONY: stage$(1)-test
+
+stage$(1)-test-full:
+.PHONY: stage$(1)-test-full
+
+stage$(1)-test-gifcc: $(STAGE$(1)_GIFCC)
+	$$< --test
+.PHONY: stage$(1)-test-gifcc
+stage$(1)-test: stage$(1)-test-gifcc
+
+stage$(1)-test-compile: $(STAGE$(1)_GIFCC)
+	$(MAKE) -C test STAGE=stage$(1) run
+.PHONY: stage$(1)-test-compile
+stage$(1)-test: stage$(1)-test-compile
+
+stage$(1)-test-c-testsuite: $(STAGE$(1)_GIFCC)
+	./scripts/run_c-testsuite stage$(1)
+.PHONY: stage$(1)-test-c-testsuite
+stage$(1)-test-full: stage$(1)-test-c-testsuite
+endef
+
+$(eval $(call stage-test,1))
+$(eval $(call stage-test,2))
 
 clean:
 	$(RM) -r target $(GEN_HDRS)

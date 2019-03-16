@@ -13,6 +13,8 @@ t=$1
 
 cat $t
 
+which gifcc
+
 set -x
 
 if ! gifcc "$t" > "$t.s"
