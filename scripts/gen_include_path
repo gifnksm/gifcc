@@ -1,0 +1,21 @@
+#!/bin/bash -ex
+
+REPOROOT="$(git rev-parse --show-toplevel)"
+OUTPUT="$1"
+
+INCLUDE_PATH="${REPOROOT}/include"
+
+cat <<EOF > "${OUTPUT}.tmp"
+#ifndef GIFCC_INCLUDE_H
+#define GIFCC_INCLUDE_H
+
+#define GIFCC_INCLUDE "${INCLUDE_PATH}"
+
+#endif // GIFCC_INCLUDE_H
+EOF
+
+if ! [ -e "${OUTPUT}" ] || ! diff "${OUTPUT}" "${OUTPUT}.tmp"; then
+    mv "${OUTPUT}.tmp" "${OUTPUT}"
+else
+    rm "${OUTPUT}.tmp"
+fi

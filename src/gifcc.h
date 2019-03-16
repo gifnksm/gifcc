@@ -1,6 +1,8 @@
 #ifndef GIFCC_H
 #define GIFCC_H
 
+#include "include_path.h"
+
 #include <assert.h>
 #include <stdbool.h>
 #include <stddef.h>

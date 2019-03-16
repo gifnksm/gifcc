@@ -1,7 +1,8 @@
 OUTDIR=./target
 
-CFLAGS=-Wall -Wextra -std=c11 -g3 -D_POSIX_C_SOURCE=201809L -MMD -fdiagnostics-color -DGIFCC_INCLUDE=\"$(abspath ./include)\"
+CFLAGS=-Wall -Wextra -std=c11 -g3 -D_POSIX_C_SOURCE=201809L -MMD -fdiagnostics-color
 
+GEN_HDRS=src/include_path.h
 SRCS=$(wildcard src/*.c)
 OBJS=$(patsubst src/%.c,$(OUTDIR)/%.o,$(SRCS))
 DEPS=$(patsubst src/%.c,$(OUTDIR)/%.d,$(SRCS))
@@ -22,6 +23,12 @@ all: $(OUTDIR)/gifcc
 
 $(OUTDIR)/gifcc: $(OBJS)
 	$(CC) $(LDFLAGS) -o $@ $^
+
+src/include_path.h: FORCE
+	scripts/gen_include_path $@
+
+FORCE:
+.PHONY: FORCE
 
 test:
 .PHONY: test
@@ -46,7 +53,7 @@ test-c-testsuite: $(OUTDIR)/gifcc
 test-full: test-c-testsuite
 
 clean:
-	$(RM) -r target
+	$(RM) -r target $(GEN_HDRS)
 .PHONY: clean
 
 format:
@@ -61,7 +68,7 @@ lcov:
 	lcov --capture --directory . --output-file target/coverage.info
 	genhtml target/coverage.info --output-directory target/html
 
-$(OUTDIR)/%.o: src/%.c | $(OUTDIR)/
+$(OUTDIR)/%.o: src/%.c $(GEN_HDRS) Makefile | $(OUTDIR)/
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 %/:

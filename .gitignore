@@ -3,3 +3,4 @@ GTAGS
 GRTAGS
 GPATH
 target
+src/include_path.h*
