@@ -1,8 +1,9 @@
 #!/bin/bash -eu
 
+STAGE=$1
 CURDIR=$(readlink -f $(dirname $0))
 REPOROOT=$(readlink -f ${CURDIR}/..)
-PATH="$(readlink -f ${CURDIR}/../target):${PATH}"
+PATH="$(readlink -f ${CURDIR}/../target/${STAGE}):${PATH}"
 
 cd ${REPOROOT}
 git submodule update --init
@@ -13,7 +14,7 @@ if ! [ -d ./.tmsu ]; then
 fi
 
 cp ${REPOROOT}/scripts/gifcc-x86_64 ${REPOROOT}/external/c-testsuite/runners/single-exec/
-OUTPUT="${REPOROOT}/target/c-testsuite"
+OUTPUT="${REPOROOT}/target/${STAGE}/c-testsuite"
 ./single-exec gifcc-x86_64 | tee ${OUTPUT} | grep -v '^#'
 
 PASS="$(grep '^ok' ${OUTPUT} | grep -v '# SKIP' | wc -l)"

@@ -28,7 +28,7 @@ jobs:
       - run: make test-full
       - run:
           command: |
-            mkdir -p target/test-results/c-testsuite
-            tap-xunit < target/c-testsuite > target/test-results/c-testsuite/results.xml || true
+            mkdir -p target/test-results/stage1-c-testsuite
+            tap-xunit < target/stage1/c-testsuite > target/test-results/stage1-c-testsuite/results.xml || true
       - store_test_results:
           path: target/test-results

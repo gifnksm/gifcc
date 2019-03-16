@@ -1,5 +1,5 @@
-OUTDIR=../target/test
-GIFCC=../target/gifcc
+OUTDIR=../target/test/$(STAGE)
+GIFCC=../target/$(STAGE)/gifcc
 
 HEADERS=$(wildcard *.h)
 SRCS=$(wildcard *.c)
