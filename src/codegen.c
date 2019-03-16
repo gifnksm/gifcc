@@ -87,6 +87,7 @@ typedef struct {
   const char *sub;
   const char *mul;
   const char *div;
+  const char * xor ;
   const char *comi;
   const char *cvtt_to_si;
   const char *cvt_to_ss;
@@ -100,6 +101,7 @@ const SseOp SseOpSS = {
     .sub = "subss",
     .mul = "mulss",
     .div = "divss",
+    .xor = "xorps",
     .comi = "comiss",
     .cvtt_to_si = "cvttss2si",
     .cvt_to_ss = NULL,
@@ -112,6 +114,7 @@ const SseOp SseOpSD = {
     .sub = "subsd",
     .mul = "mulsd",
     .div = "divsd",
+    .xor = "xorpd",
     .comi = "comisd",
     .cvtt_to_si = "cvttsd2si",
     .cvt_to_ss = "cvtsd2ss",
@@ -590,6 +593,7 @@ static void emit_expr_num(Expr *expr) {
   if (expr->val_type->ty == TY_VOID) {
     return;
   }
+
   int size = get_val_size(expr->val_type, expr->range);
   if (size < 4) {
     emit_push(num2str(expr->num, expr->range));
@@ -953,9 +957,41 @@ static void emit_expr_indirect(Expr *expr) {
 static void emit_expr_minus(Expr *expr) {
   assert(expr->ty == EX_MINUS);
 
-  const Reg *r = get_int_reg(expr->val_type, expr->range);
   emit_expr(expr->unop.operand);
-  printf("  neg %s [rsp]\n", r->ptr);
+
+  if (is_int_reg_type(expr->val_type)) {
+    const Reg *r = get_int_reg(expr->val_type, expr->range);
+    printf("  neg %s [rsp]\n", r->ptr);
+    return;
+  }
+
+  if (is_sse_reg_type(expr->val_type)) {
+    emit_pop_xmm(0);
+
+    const SseOp *op = get_sse_op(expr->val_type, expr->range);
+    if (expr->val_type->ty == TY_DOUBLE) {
+      printf("  mov DWORD PTR [rsp - 4], 0x80000000\n");
+      printf("  mov DWORD PTR [rsp - 8], 0x00000000\n");
+    } else {
+      assert(expr->val_type->ty == TY_FLOAT);
+      printf("  mov DWORD PTR [rsp - 4], 0x00000000\n");
+      printf("  mov DWORD PTR [rsp - 8], 0x80000000\n");
+    }
+    printf("  movsd xmm1, QWORD PTR [rsp - 8]\n");
+    printf("  %s xmm0, xmm1\n", op->xor);
+    emit_push_xmm(0);
+    return;
+  }
+
+  if (is_x87_reg_type(expr->val_type)) {
+    printf("  fld TBYTE PTR [rsp]\n");
+    printf("  fchs\n");
+    printf("  fstp TBYTE PTR [rsp]\n");
+    return;
+  }
+
+  range_internal_error(expr->range, "Invalid type: %s, op=%d",
+                       format_type(expr->val_type, false), expr->ty);
 }
 
 static void emit_expr_not(Expr *expr) {
