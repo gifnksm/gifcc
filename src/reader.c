@@ -446,8 +446,8 @@ static void print_source(const Range *range) {
       int el = int_vec_get(fo->file->line_offset, line);
       const char *line_str = &fo->file->source[sl];
       int line_len = el - sl;
-      int sc = (line == start_line) ? start_column - 1 : 0;
-      int ec = (line == end_line) ? end_column - 1 : line_len;
+      int sc = (line == start_line) ? start_column : 0;
+      int ec = (line == end_line) ? end_column : line_len;
 
       for (int i = 0; i < line_len; i++) {
         if (line_str[i] == '\t') {
@@ -457,7 +457,7 @@ static void print_source(const Range *range) {
         }
       }
 
-      for (int i = 0; i < sc; i++) {
+      for (int i = 1; i <= sc - 1; i++) {
         fprintf(stderr, " ");
       }
       if (line == start_line) {

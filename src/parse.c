@@ -2167,9 +2167,10 @@ static Expr *primary_expression(Tokenizer *tokenizer, Scope *scope) {
     return new_expr_str(scope, token->str, token->range);
   }
 
-  if (token_consume(tokenizer, '(')) {
+  if ((token = token_consume(tokenizer, '(')) != NULL) {
     Expr *expr = expression(tokenizer, scope);
-    token_expect(tokenizer, ')');
+    Token *end = token_expect(tokenizer, ')');
+    expr->range = range_join(token->range, end->range);
     return expr;
   }
 
