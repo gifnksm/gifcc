@@ -133,10 +133,34 @@ static int reg_gp_offset = INVALID_STACK_POS;
 static int reg_fp_offset = INVALID_STACK_POS;
 static int overflow_arg_area_offset = INVALID_STACK_POS;
 
+static void emit_assign(Type *type, const Range *range, Expr *dest, Expr *src);
 static void emit_expr(Expr *expr);
 static arg_class_t classify_arg_type(const Type *type, const Range *range,
                                      int *num_int, int *num_sse);
+static IntVector *classify_arg(const Vector *args, int int_reg_idx);
+static void emit_expr_num(Expr *expr);
+static void emit_expr_stack_var(Expr *expr);
+static void emit_expr_global_var(Expr *expr);
+static void emit_expr_str(Expr *expr);
 static void emit_expr_call(Expr *expr);
+static void emit_expr_dot(Expr *expr);
+static void emit_expr_comma(Expr *expr);
+static void emit_expr_log_and(Expr *expr);
+static void emit_expr_log_or(Expr *expr);
+static void emit_expr_cond(Expr *expr);
+static void emit_expr_indirect(Expr *expr);
+static void emit_expr_minus(Expr *expr);
+static void emit_expr_not(Expr *expr);
+static void emit_expr_cast(Expr *expr);
+static void emit_expr_pre_inc(Expr *expr);
+static void emit_expr_pre_dec(Expr *expr);
+static void emit_expr_post_inc(Expr *expr);
+static void emit_expr_post_dec(Expr *expr);
+static void emit_expr_builtin_va_start(Expr *expr);
+static void emit_expr_builtin_va_arg(Expr *expr);
+static void emit_expr_builtin_va_end(Expr *expr);
+static void emit_expr_builtin_va_copy(Expr *expr);
+static void emit_expr_binop(Expr *expr);
 static void emit_expr_binop_int(Expr *expr);
 static void emit_expr_binop_sse(Expr *expr);
 static void emit_expr_binop_x87(Expr *expr);
@@ -381,498 +405,114 @@ static void emit_assign(Type *type, const Range *range, Expr *dest, Expr *src) {
 }
 
 static void emit_expr(Expr *expr) {
-  if (expr->ty == EX_NUM) {
-    if (expr->val_type->ty == TY_VOID) {
-      return;
-    }
-    int size = get_val_size(expr->val_type, expr->range);
-    if (size < 4) {
-      emit_push(num2str(expr->num, expr->range));
-    } else if (size <= 8) {
-      const Reg *r = get_int_reg_for_size(size, expr->range);
-      printf("  mov %s, %s\n", r->rax, num2str(expr->num, expr->range));
-      emit_push("rax");
-    } else {
-      assert(is_x87_reg_type(expr->val_type));
-      assert(size == 16);
-      printf("  mov rax, %lu\n", expr->num.bytes[0]);
-      printf("  mov [rsp - 16],  rax\n");
-      printf("  mov rax, %lu\n", expr->num.bytes[1]);
-      printf("  mov [rsp - 8],  rax\n");
-      emit_stack_sub(16);
-    }
+  switch (expr->ty) {
+  case EX_NUM:
+    emit_expr_num(expr);
     return;
-  }
-
-  if (expr->ty == EX_STACK_VAR) {
-    StackVar *var = expr->stack_var;
-    int size = get_val_size(expr->val_type, expr->range);
-    emit_stack_sub(align(size, 8));
-
-    int src_offset = var->offset;
-    int copy_size = 0;
-    while (size - copy_size > 0) {
-      const Reg *r = get_int_reg_for_copy(size - copy_size);
-      printf("  mov %s, [rbp - %d]\n", r->rax, src_offset - copy_size);
-      printf("  mov [rsp + %d], %s\n", copy_size, r->rax);
-      copy_size += r->size;
-    }
+  case EX_STACK_VAR:
+    emit_expr_stack_var(expr);
     return;
-  }
-
-  if (expr->ty == EX_GLOBAL_VAR) {
-    const char *name = expr->global_var.name;
-    int size = get_val_size(expr->val_type, expr->range);
-    emit_stack_sub(align(size, 8));
-
-    int copy_size = 0;
-
-    while (size - copy_size > 0) {
-      const Reg *r = get_int_reg_for_copy(size - copy_size);
-      printf("  mov %s, %s[rip + %d]\n", r->rax, name, copy_size);
-      printf("  mov [rsp + %d], %s\n", copy_size, r->rax);
-      copy_size += r->size;
-    }
+  case EX_GLOBAL_VAR:
+    emit_expr_global_var(expr);
     return;
-  }
-
-  if (expr->ty == EX_STR) {
-    printf("  lea rax, %s[rip]\n", expr->str);
-    emit_push("rax");
+  case EX_STR:
+    emit_expr_str(expr);
     return;
-  }
-
-  if (expr->ty == EX_CALL) {
+  case EX_CALL:
     emit_expr_call(expr);
     return;
-  }
-
-  if (expr->ty == EX_ASSIGN) {
+  case EX_ASSIGN:
     emit_assign(expr->val_type, expr->range, expr->binop.lhs, expr->binop.rhs);
     return;
-  }
-
-  if (expr->ty == EX_DOT) {
-    Expr *operand = expr->dot.operand;
-    Member *member = expr->dot.member;
-    int size = get_val_size(operand->val_type, operand->range);
-    int offset = member->offset;
-    int mem_size = get_val_size(member->type, expr->range);
-    int size_diff = align(size, 8) - align(mem_size, 8);
-    emit_expr(expr->dot.operand);
-
-    int copy_size = 0;
-    while (mem_size - copy_size > 0) {
-      const Reg *r = get_int_reg_for_copy(mem_size - copy_size);
-      printf("  mov %s, [rsp + %d]\n", r->rax, offset + copy_size);
-      printf("  mov [rsp - %d], %s\n", align(mem_size, 8) - copy_size, r->rax);
-      copy_size += r->size;
-    }
-    copy_size = 0;
-    while (mem_size - copy_size > 0) {
-      const Reg *r = get_int_reg_for_copy(mem_size - copy_size);
-      printf("  mov %s, [rsp - %d]\n", r->rax, align(mem_size, 8) - copy_size);
-      printf("  mov [rsp + %d], %s\n", size_diff + copy_size, r->rax);
-      copy_size += r->size;
-    }
-    emit_stack_add(size_diff);
+  case EX_DOT:
+    emit_expr_dot(expr);
     return;
-  }
-
-  if (expr->ty == EX_COMMA) {
-    Vector *exprs = expr->comma.exprs;
-    for (int i = 0; i < vec_len(exprs); i++) {
-      Expr *op = vec_get(exprs, i);
-      emit_expr(op);
-      if (i != vec_len(exprs) - 1) {
-        int op_size = get_val_size(op->val_type, op->range);
-        emit_stack_add(align(op_size, 8));
-        continue;
-      }
-    }
+  case EX_COMMA:
+    emit_expr_comma(expr);
     return;
-  }
-
-  if (expr->ty == EX_LOG_AND) {
-    const Reg *r = get_int_reg(expr->val_type, expr->range);
-    char *false_label = make_label("logand.false");
-    char *end_label = make_label("logand.end");
-    emit_expr(expr->binop.lhs);
-    emit_pop("rax");
-    printf("  cmp %s, 0\n", r->rax);
-    printf("  je %s\n", false_label);
-
-    emit_expr(expr->binop.rhs);
-    emit_pop("rax");
-    printf("  cmp %s, 0\n", r->rax);
-    printf("  je %s\n", false_label);
-
-    emit_push("1");
-    printf("  jmp %s\n", end_label);
-    stack_pos -= 8;
-
-    printf("%s:\n", false_label);
-    emit_push("0");
-
-    printf("%s:\n", end_label);
+  case EX_LOG_AND:
+    emit_expr_log_and(expr);
     return;
-  }
-
-  if (expr->ty == EX_LOG_OR) {
-    const Reg *r = get_int_reg(expr->val_type, expr->range);
-    char *true_label = make_label("logor.true");
-    char *end_label = make_label("logor.end");
-    emit_expr(expr->binop.lhs);
-    emit_pop("rax");
-    printf("  cmp %s, 0\n", r->rax);
-    printf("  jne %s\n", true_label);
-
-    emit_expr(expr->binop.rhs);
-    emit_pop("rax");
-    printf("  cmp %s, 0\n", r->rax);
-    printf("  jne %s\n", true_label);
-
-    emit_push("0");
-    printf("  jmp %s\n", end_label);
-    stack_pos -= 8;
-
-    printf("%s:\n", true_label);
-    emit_push("1");
-
-    printf("%s:\n", end_label);
+  case EX_LOG_OR:
+    emit_expr_log_or(expr);
     return;
-  }
-
-  if (expr->ty == EX_COND) {
-    const Reg *r =
-        get_int_reg(expr->cond.cond->val_type, expr->cond.cond->range);
-    char *else_label = make_label("cond.else");
-    char *end_label = make_label("cond.end");
-    emit_expr(expr->cond.cond);
-    emit_pop("rax");
-    printf("  cmp %s, 0\n", r->rax);
-    printf("  je %s\n", else_label);
-
-    int cond_stack_pos = stack_pos;
-    emit_expr(expr->cond.then_expr);
-    printf("  jmp %s\n", end_label);
-    int end_stack_pos = stack_pos;
-
-    stack_pos = cond_stack_pos;
-    printf("%s:\n", else_label);
-    emit_expr(expr->cond.else_expr);
-    assert(stack_pos == end_stack_pos);
-
-    printf("%s:\n", end_label);
+  case EX_COND:
+    emit_expr_cond(expr);
     return;
-  }
-
-  if (expr->ty == EX_ADDRESS) {
-    // 単項の `&`
+  case EX_ADDRESS:
     emit_lval(expr->unop.operand);
     return;
-  }
-  if (expr->ty == EX_INDIRECT) {
-    // 単項の `*`
-    Expr *operand = expr->unop.operand;
-    emit_expr(operand);
-    emit_pop("rax");
-
-    int size = get_val_size(expr->val_type, expr->range);
-    emit_stack_sub(align(size, 8));
-
-    int copy_size = 0;
-    while (size - copy_size > 0) {
-      const Reg *r = get_int_reg_for_copy(size - copy_size);
-      printf("  mov %s, [rax + %d]\n", r->rdi, copy_size);
-      printf("  mov [rsp + %d], %s\n", copy_size, r->rdi);
-      copy_size += r->size;
-    }
+  case EX_INDIRECT:
+    emit_expr_indirect(expr);
     return;
-  }
-  if (expr->ty == EX_PLUS) {
-    // 単項の `+`
-    range_error(expr->range, "不正な演算子です: %d", expr->ty);
-  }
-  if (expr->ty == EX_MINUS) {
-    // 単項の `-`
-    const Reg *r = get_int_reg(expr->val_type, expr->range);
-    emit_expr(expr->unop.operand);
-    printf("  neg %s [rsp]\n", r->ptr);
+  case EX_MINUS:
+    emit_expr_minus(expr);
     return;
-  }
-  if (expr->ty == EX_NOT) {
-    // `~`
-    const Reg *r = get_int_reg(expr->val_type, expr->range);
-    emit_expr(expr->unop.operand);
-    printf("  not %s [rsp]\n", r->ptr);
+  case EX_NOT:
+    emit_expr_not(expr);
     return;
-  }
-  if (expr->ty == EX_LOG_NOT) {
-    range_error(expr->range, "不正な演算子です: %d", expr->ty);
-  }
-
-  if (expr->ty == EX_CAST) {
-    Expr *operand = expr->unop.operand;
-    emit_expr(operand);
-
-    if (expr->val_type->ty == TY_VOID) {
-      int size = get_val_size(operand->val_type, operand->range);
-      emit_stack_add(align(size, 8));
-      return;
-    }
-
-    if (is_int_reg_type(operand->val_type) && is_int_reg_type(expr->val_type)) {
-      const Reg *to = get_int_reg(expr->val_type, expr->range);
-      const Reg *from = get_int_reg(operand->val_type, operand->range);
-      int from_size = get_val_size(operand->val_type, operand->range);
-      int to_size = get_val_size(expr->val_type, expr->range);
-      if (to_size > from_size) {
-        if (is_signed_int_type(operand->val_type, operand->range)) {
-          printf("  movsx %s, %s [rsp]\n", to->rax, from->ptr);
-        } else {
-          if (from_size < 4) {
-            printf("  movzx %s, %s [rsp]\n", to->rax, from->ptr);
-          } else {
-            printf("  mov %s, %s [rsp]\n", from->rax, from->ptr);
-          }
-        }
-        printf("  mov [rsp], rax\n");
-      }
-      return;
-    }
-
-    if (is_sse_reg_type(operand->val_type) && is_int_reg_type(expr->val_type)) {
-      const SseOp *op = get_sse_op(operand->val_type, operand->range);
-      const Reg *to = get_int_reg(expr->val_type, expr->range);
-      emit_pop_xmm(0);
-      printf("  %s %s, xmm0\n", op->cvtt_to_si, to->rax);
-      emit_push("rax");
-      return;
-    }
-
-    if (is_int_reg_type(operand->val_type) && is_sse_reg_type(expr->val_type)) {
-      const SseOp *op = get_sse_op(expr->val_type, expr->range);
-      const Reg *from = get_int_reg(operand->val_type, operand->range);
-      emit_pop("rax");
-      printf("  %s xmm0, %s\n", op->cvtt_from_si, from->rax);
-      emit_push_xmm(0);
-      return;
-    }
-
-    if (is_sse_reg_type(operand->val_type) && is_sse_reg_type(expr->val_type)) {
-      const SseOp *op = get_sse_op(operand->val_type, expr->range);
-      emit_pop_xmm(0);
-      if (expr->val_type->ty == TY_FLOAT) {
-        printf("  %s xmm0, xmm0\n", op->cvt_to_ss);
-      } else if (expr->val_type->ty == TY_DOUBLE) {
-        printf("  %s xmm0, xmm0\n", op->cvt_to_sd);
-      } else {
-        goto CastError;
-      }
-      emit_push_xmm(0);
-      return;
-    }
-
-    if (is_int_reg_type(operand->val_type) && is_x87_reg_type(expr->val_type)) {
-      const Reg *from = get_int_reg(operand->val_type, operand->range);
-      printf("  fild %s [rsp]\n", from->ptr);
-      printf("  fstp TBYTE PTR [rsp - 8]\n");
-      emit_stack_sub(8);
-      return;
-    }
-
-    if (is_x87_reg_type(operand->val_type) && is_int_reg_type(expr->val_type)) {
-      printf("  fld TBYTE PTR [rsp]\n");
-      printf("  fisttp QWORD PTR [rsp + 8]\n");
-      emit_stack_add(8);
-      return;
-    }
-
-    if (is_sse_reg_type(operand->val_type) && is_x87_reg_type(expr->val_type)) {
-      const SseOp *from_op = get_sse_op(operand->val_type, operand->range);
-      printf("  fld %s [rsp]\n", from_op->ptr);
-      printf("  fstp TBYTE PTR [rsp - 8]\n");
-      emit_stack_sub(8);
-      return;
-    }
-
-    if (is_x87_reg_type(operand->val_type) && is_sse_reg_type(expr->val_type)) {
-      const SseOp *to_op = get_sse_op(expr->val_type, expr->range);
-      printf("  fld TBYTE PTR [rsp]\n");
-      printf("  fstp %s [rsp + 8]\n", to_op->ptr);
-      emit_stack_add(8);
-      return;
-    }
-
-  CastError:
-    range_error(expr->range, "不正なキャストです: %s, %s",
-                format_type(operand->val_type, false),
-                format_type(expr->val_type, false));
-  }
-  if (expr->ty == EX_PRE_INC) {
-    // 前置の `++`
-    const Reg *r = get_int_reg(expr->val_type, expr->range);
-    emit_lval(expr->unop.operand);
-    printf("  mov rax, [rsp]\n");
-    printf("  mov %s, [rax]\n", r->rdi);
-    printf("  add %s, %d\n", r->rdi, get_incdec_size(expr));
-    printf("  mov [rax], %s\n", r->rdi);
-    printf("  mov [rsp], rdi\n");
+  case EX_CAST:
+    emit_expr_cast(expr);
     return;
-  }
-  if (expr->ty == EX_PRE_DEC) {
-    // 前置の `--`
-    const Reg *r = get_int_reg(expr->val_type, expr->range);
-    emit_lval(expr->unop.operand);
-    printf("  mov rax, [rsp]\n");
-    printf("  mov %s, [rax]\n", r->rdi);
-    printf("  sub %s, %d\n", r->rdi, get_incdec_size(expr));
-    printf("  mov [rax], %s\n", r->rdi);
-    printf("  mov [rsp], rdi\n");
+  case EX_PRE_INC:
+    emit_expr_pre_inc(expr);
     return;
-  }
-  if (expr->ty == EX_POST_INC) {
-    // 後置の `++`
-    const Reg *r = get_int_reg(expr->val_type, expr->range);
-    emit_lval(expr->unop.operand);
-    printf("  mov rax, [rsp]\n");
-    printf("  mov %s, [rax]\n", r->rdi);
-    printf("  mov [rsp], rdi\n");
-    printf("  add %s, %d\n", r->rdi, get_incdec_size(expr));
-    printf("  mov [rax], %s\n", r->rdi);
+  case EX_PRE_DEC:
+    emit_expr_pre_dec(expr);
     return;
-  }
-  if (expr->ty == EX_POST_DEC) {
-    // 後置の `--`
-    const Reg *r = get_int_reg(expr->val_type, expr->range);
-    emit_lval(expr->unop.operand);
-    printf("  mov rax, [rsp]\n");
-    printf("  mov %s, [rax]\n", r->rdi);
-    printf("  mov [rsp], rdi\n");
-    printf("  sub %s, %d\n", r->rdi, get_incdec_size(expr));
-    printf("  mov [rax], %s\n", r->rdi);
+  case EX_POST_INC:
+    emit_expr_post_inc(expr);
     return;
-  }
-
-  if (expr->ty == EX_BUILTIN_FUNC) {
-    range_error(expr->range, "internal compiler error");
-  }
-  if (expr->ty == EX_BUILTIN_VA_START) {
-    Expr *ap = expr->builtin_va_start.ap;
-    range_assert(expr->range, is_ptr_type(ap->val_type),
-                 "va_list is not pointer");
-    emit_expr(ap);
-    emit_pop("rax");
-    const char *gp_offset = "[rax]";
-    const char *fp_offset = "[rax + 4]";
-    const char *overflow_arg_area = "[rax + 8]";
-    const char *reg_save_area = "[rax + 16]";
-    printf("  mov DWORD PTR %s, %d\n", gp_offset, reg_gp_offset);
-    printf("  mov DWORD PTR %s, %d\n", fp_offset, reg_fp_offset);
-    printf("  lea rdi, [rbp + %d]\n", overflow_arg_area_offset);
-    printf("  mov %s, rdi\n", overflow_arg_area);
-    printf("  lea rdi, [rbp - %d]\n", reg_save_area_pos);
-    printf("  mov %s, rdi\n", reg_save_area);
+  case EX_POST_DEC:
+    emit_expr_post_dec(expr);
     return;
-  }
-  if (expr->ty == EX_BUILTIN_VA_ARG) {
-    int num_int = 0;
-    int num_sse = 0;
-
-    Type *type = expr->builtin_va_arg.type;
-
-    Expr *ap = expr->builtin_va_arg.ap;
-    arg_class_t class =
-        classify_arg_type(type, expr->range, &num_int, &num_sse);
-
-    emit_expr(ap);
-    emit_pop("rcx");
-    const char *gp_offset = "[rcx]";
-    const char *fp_offset = "[rcx + 4]";
-    const char *overflow_arg_area = "[rcx + 8]";
-    const char *reg_save_area = "[rcx + 16]";
-    const char *stack_label = NULL;
-    const char *fetch_label = make_label("va_arg.fetch");
-    int size = get_val_size(type, expr->range);
-    switch (class) {
-    case ARG_CLASS_MEMORY:
-    case ARG_CLASS_X87:
-      // do nothing
-      break;
-    case ARG_CLASS_INTEGER:
-      stack_label = make_label("va_arg.stack");
-      printf("  mov %s, %s\n", Reg4.rax, gp_offset);
-      printf("  cmp %s, %d\n", Reg4.rax, 8 * NUM_INT_REG - align(size, 8));
-      printf("  ja %s\n", stack_label);
-      printf("  lea %s, [rax + %d]\n", Reg4.rdx, align(size, 8));
-      printf("  add rax, %s\n", reg_save_area);
-      printf("  mov %s, %s\n", gp_offset, Reg4.rdx);
-      printf("  jmp %s\n", fetch_label);
-      break;
-    case ARG_CLASS_SSE:
-      stack_label = make_label("va_arg.stack");
-      printf("  mov %s, %s\n", Reg4.rax, fp_offset);
-      printf("  cmp %s, %d\n", Reg4.rax,
-             8 * NUM_INT_REG + 16 * NUM_SSE_REG - align(size, 16));
-      printf("  ja %s\n", stack_label);
-      printf("  lea %s, [rax + %d]\n", Reg4.rdx, align(size, 16));
-      printf("  add rax, %s\n", reg_save_area);
-      printf("  mov %s, %s\n", fp_offset, Reg4.rdx);
-      printf("  jmp %s\n", fetch_label);
-      break;
-      break;
-    }
-    if (stack_label != NULL) {
-      printf("%s:\n", stack_label);
-    }
-    printf("  mov rax, %s\n", overflow_arg_area);
-    printf("  lea rdx, [rax + %d]\n", align(size, 8));
-    printf("  mov %s, rdx\n", overflow_arg_area);
-
-    printf("%s:\n", fetch_label);
-    emit_stack_sub(align(size, 8));
-    int copy_size = 0;
-    while (size - copy_size > 0) {
-      const Reg *r = get_int_reg_for_copy(size - copy_size);
-      printf("  mov %s, [rax + %d]\n", r->rdx, copy_size);
-      printf("  mov [rsp + %d], %s\n", copy_size, r->rdx);
-      copy_size += r->size;
-    }
+  case EX_BUILTIN_VA_START:
+    emit_expr_builtin_va_start(expr);
     return;
-  }
-  if (expr->ty == EX_BUILTIN_VA_END) {
-    // nothing to do
+  case EX_BUILTIN_VA_ARG:
+    emit_expr_builtin_va_arg(expr);
     return;
-  }
-  if (expr->ty == EX_BUILTIN_VA_COPY) {
-    Type *type = new_type_builtin_va_list(expr->range);
-    int size = get_val_size(type, expr->range);
-    emit_assign(type, expr->range, expr->builtin_va_copy.dest,
-                expr->builtin_va_copy.src);
-    emit_stack_add(align(size, 8));
+  case EX_BUILTIN_VA_END:
+    emit_expr_builtin_va_end(expr);
     return;
-  }
-
-  // 二項演算子
-  const Expr *lhs = expr->binop.lhs;
-  if (is_int_reg_type(lhs->val_type)) {
-    emit_expr_binop_int(expr);
+  case EX_BUILTIN_VA_COPY:
+    emit_expr_builtin_va_copy(expr);
     return;
-  }
-
-  if (is_sse_reg_type(lhs->val_type)) {
-    emit_expr_binop_sse(expr);
+  case EX_ADD:
+  case EX_SUB:
+  case EX_MUL:
+  case EX_DIV:
+  case EX_MOD:
+  case EX_EQEQ:
+  case EX_NOTEQ:
+  case EX_LT:
+  case EX_GT:
+  case EX_LTEQ:
+  case EX_GTEQ:
+  case EX_LSHIFT:
+  case EX_RSHIFT:
+  case EX_AND:
+  case EX_XOR:
+  case EX_OR:
+    emit_expr_binop(expr);
     return;
+  case EX_COMPOUND:
+  case EX_PLUS:
+  case EX_LOG_NOT:
+  case EX_MUL_ASSIGN:
+  case EX_DIV_ASSIGN:
+  case EX_MOD_ASSIGN:
+  case EX_ADD_ASSIGN:
+  case EX_SUB_ASSIGN:
+  case EX_LSHIFT_ASSIGN:
+  case EX_RSHIFT_ASSIGN:
+  case EX_AND_ASSIGN:
+  case EX_XOR_ASSIGN:
+  case EX_OR_ASSIGN:
+  case EX_BUILTIN_FUNC:
+    break;
   }
-
-  if (is_x87_reg_type(lhs->val_type)) {
-    emit_expr_binop_x87(expr);
-    return;
-  }
-
-  range_error(expr->range, "不正な型の演算です: %s, op=%d",
-              format_type(expr->val_type, false), expr->ty);
+  range_internal_error(expr->range, "Invalid expr type: %d", expr->ty);
 }
 
 static arg_class_t classify_arg_type(const Type *type, const Range *range,
@@ -943,6 +583,70 @@ static IntVector *classify_arg(const Vector *args, int int_reg_idx) {
                                           &num_int_reg, &num_sse_reg));
   }
   return class;
+}
+
+static void emit_expr_num(Expr *expr) {
+  assert(expr->ty == EX_NUM);
+  if (expr->val_type->ty == TY_VOID) {
+    return;
+  }
+  int size = get_val_size(expr->val_type, expr->range);
+  if (size < 4) {
+    emit_push(num2str(expr->num, expr->range));
+  } else if (size <= 8) {
+    const Reg *r = get_int_reg_for_size(size, expr->range);
+    printf("  mov %s, %s\n", r->rax, num2str(expr->num, expr->range));
+    emit_push("rax");
+  } else {
+    assert(is_x87_reg_type(expr->val_type));
+    assert(size == 16);
+    printf("  mov rax, %lu\n", expr->num.bytes[0]);
+    printf("  mov [rsp - 16],  rax\n");
+    printf("  mov rax, %lu\n", expr->num.bytes[1]);
+    printf("  mov [rsp - 8],  rax\n");
+    emit_stack_sub(16);
+  }
+}
+
+static void emit_expr_stack_var(Expr *expr) {
+  assert(expr->ty == EX_STACK_VAR);
+
+  StackVar *var = expr->stack_var;
+  int size = get_val_size(expr->val_type, expr->range);
+  emit_stack_sub(align(size, 8));
+
+  int src_offset = var->offset;
+  int copy_size = 0;
+  while (size - copy_size > 0) {
+    const Reg *r = get_int_reg_for_copy(size - copy_size);
+    printf("  mov %s, [rbp - %d]\n", r->rax, src_offset - copy_size);
+    printf("  mov [rsp + %d], %s\n", copy_size, r->rax);
+    copy_size += r->size;
+  }
+}
+
+static void emit_expr_global_var(Expr *expr) {
+  assert(expr->ty == EX_GLOBAL_VAR);
+
+  const char *name = expr->global_var.name;
+  int size = get_val_size(expr->val_type, expr->range);
+  emit_stack_sub(align(size, 8));
+
+  int copy_size = 0;
+
+  while (size - copy_size > 0) {
+    const Reg *r = get_int_reg_for_copy(size - copy_size);
+    printf("  mov %s, %s[rip + %d]\n", r->rax, name, copy_size);
+    printf("  mov [rsp + %d], %s\n", copy_size, r->rax);
+    copy_size += r->size;
+  }
+}
+
+static void emit_expr_str(Expr *expr) {
+  assert(expr->ty == EX_STR);
+
+  printf("  lea rax, %s[rip]\n", expr->str);
+  emit_push("rax");
 }
 
 static void emit_expr_call(Expr *expr) {
@@ -1106,6 +810,430 @@ static void emit_expr_call(Expr *expr) {
     }
   }
   return;
+}
+
+static void emit_expr_dot(Expr *expr) {
+  assert(expr->ty == EX_DOT);
+
+  Expr *operand = expr->dot.operand;
+  Member *member = expr->dot.member;
+  int size = get_val_size(operand->val_type, operand->range);
+  int offset = member->offset;
+  int mem_size = get_val_size(member->type, expr->range);
+  int size_diff = align(size, 8) - align(mem_size, 8);
+  emit_expr(expr->dot.operand);
+
+  int copy_size = 0;
+  while (mem_size - copy_size > 0) {
+    const Reg *r = get_int_reg_for_copy(mem_size - copy_size);
+    printf("  mov %s, [rsp + %d]\n", r->rax, offset + copy_size);
+    printf("  mov [rsp - %d], %s\n", align(mem_size, 8) - copy_size, r->rax);
+    copy_size += r->size;
+  }
+  copy_size = 0;
+  while (mem_size - copy_size > 0) {
+    const Reg *r = get_int_reg_for_copy(mem_size - copy_size);
+    printf("  mov %s, [rsp - %d]\n", r->rax, align(mem_size, 8) - copy_size);
+    printf("  mov [rsp + %d], %s\n", size_diff + copy_size, r->rax);
+    copy_size += r->size;
+  }
+  emit_stack_add(size_diff);
+}
+
+static void emit_expr_comma(Expr *expr) {
+  assert(expr->ty == EX_COMMA);
+
+  Vector *exprs = expr->comma.exprs;
+  for (int i = 0; i < vec_len(exprs); i++) {
+    Expr *op = vec_get(exprs, i);
+    emit_expr(op);
+    if (i != vec_len(exprs) - 1) {
+      int op_size = get_val_size(op->val_type, op->range);
+      emit_stack_add(align(op_size, 8));
+      continue;
+    }
+  }
+}
+
+static void emit_expr_log_and(Expr *expr) {
+  assert(expr->ty == EX_LOG_AND);
+
+  const Reg *r = get_int_reg(expr->val_type, expr->range);
+  char *false_label = make_label("logand.false");
+  char *end_label = make_label("logand.end");
+  emit_expr(expr->binop.lhs);
+  emit_pop("rax");
+  printf("  cmp %s, 0\n", r->rax);
+  printf("  je %s\n", false_label);
+
+  emit_expr(expr->binop.rhs);
+  emit_pop("rax");
+  printf("  cmp %s, 0\n", r->rax);
+  printf("  je %s\n", false_label);
+
+  emit_push("1");
+  printf("  jmp %s\n", end_label);
+  stack_pos -= 8;
+
+  printf("%s:\n", false_label);
+  emit_push("0");
+
+  printf("%s:\n", end_label);
+}
+
+static void emit_expr_log_or(Expr *expr) {
+  assert(expr->ty == EX_LOG_OR);
+
+  const Reg *r = get_int_reg(expr->val_type, expr->range);
+  char *true_label = make_label("logor.true");
+  char *end_label = make_label("logor.end");
+  emit_expr(expr->binop.lhs);
+  emit_pop("rax");
+  printf("  cmp %s, 0\n", r->rax);
+  printf("  jne %s\n", true_label);
+
+  emit_expr(expr->binop.rhs);
+  emit_pop("rax");
+  printf("  cmp %s, 0\n", r->rax);
+  printf("  jne %s\n", true_label);
+
+  emit_push("0");
+  printf("  jmp %s\n", end_label);
+  stack_pos -= 8;
+
+  printf("%s:\n", true_label);
+  emit_push("1");
+
+  printf("%s:\n", end_label);
+}
+
+static void emit_expr_cond(Expr *expr) {
+  assert(expr->ty == EX_COND);
+
+  const Reg *r = get_int_reg(expr->cond.cond->val_type, expr->cond.cond->range);
+  char *else_label = make_label("cond.else");
+  char *end_label = make_label("cond.end");
+  emit_expr(expr->cond.cond);
+  emit_pop("rax");
+  printf("  cmp %s, 0\n", r->rax);
+  printf("  je %s\n", else_label);
+
+  int cond_stack_pos = stack_pos;
+  emit_expr(expr->cond.then_expr);
+  printf("  jmp %s\n", end_label);
+  int end_stack_pos = stack_pos;
+
+  stack_pos = cond_stack_pos;
+  printf("%s:\n", else_label);
+  emit_expr(expr->cond.else_expr);
+  assert(stack_pos == end_stack_pos);
+
+  printf("%s:\n", end_label);
+}
+
+static void emit_expr_indirect(Expr *expr) {
+  assert(expr->ty == EX_INDIRECT);
+
+  Expr *operand = expr->unop.operand;
+  emit_expr(operand);
+  emit_pop("rax");
+
+  int size = get_val_size(expr->val_type, expr->range);
+  emit_stack_sub(align(size, 8));
+
+  int copy_size = 0;
+  while (size - copy_size > 0) {
+    const Reg *r = get_int_reg_for_copy(size - copy_size);
+    printf("  mov %s, [rax + %d]\n", r->rdi, copy_size);
+    printf("  mov [rsp + %d], %s\n", copy_size, r->rdi);
+    copy_size += r->size;
+  }
+}
+
+static void emit_expr_minus(Expr *expr) {
+  assert(expr->ty == EX_MINUS);
+
+  const Reg *r = get_int_reg(expr->val_type, expr->range);
+  emit_expr(expr->unop.operand);
+  printf("  neg %s [rsp]\n", r->ptr);
+}
+
+static void emit_expr_not(Expr *expr) {
+  assert(expr->ty == EX_NOT);
+
+  const Reg *r = get_int_reg(expr->val_type, expr->range);
+  emit_expr(expr->unop.operand);
+  printf("  not %s [rsp]\n", r->ptr);
+}
+
+static void emit_expr_cast(Expr *expr) {
+  assert(expr->ty == EX_CAST);
+
+  Expr *operand = expr->unop.operand;
+  emit_expr(operand);
+
+  if (expr->val_type->ty == TY_VOID) {
+    int size = get_val_size(operand->val_type, operand->range);
+    emit_stack_add(align(size, 8));
+    return;
+  }
+
+  if (is_int_reg_type(operand->val_type) && is_int_reg_type(expr->val_type)) {
+    const Reg *to = get_int_reg(expr->val_type, expr->range);
+    const Reg *from = get_int_reg(operand->val_type, operand->range);
+    int from_size = get_val_size(operand->val_type, operand->range);
+    int to_size = get_val_size(expr->val_type, expr->range);
+    if (to_size > from_size) {
+      if (is_signed_int_type(operand->val_type, operand->range)) {
+        printf("  movsx %s, %s [rsp]\n", to->rax, from->ptr);
+      } else {
+        if (from_size < 4) {
+          printf("  movzx %s, %s [rsp]\n", to->rax, from->ptr);
+        } else {
+          printf("  mov %s, %s [rsp]\n", from->rax, from->ptr);
+        }
+      }
+      printf("  mov [rsp], rax\n");
+    }
+    return;
+  }
+
+  if (is_sse_reg_type(operand->val_type) && is_int_reg_type(expr->val_type)) {
+    const SseOp *op = get_sse_op(operand->val_type, operand->range);
+    const Reg *to = get_int_reg(expr->val_type, expr->range);
+    emit_pop_xmm(0);
+    printf("  %s %s, xmm0\n", op->cvtt_to_si, to->rax);
+    emit_push("rax");
+    return;
+  }
+
+  if (is_int_reg_type(operand->val_type) && is_sse_reg_type(expr->val_type)) {
+    const SseOp *op = get_sse_op(expr->val_type, expr->range);
+    const Reg *from = get_int_reg(operand->val_type, operand->range);
+    emit_pop("rax");
+    printf("  %s xmm0, %s\n", op->cvtt_from_si, from->rax);
+    emit_push_xmm(0);
+    return;
+  }
+
+  if (is_sse_reg_type(operand->val_type) && is_sse_reg_type(expr->val_type)) {
+    const SseOp *op = get_sse_op(operand->val_type, expr->range);
+    emit_pop_xmm(0);
+    if (expr->val_type->ty == TY_FLOAT) {
+      printf("  %s xmm0, xmm0\n", op->cvt_to_ss);
+    } else if (expr->val_type->ty == TY_DOUBLE) {
+      printf("  %s xmm0, xmm0\n", op->cvt_to_sd);
+    } else {
+      goto CastError;
+    }
+    emit_push_xmm(0);
+    return;
+  }
+
+  if (is_int_reg_type(operand->val_type) && is_x87_reg_type(expr->val_type)) {
+    const Reg *from = get_int_reg(operand->val_type, operand->range);
+    printf("  fild %s [rsp]\n", from->ptr);
+    printf("  fstp TBYTE PTR [rsp - 8]\n");
+    emit_stack_sub(8);
+    return;
+  }
+
+  if (is_x87_reg_type(operand->val_type) && is_int_reg_type(expr->val_type)) {
+    printf("  fld TBYTE PTR [rsp]\n");
+    printf("  fisttp QWORD PTR [rsp + 8]\n");
+    emit_stack_add(8);
+    return;
+  }
+
+  if (is_sse_reg_type(operand->val_type) && is_x87_reg_type(expr->val_type)) {
+    const SseOp *from_op = get_sse_op(operand->val_type, operand->range);
+    printf("  fld %s [rsp]\n", from_op->ptr);
+    printf("  fstp TBYTE PTR [rsp - 8]\n");
+    emit_stack_sub(8);
+    return;
+  }
+
+  if (is_x87_reg_type(operand->val_type) && is_sse_reg_type(expr->val_type)) {
+    const SseOp *to_op = get_sse_op(expr->val_type, expr->range);
+    printf("  fld TBYTE PTR [rsp]\n");
+    printf("  fstp %s [rsp + 8]\n", to_op->ptr);
+    emit_stack_add(8);
+    return;
+  }
+
+CastError:
+  range_error(expr->range, "不正なキャストです: %s, %s",
+              format_type(operand->val_type, false),
+              format_type(expr->val_type, false));
+}
+
+static void emit_expr_pre_inc(Expr *expr) {
+  assert(expr->ty == EX_PRE_INC);
+
+  const Reg *r = get_int_reg(expr->val_type, expr->range);
+  emit_lval(expr->unop.operand);
+  printf("  mov rax, [rsp]\n");
+  printf("  mov %s, [rax]\n", r->rdi);
+  printf("  add %s, %d\n", r->rdi, get_incdec_size(expr));
+  printf("  mov [rax], %s\n", r->rdi);
+  printf("  mov [rsp], rdi\n");
+}
+
+static void emit_expr_pre_dec(Expr *expr) {
+  assert(expr->ty == EX_PRE_DEC);
+
+  const Reg *r = get_int_reg(expr->val_type, expr->range);
+  emit_lval(expr->unop.operand);
+  printf("  mov rax, [rsp]\n");
+  printf("  mov %s, [rax]\n", r->rdi);
+  printf("  sub %s, %d\n", r->rdi, get_incdec_size(expr));
+  printf("  mov [rax], %s\n", r->rdi);
+  printf("  mov [rsp], rdi\n");
+}
+
+static void emit_expr_post_inc(Expr *expr) {
+  assert(expr->ty == EX_POST_INC);
+
+  const Reg *r = get_int_reg(expr->val_type, expr->range);
+  emit_lval(expr->unop.operand);
+  printf("  mov rax, [rsp]\n");
+  printf("  mov %s, [rax]\n", r->rdi);
+  printf("  mov [rsp], rdi\n");
+  printf("  add %s, %d\n", r->rdi, get_incdec_size(expr));
+  printf("  mov [rax], %s\n", r->rdi);
+}
+
+static void emit_expr_post_dec(Expr *expr) {
+  assert(expr->ty == EX_POST_DEC);
+
+  const Reg *r = get_int_reg(expr->val_type, expr->range);
+  emit_lval(expr->unop.operand);
+  printf("  mov rax, [rsp]\n");
+  printf("  mov %s, [rax]\n", r->rdi);
+  printf("  mov [rsp], rdi\n");
+  printf("  sub %s, %d\n", r->rdi, get_incdec_size(expr));
+  printf("  mov [rax], %s\n", r->rdi);
+}
+
+static void emit_expr_builtin_va_start(Expr *expr) {
+  assert(expr->ty == EX_BUILTIN_VA_START);
+
+  Expr *ap = expr->builtin_va_start.ap;
+  range_assert(expr->range, is_ptr_type(ap->val_type),
+               "va_list is not pointer");
+  emit_expr(ap);
+  emit_pop("rax");
+  const char *gp_offset = "[rax]";
+  const char *fp_offset = "[rax + 4]";
+  const char *overflow_arg_area = "[rax + 8]";
+  const char *reg_save_area = "[rax + 16]";
+  printf("  mov DWORD PTR %s, %d\n", gp_offset, reg_gp_offset);
+  printf("  mov DWORD PTR %s, %d\n", fp_offset, reg_fp_offset);
+  printf("  lea rdi, [rbp + %d]\n", overflow_arg_area_offset);
+  printf("  mov %s, rdi\n", overflow_arg_area);
+  printf("  lea rdi, [rbp - %d]\n", reg_save_area_pos);
+  printf("  mov %s, rdi\n", reg_save_area);
+}
+
+static void emit_expr_builtin_va_arg(Expr *expr) {
+  assert(expr->ty == EX_BUILTIN_VA_ARG);
+
+  int num_int = 0;
+  int num_sse = 0;
+
+  Type *type = expr->builtin_va_arg.type;
+
+  Expr *ap = expr->builtin_va_arg.ap;
+  arg_class_t class = classify_arg_type(type, expr->range, &num_int, &num_sse);
+
+  emit_expr(ap);
+  emit_pop("rcx");
+  const char *gp_offset = "[rcx]";
+  const char *fp_offset = "[rcx + 4]";
+  const char *overflow_arg_area = "[rcx + 8]";
+  const char *reg_save_area = "[rcx + 16]";
+  const char *stack_label = NULL;
+  const char *fetch_label = make_label("va_arg.fetch");
+  int size = get_val_size(type, expr->range);
+  switch (class) {
+  case ARG_CLASS_MEMORY:
+  case ARG_CLASS_X87:
+    // do nothing
+    break;
+  case ARG_CLASS_INTEGER:
+    stack_label = make_label("va_arg.stack");
+    printf("  mov %s, %s\n", Reg4.rax, gp_offset);
+    printf("  cmp %s, %d\n", Reg4.rax, 8 * NUM_INT_REG - align(size, 8));
+    printf("  ja %s\n", stack_label);
+    printf("  lea %s, [rax + %d]\n", Reg4.rdx, align(size, 8));
+    printf("  add rax, %s\n", reg_save_area);
+    printf("  mov %s, %s\n", gp_offset, Reg4.rdx);
+    printf("  jmp %s\n", fetch_label);
+    break;
+  case ARG_CLASS_SSE:
+    stack_label = make_label("va_arg.stack");
+    printf("  mov %s, %s\n", Reg4.rax, fp_offset);
+    printf("  cmp %s, %d\n", Reg4.rax,
+           8 * NUM_INT_REG + 16 * NUM_SSE_REG - align(size, 16));
+    printf("  ja %s\n", stack_label);
+    printf("  lea %s, [rax + %d]\n", Reg4.rdx, align(size, 16));
+    printf("  add rax, %s\n", reg_save_area);
+    printf("  mov %s, %s\n", fp_offset, Reg4.rdx);
+    printf("  jmp %s\n", fetch_label);
+    break;
+    break;
+  }
+  if (stack_label != NULL) {
+    printf("%s:\n", stack_label);
+  }
+  printf("  mov rax, %s\n", overflow_arg_area);
+  printf("  lea rdx, [rax + %d]\n", align(size, 8));
+  printf("  mov %s, rdx\n", overflow_arg_area);
+
+  printf("%s:\n", fetch_label);
+  emit_stack_sub(align(size, 8));
+  int copy_size = 0;
+  while (size - copy_size > 0) {
+    const Reg *r = get_int_reg_for_copy(size - copy_size);
+    printf("  mov %s, [rax + %d]\n", r->rdx, copy_size);
+    printf("  mov [rsp + %d], %s\n", copy_size, r->rdx);
+    copy_size += r->size;
+  }
+}
+
+static void emit_expr_builtin_va_end(Expr *expr) {
+  assert(expr->ty == EX_BUILTIN_VA_END);
+  // nothing to do
+}
+static void emit_expr_builtin_va_copy(Expr *expr) {
+  assert(expr->ty == EX_BUILTIN_VA_COPY);
+
+  Type *type = new_type_builtin_va_list(expr->range);
+  int size = get_val_size(type, expr->range);
+  emit_assign(type, expr->range, expr->builtin_va_copy.dest,
+              expr->builtin_va_copy.src);
+  emit_stack_add(align(size, 8));
+}
+
+static void emit_expr_binop(Expr *expr) {
+  const Expr *lhs = expr->binop.lhs;
+  if (is_int_reg_type(lhs->val_type)) {
+    emit_expr_binop_int(expr);
+    return;
+  }
+
+  if (is_sse_reg_type(lhs->val_type)) {
+    emit_expr_binop_sse(expr);
+    return;
+  }
+
+  if (is_x87_reg_type(lhs->val_type)) {
+    emit_expr_binop_x87(expr);
+    return;
+  }
+
+  range_internal_error(expr->range, "Invalid type: %s, op=%d",
+                       format_type(expr->val_type, false), expr->ty);
 }
 
 static void emit_expr_binop_int(Expr *expr) {

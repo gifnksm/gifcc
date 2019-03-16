@@ -653,10 +653,13 @@ __attribute__((format(printf, 4, 5))) void range_warn_raw(const Range *range,
 void range_warn_raw_v(const Range *range, const char *dbg_file, int dbg_line,
                       const char *fmt, va_list ap);
 
+#define range_internal_error(range, fmt, ...)                                  \
+  range_error(range, "ICE " fmt, ##__VA_ARGS__)
+
 #define range_assert(range, cond, fmt, ...)                                    \
   do {                                                                         \
     if (!(cond)) {                                                             \
-      range_error((range), "ICE `%s` " fmt, #cond, ##__VA_ARGS__);             \
+      range_internal_error((range), "`%s` " fmt, #cond, ##__VA_ARGS__);        \
     }                                                                          \
   } while (0)
 
