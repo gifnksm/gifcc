@@ -1,5 +1,6 @@
 #include "gifcc.h"
 #include <assert.h>
+#include <limits.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -55,6 +56,7 @@ static void print_message_raw(message_t msg, const Range *range,
 static void print_source(const Range *range);
 static void print_expanded_message(const Range *range, const char *dbg_file,
                                    int dbg_line);
+static File *new_builtin_file(void);
 static File *new_file(FILE *fp, const char *filename);
 static char *read_whole_file(File *file, FILE *fp);
 
@@ -151,9 +153,17 @@ void range_get_end(const Range *range, const char **filename, int *line,
 
 Reader *new_reader(void) {
   Reader *reader = NEW(Reader);
+  reader->offset = 0;
+  reader->is_sol = true;
   reader->file_stack = new_vector();
   reader->file_offset = new_vector();
-  reader->is_sol = true;
+
+  File *file = new_builtin_file();
+  file->stack_idx = INT_MAX;
+  switch_file(reader, file);
+
+  reader->offset = 1;
+
   return reader;
 }
 
@@ -473,6 +483,16 @@ static void print_expanded_message(const Range *range, const char *dbg_file,
     print_message(MESSAGE_NOTE, range, dbg_file, dbg_line, "マクロ展開元");
     print_source(range);
   }
+}
+
+static File *new_builtin_file(void) {
+  File *file = NEW(File);
+  file->source = "";
+  file->name = "<builtin>";
+  file->offset = 0;
+  file->line_offset = new_int_vector();
+  int_vec_push(file->line_offset, file->offset);
+  return file;
 }
 
 static File *new_file(FILE *fp, const char *filename) {
