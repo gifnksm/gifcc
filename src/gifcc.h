@@ -1,4 +1,5 @@
-#pragma once
+#ifndef GIFCC_H
+#define GIFCC_H
 
 #include <assert.h>
 #include <stdbool.h>
@@ -730,3 +731,5 @@ void gen(TranslationUnit *tunit);
 static inline char *get_label(Function *func, char *name) {
   return map_get(func->label_map, name);
 }
+
+#endif // GIFCC_H
