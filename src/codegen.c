@@ -1017,8 +1017,8 @@ static void emit_expr_cast(Expr *expr) {
   if (is_int_reg_type(operand->val_type) && is_int_reg_type(expr->val_type)) {
     const Reg *to = get_int_reg(expr->val_type, expr->range);
     const Reg *from = get_int_reg(operand->val_type, operand->range);
-    int from_size = get_val_size(operand->val_type, operand->range);
-    int to_size = get_val_size(expr->val_type, expr->range);
+    int from_size = from->size;
+    int to_size = to->size;
     if (to_size > from_size) {
       if (is_signed_int_type(operand->val_type, operand->range)) {
         printf("  movsx %s, %s [rsp]\n", to->rax, from->ptr);
@@ -1037,8 +1037,12 @@ static void emit_expr_cast(Expr *expr) {
   if (is_sse_reg_type(operand->val_type) && is_int_reg_type(expr->val_type)) {
     const SseOp *op = get_sse_op(operand->val_type, operand->range);
     const Reg *to = get_int_reg(expr->val_type, expr->range);
+    const Reg *conv = to;
+    if (to->size < 4) {
+      conv = &Reg4;
+    }
     emit_pop_xmm(0);
-    printf("  %s %s, xmm0\n", op->cvtt_to_si, to->rax);
+    printf("  %s %s, xmm0\n", op->cvtt_to_si, conv->rax);
     emit_push("rax");
     return;
   }
@@ -1046,8 +1050,17 @@ static void emit_expr_cast(Expr *expr) {
   if (is_int_reg_type(operand->val_type) && is_sse_reg_type(expr->val_type)) {
     const SseOp *op = get_sse_op(expr->val_type, expr->range);
     const Reg *from = get_int_reg(operand->val_type, operand->range);
+    const Reg *conv = from;
     emit_pop("rax");
-    printf("  %s xmm0, %s\n", op->cvtt_from_si, from->rax);
+    if (from->size < 4) {
+      conv = &Reg4;
+      if (is_signed_int_type(operand->val_type, operand->range)) {
+        printf("  movsx %s, %s\n", conv->rax, from->rax);
+      } else {
+        printf("  movzx %s, %s\n", conv->rax, from->rax);
+      }
+    }
+    printf("  %s xmm0, %s\n", op->cvtt_from_si, conv->rax);
     emit_push_xmm(0);
     return;
   }
@@ -1068,7 +1081,17 @@ static void emit_expr_cast(Expr *expr) {
 
   if (is_int_reg_type(operand->val_type) && is_x87_reg_type(expr->val_type)) {
     const Reg *from = get_int_reg(operand->val_type, operand->range);
-    printf("  fild %s [rsp]\n", from->ptr);
+    const Reg *conv = from;
+    if (from->size < 2) {
+      conv = &Reg2;
+      if (is_signed_int_type(operand->val_type, operand->range)) {
+        printf("  movsx %s, %s[rsp]\n", conv->rax, from->ptr);
+      } else {
+        printf("  movzx %s, %s[rsp]\n", conv->rax, from->ptr);
+      }
+      printf("  mov [rsp], %s\n", conv->rax);
+    }
+    printf("  fild %s [rsp]\n", conv->ptr);
     printf("  fstp TBYTE PTR [rsp - 8]\n");
     emit_stack_sub(8);
     return;
