@@ -685,7 +685,7 @@ static void emit_expr_call(Expr *expr) {
     int num_sse_reg = 0;
     ret_class =
         classify_arg_type(ret_type, expr->range, &num_int_reg, &num_sse_reg);
-    if (ret_class == ARG_CLASS_MEMORY || ret_class == ARG_CLASS_X87) {
+    if (ret_class == ARG_CLASS_MEMORY) {
       // 戻り値をメモリで返す場合は、格納先の領域を獲得しておく
       emit_stack_sub(align(ret_size, 8));
       int_reg_idx++;
@@ -780,7 +780,7 @@ static void emit_expr_call(Expr *expr) {
       assert(false);
     }
   }
-  if (ret_class == ARG_CLASS_MEMORY || ret_class == ARG_CLASS_X87) {
+  if (ret_class == ARG_CLASS_MEMORY) {
     // rdiには戻り値の格納先を設定
     printf("  lea rdi, [rsp + %d]\n", arg_size);
   }
@@ -798,7 +798,6 @@ static void emit_expr_call(Expr *expr) {
   if (ret_type->ty != TY_VOID) {
     switch (ret_class) {
     case ARG_CLASS_MEMORY:
-    case ARG_CLASS_X87:
       // スタックのトップに戻り値が設定されているはずなので何もしなくて良い
       break;
     case ARG_CLASS_INTEGER:
@@ -810,6 +809,10 @@ static void emit_expr_call(Expr *expr) {
     case ARG_CLASS_SSE:
       assert(ret_size <= 8);
       emit_push_xmm(0);
+      break;
+    case ARG_CLASS_X87:
+      emit_stack_sub(16);
+      printf("  fstp TBYTE PTR[rsp]\n");
       break;
     }
   }
@@ -1849,7 +1852,6 @@ static void emit_stmt(Stmt *stmt) {
                                             &int_reg_idx, &sse_reg_idx);
       switch (class) {
       case ARG_CLASS_MEMORY:
-      case ARG_CLASS_X87:
         // 戻り値を格納するアドレス
         printf("  mov rax, [rbp - %d]\n", retval_pos);
         int copy_size = 0;
@@ -1870,6 +1872,10 @@ static void emit_stmt(Stmt *stmt) {
       case ARG_CLASS_SSE:
         assert(size <= 8);
         emit_pop_xmm(0);
+        break;
+      case ARG_CLASS_X87:
+        printf("  fld TBYTE PTR [rsp]\n");
+        emit_stack_add(16);
         break;
       }
     }
@@ -1968,7 +1974,7 @@ static void emit_func(Function *func) {
     int num_sse_reg = 0;
     arg_class_t class = classify_arg_type(func->type->func_ret, func->range,
                                           &num_int_reg, &num_sse_reg);
-    if (class == ARG_CLASS_MEMORY || class == ARG_CLASS_X87) {
+    if (class == ARG_CLASS_MEMORY) {
       // 戻り値をメモリで返す場合は、格納先のポインタをpushしておく
       emit_push("rdi");
       int_reg_idx++;

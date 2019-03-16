@@ -2541,6 +2541,12 @@ static void test78(void) {
   CHECK_INT(6, s.a + s.b + s.c);
 }
 
+static void test79(void) {
+  char *suffix = NULL;
+  long double val = strtold("1.234", &suffix);
+  TEST_PRINTF("%Lf", val);
+}
+
 int main(void) {
   Test test_list[] = {
       TEST(test01), TEST(test02), TEST(test03), TEST(test04), TEST(test05),
@@ -2558,7 +2564,7 @@ int main(void) {
       TEST(test61), TEST(test62), TEST(test63), TEST(test64), TEST(test65),
       TEST(test66), TEST(test67), TEST(test68), TEST(test69), TEST(test70),
       TEST(test71), TEST(test72), TEST(test73), TEST(test74), TEST(test75),
-      TEST(test76), TEST(test77), {NULL, NULL},
+      TEST(test76), TEST(test77), TEST(test78), TEST(test79), {NULL, NULL},
   };
   RUN_TEST(test_list);
 
