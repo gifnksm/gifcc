@@ -342,14 +342,19 @@ typedef struct Type {
   StructBody *struct_body;
 } Type;
 
-typedef struct Member Member;
 typedef struct Expr Expr;
 typedef struct Initializer {
   Type *type;
-  Map *members;
+  Vector *members;
   Vector *elements;
   Expr *expr;
 } Initializer;
+
+typedef struct Member Member;
+typedef struct MemberInitializer {
+  Member *member;
+  Initializer *init;
+} MemberInitializer;
 
 typedef struct StackVar {
   const char *name;
@@ -583,7 +588,6 @@ Set *set_intersection(const Set *a, const Set *b);
 Map *new_map(void);
 int map_size(const Map *map);
 void *map_get_by_index(Map *map, int n, const char **key);
-void map_set_by_index(Map *map, int n, const char *key, void *val);
 void map_put(Map *map, const char *key, void *val);
 void *map_get(Map *map, const char *key);
 bool map_remove(Map *map, const char *key);

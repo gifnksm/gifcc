@@ -472,13 +472,12 @@ static void dump_init(Initializer *init, const Range *range, int level) {
     dump_indent(level);
     dump_type(init->type);
     printf("{\n");
-    for (int i = 0; i < map_size(init->members); i++) {
-      const char *name;
-      Initializer *val = map_get_by_index(init->members, i, &name);
+    for (int i = 0; i < vec_len(init->members); i++) {
+      MemberInitializer *meminit = vec_get(init->members, i);
       dump_range_start(range);
       dump_indent(level + 1);
-      printf(".%s = \n", name);
-      dump_init(val, range, level + 1);
+      printf(".%s = \n", meminit->member->name);
+      dump_init(meminit->init, range, level + 1);
     }
     dump_range_end(range);
     dump_indent(level);

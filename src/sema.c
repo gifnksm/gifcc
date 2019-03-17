@@ -882,10 +882,9 @@ static void walk_initializer(Initializer *init) {
   }
 
   if (init->members != NULL) {
-    for (int i = 0; i < map_size(init->members); i++) {
-      const char *name;
-      Initializer *meminit = map_get_by_index(init->members, i, &name);
-      walk_initializer(meminit);
+    for (int i = 0; i < vec_len(init->members); i++) {
+      MemberInitializer *meminit = vec_get(init->members, i);
+      walk_initializer(meminit->init);
     }
   }
 

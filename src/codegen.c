@@ -2193,12 +2193,12 @@ static void emit_gvar_init(Initializer *init, const Range *range,
 
   if (init->members != NULL) {
     assert(init->type->ty == TY_STRUCT || init->type->ty == TY_UNION);
-    assert(map_size(init->members) <= 1 || init->type->ty == TY_STRUCT);
+    assert(vec_len(init->members) <= 1 || init->type->ty == TY_STRUCT);
     StructBody *body = init->type->struct_body;
     int offset = 0;
-    for (int i = 0; i < map_size(init->members); i++) {
-      Initializer *meminit = map_get_by_index(init->members, i, NULL);
-      if (meminit == NULL) {
+    for (int i = 0; i < vec_len(init->members); i++) {
+      MemberInitializer *meminit = vec_get(init->members, i);
+      if (meminit->init == NULL) {
         continue;
       }
       if (i > 0) {
@@ -2209,8 +2209,8 @@ static void emit_gvar_init(Initializer *init, const Range *range,
         }
         assert(offset == member->offset);
       }
-      emit_gvar_init(meminit, range, gvar_list);
-      offset += get_val_size(meminit->type, range);
+      emit_gvar_init(meminit->init, range, gvar_list);
+      offset += get_val_size(meminit->member->type, range);
     }
     int ty_size = get_val_size(init->type, range);
     if (offset < ty_size) {

@@ -84,6 +84,7 @@ static const TypeSpecifier EMPTY_TYPE_SPECIFIER = {};
 static const FunctionSpecifier EMPTY_FUNCTION_SPECIFIER = {};
 
 static Initializer *new_initializer(Type *type);
+static MemberInitializer *new_member_initializer(Member *member);
 static GlobalCtxt *new_global_ctxt(void);
 static FuncCtxt *new_func_ctxt(char *name, Type *type);
 static Scope *new_scope(GlobalCtxt *gcx, FuncCtxt *fcx, Scope *outer);
@@ -280,19 +281,21 @@ static Initializer *new_initializer(Type *type) {
   init->elements = NULL;
   switch (type->ty) {
   case TY_STRUCT: {
-    init->members = new_map();
+    init->members = new_vector();
     StructBody *body = type->struct_body;
     for (int i = 0; i < vec_len(body->member_list); i++) {
       Member *member = vec_get(body->member_list, i);
-      map_put(init->members, member->name, NULL);
+      MemberInitializer *meminit = new_member_initializer(member);
+      vec_push(init->members, meminit);
     }
     break;
   }
   case TY_UNION: {
-    init->members = new_map();
+    init->members = new_vector();
     StructBody *body = type->struct_body;
     if (vec_len(body->member_list) > 0) {
-      map_put(init->members, NULL, NULL);
+      MemberInitializer *meminit = new_member_initializer(NULL);
+      vec_push(init->members, meminit);
     }
     break;
   }
@@ -304,6 +307,12 @@ static Initializer *new_initializer(Type *type) {
     break;
   }
   return init;
+}
+
+static MemberInitializer *new_member_initializer(Member *member) {
+  MemberInitializer *meminit = NEW(MemberInitializer);
+  meminit->member = member;
+  return meminit;
 }
 
 static GlobalCtxt *new_global_ctxt(void) {
@@ -2867,17 +2876,17 @@ static void struct_initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
             token_consume(tokenizer, '=');
           }
           Token *current = token_peek(tokenizer);
-          Initializer *meminit = map_get_by_index((*init)->members, i, NULL);
+          MemberInitializer *meminit = vec_get((*init)->members, i);
           // if name is null, try parsing designator as inner struct/union's
           // designator
-          initializer_inner(tokenizer, scope, member->type, &meminit, NULL);
+          initializer_inner(tokenizer, scope, member->type, &meminit->init,
+                            NULL);
           if (token_peek(tokenizer) == current) {
             // if the designator is not found in inner struct/union, continue to
             // next member
             continue;
           }
           idx = i + 1;
-          map_set_by_index((*init)->members, i, member->name, meminit);
           token_consume(tokenizer, ',');
           break;
         }
@@ -2887,10 +2896,9 @@ static void struct_initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
     // initializers without designator.
     if (token_peek(tokenizer)->ty != '.' && token_peek(tokenizer)->ty != '}') {
       for (int i = idx; i < vec_len(body->member_list); i++) {
-        Initializer *meminit = map_get_by_index((*init)->members, i, NULL);
+        MemberInitializer *meminit = vec_get((*init)->members, i);
         Member *member = vec_get(body->member_list, i);
-        initializer_inner(tokenizer, scope, member->type, &meminit, NULL);
-        map_set_by_index((*init)->members, i, member->name, meminit);
+        initializer_inner(tokenizer, scope, member->type, &meminit->init, NULL);
         if ((i < vec_len(body->member_list) - 1 &&
              token_consume(tokenizer, ',') == NULL) ||
             (token_peek(tokenizer)->ty == '.')) {
@@ -2927,25 +2935,26 @@ static void union_initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
             token_consume(tokenizer, '=');
           }
           Token *current = token_peek(tokenizer);
-          Initializer *meminit = map_get_by_index((*init)->members, 0, NULL);
+          MemberInitializer *meminit = vec_get((*init)->members, 0);
           // if name is null, try parsing designator as inner struct/union's
           // designator
-          initializer_inner(tokenizer, scope, member->type, &meminit, NULL);
+          initializer_inner(tokenizer, scope, member->type, &meminit->init,
+                            NULL);
           if (token_peek(tokenizer) == current) {
             // if the designator is not found in inner struct/union, continue to
             // next member
             continue;
           }
-          map_set_by_index((*init)->members, 0, member->name, meminit);
+          meminit->member = member;
           token_consume(tokenizer, ',');
           break;
         }
       }
     } else {
-      Initializer *meminit = map_get_by_index((*init)->members, 0, NULL);
+      MemberInitializer *meminit = vec_get((*init)->members, 0);
       Member *member = vec_get(body->member_list, 0);
-      initializer_inner(tokenizer, scope, member->type, &meminit, NULL);
-      map_set_by_index((*init)->members, 0, member->name, meminit);
+      initializer_inner(tokenizer, scope, member->type, &meminit->init, NULL);
+      meminit->member = member;
       break;
     }
 
@@ -3343,15 +3352,13 @@ static void gen_init(Scope *scope, Expr **expr, Initializer *init, Expr *dest,
       range_assert(dest->range, type->ty == TY_STRUCT || type->ty == TY_UNION,
                    "type is not array nor struct: %s",
                    format_type(type, false));
-      for (int i = 0; i < map_size(init->members); i++) {
-        const char *name;
-        Initializer *meminit = map_get_by_index(init->members, i, &name);
-        Expr *mem = name != NULL ? new_expr_dot(dest, name, dest->range) : dest;
-        Type *memtype =
-            (meminit != NULL)
-                ? meminit->type
-                : ((Member *)vec_get(type->struct_body->member_list, i))->type;
-        gen_init(scope, expr, meminit, mem, memtype);
+      for (int i = 0; i < vec_len(init->members); i++) {
+        MemberInitializer *meminit = vec_get(init->members, i);
+        Member *member = meminit->member;
+        Expr *mem_expr = member->name != NULL
+                             ? new_expr_dot(dest, member->name, dest->range)
+                             : dest;
+        gen_init(scope, expr, meminit->init, mem_expr, member->type);
       }
       return;
     }

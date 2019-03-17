@@ -22,11 +22,6 @@ void *map_get_by_index(Map *map, int n, const char **key) {
   }
   return vec_get(map->vals, n);
 }
-void map_set_by_index(Map *map, int n, const char *key, void *val) {
-  assert(n < map_size(map));
-  vec_set(map->keys, n, (void *)key);
-  vec_set(map->vals, n, val);
-}
 
 void map_put(Map *map, const char *key, void *val) {
   vec_push(map->keys, (void *)key);
