@@ -1,6 +1,7 @@
 #include "gifcc.h"
 #include <assert.h>
 #include <ctype.h>
+#include <errno.h>
 #include <libgen.h>
 #include <limits.h>
 #include <stdarg.h>
@@ -597,6 +598,23 @@ static Macro *new_func_macro(Vector *params, bool has_varargs,
   return macro;
 }
 
+static Vector *read_tokens_to_eol(Tokenizer *tokenizer) {
+  Vector *tokens = new_vector();
+  while (true) {
+    Token *token = NULL;
+    if (!do_read_token(tokenizer, &token, false, false)) {
+      char ch = reader_peek(tokenizer->reader);
+      if (ch == '\n' || ch == '\0') {
+        break;
+      }
+      reader_error_here(tokenizer->reader, "トークナイズできません: `%c`",
+                        reader_peek(tokenizer->reader));
+    }
+    vec_push(tokens, token);
+  }
+  return tokens;
+}
+
 static bool pp_directive(Tokenizer *tokenizer) {
   int start = reader_get_offset(tokenizer->reader);
   if (!reader_consume(tokenizer->reader, '#')) {
@@ -770,21 +788,8 @@ static bool pp_directive(Tokenizer *tokenizer) {
       reader_expect(tokenizer->reader, ')');
     }
 
-    Vector *tokens = new_vector();
-    while (true) {
-      Token *token = NULL;
-      if (!do_read_token(tokenizer, &token, false, true)) {
-        char ch = reader_peek(tokenizer->reader);
-        if (ch == '\n' || ch == '\0') {
-          break;
-        }
-        reader_error_here(tokenizer->reader, "トークナイズできません: `%c`",
-                          reader_peek(tokenizer->reader));
-      }
-      vec_push(tokens, token);
-    }
+    Vector *tokens = read_tokens_to_eol(tokenizer);
     reader_expect(tokenizer->reader, '\n');
-
     Macro *macro;
     if (params != NULL) {
       macro = new_func_macro(params, has_varargs, tokens);
@@ -824,6 +829,48 @@ static bool pp_directive(Tokenizer *tokenizer) {
                 str_get_raw(str));
   }
 
+  if (strcmp(directive_raw, "line") == 0) {
+    skip_space_or_comment(tokenizer->reader);
+    Vector *tokens = read_tokens_to_eol(tokenizer);
+    tokens = pp_expand_macros(tokenizer, tokens, NULL);
+    if (vec_len(tokens) == 0) {
+      reader_error_here(tokenizer->reader,
+                        "#line directive requires a positive integer argument");
+    }
+    Token *num = vec_get(tokens, 0);
+    if (num->ty != TK_NUM) {
+      range_error(num->range,
+                  "#line directive requires a positive integer argument");
+    }
+    char *endptr;
+    unsigned long long val;
+    errno = 0;
+    val = strtoull(num->num, &endptr, 10);
+    if ((val == ULLONG_MAX && errno == ERANGE) || val > INT_MAX ||
+        strcmp(endptr, "") != 0) {
+      range_error(num->range,
+                  "#line directive requires a positive integer argument");
+    }
+    int line = val;
+    const char *filename = NULL;
+    if (vec_len(tokens) > 1) {
+      Token *str = vec_get(tokens, 1);
+      if (str->ty != TK_STR) {
+        range_error(str->range, "invalid filename for #line directive");
+      }
+      filename = str->str;
+    }
+    if (vec_len(tokens) > 2) {
+      Token *token = vec_get(tokens, 2);
+      range_warn(token->range, "extra tokens at end of #line directive");
+    }
+
+    reader_expect(tokenizer->reader, '\n');
+
+    reader_set_position(tokenizer->reader, &line, filename);
+    return true;
+  }
+
   skip_to_eol(tokenizer->reader);
   int end = reader_get_offset(tokenizer->reader);
   reader_expect(tokenizer->reader, '\n');
@@ -850,23 +897,7 @@ static bool pp_outer_cond_fullfilled(Vector *pp_cond_stack) {
 }
 
 static bool pp_read_if_cond(Tokenizer *tokenizer) {
-  Vector *tokens = new_vector();
-
-  // read tokens until next line break
-  while (true) {
-    Token *token = NULL;
-    if (!do_read_token(tokenizer, &token, false, false)) {
-      char ch = reader_peek(tokenizer->reader);
-      if (ch == '\n' || ch == '\0') {
-        break;
-      }
-      reader_error_here(tokenizer->reader, "トークナイズできません: `%c`",
-                        reader_peek(tokenizer->reader));
-    }
-    if (token != NULL) {
-      vec_push(tokens, token);
-    }
-  }
+  Vector *tokens = read_tokens_to_eol(tokenizer);
   int here_offset = reader_get_offset(tokenizer->reader);
   const Range *here =
       range_from_reader(tokenizer->reader, here_offset, here_offset);

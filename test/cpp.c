@@ -64,6 +64,11 @@ static int n5 = 6\
 #define DEFVAR(var, val, type) type var = val
 DEFVAR(n6, 700, int);
 
+#line 100
+#if __LINE__ != 100
+#error "ERROR"
+#endif
+
 static void test01(void) {
   CHECK_INT(100, n0);
   CHECK_INT(200, n1);

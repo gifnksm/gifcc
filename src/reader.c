@@ -19,6 +19,8 @@ typedef struct FileOffset {
   int index;
   int global_offset;
   int file_offset;
+  int line_bias;
+  const char *alt_filename;
   File *file;
 } FileOffset;
 
@@ -42,7 +44,7 @@ typedef enum {
   MESSAGE_NOTE,
 } message_t;
 
-static void switch_file(Reader *reader, File *file);
+static FileOffset *switch_file(Reader *reader, File *file);
 static char reader_peek_ahead(const Reader *reader, int n);
 static File *peek_file(const Reader *reader);
 static File *peek_file_n(const Reader *reader, int n);
@@ -160,7 +162,7 @@ Reader *new_reader(void) {
 
   File *file = new_builtin_file();
   file->stack_idx = INT_MAX;
-  switch_file(reader, file);
+  (void)switch_file(reader, file);
 
   reader->offset = 1;
 
@@ -171,10 +173,22 @@ void reader_add_file(Reader *reader, FILE *fp, const char *filename) {
   File *file = new_file(fp, filename);
   file->stack_idx = vec_len(reader->file_stack);
   vec_push(reader->file_stack, file);
-  switch_file(reader, file);
+  (void)switch_file(reader, file);
 }
 
-static void switch_file(Reader *reader, File *file) {
+void reader_set_position(Reader *reader, int *line, const char *filename) {
+  int current_line;
+  reader_get_position(reader, reader->offset, NULL, &current_line, NULL);
+
+  File *file = peek_file(reader);
+  FileOffset *fo = switch_file(reader, file);
+  if (line != NULL) {
+    fo->line_bias = *line - current_line;
+  }
+  fo->alt_filename = filename;
+}
+
+static FileOffset *switch_file(Reader *reader, File *file) {
   FileOffset *fo = NEW(FileOffset);
   fo->index = vec_len(reader->file_offset);
   fo->global_offset = reader->offset;
@@ -182,6 +196,7 @@ static void switch_file(Reader *reader, File *file) {
   fo->file = file;
   vec_push(reader->file_offset, fo);
   reader->is_sol = true;
+  return fo;
 }
 
 static File *peek_file(const Reader *reader) { return peek_file_n(reader, 0); }
@@ -228,7 +243,7 @@ void reader_succ(Reader *reader) {
     file->offset++;
     if (file->offset >= file->size) {
       vec_pop(reader->file_stack);
-      switch_file(reader, peek_file(reader));
+      (void)switch_file(reader, peek_file(reader));
       return;
     }
 
@@ -297,8 +312,9 @@ static FileOffset *get_file_offset(const Reader *reader, int offset) {
   assert(false);
 }
 
-void reader_get_position(const Reader *reader, int offset,
-                         const char **filename, int *line, int *column) {
+static void reader_get_position_inner(const Reader *reader, int offset,
+                                      bool get_real, const char **filename,
+                                      int *line, int *column) {
   FileOffset *fo = get_file_offset(reader, offset);
   for (int j = int_vec_len(fo->file->line_offset) - 1; j >= 0; j--) {
     int line_start = int_vec_get(fo->file->line_offset, j);
@@ -307,10 +323,17 @@ void reader_get_position(const Reader *reader, int offset,
     }
 
     if (filename != NULL) {
-      *filename = fo->file->name;
+      if (get_real || fo->alt_filename == NULL) {
+        *filename = fo->file->name;
+      } else {
+        *filename = fo->alt_filename;
+      }
     }
     if (line != NULL) {
       *line = j + 1;
+      if (!get_real) {
+        *line += fo->line_bias;
+      }
     }
     if (column != NULL) {
       *column = offset - fo->global_offset + fo->file_offset - line_start + 1;
@@ -320,6 +343,14 @@ void reader_get_position(const Reader *reader, int offset,
   assert(false);
 }
 
+void reader_get_position(const Reader *reader, int offset,
+                         const char **filename, int *line, int *column) {
+  reader_get_position_inner(reader, offset, false, filename, line, column);
+}
+void reader_get_real_position(const Reader *reader, int offset,
+                              const char **filename, int *line, int *column) {
+  reader_get_position_inner(reader, offset, true, filename, line, column);
+}
 char *reader_get_source(const Range *range) {
   int offset = range->start;
   FileOffset *fo = get_file_offset(range->reader, offset);
@@ -433,12 +464,12 @@ static void print_source(const Range *range) {
 
     const char *start_filename;
     int start_line, start_column;
-    reader_get_position(reader, start, &start_filename, &start_line,
-                        &start_column);
+    reader_get_real_position(reader, start, &start_filename, &start_line,
+                             &start_column);
     const char *end_filename;
     int end_line, end_column;
-    reader_get_position(reader, start + file_len - 1, &end_filename, &end_line,
-                        &end_column);
+    reader_get_real_position(reader, start + file_len - 1, &end_filename,
+                             &end_line, &end_column);
     assert(strcmp(start_filename, end_filename) == 0);
 
     for (int line = start_line; line <= end_line; line++) {

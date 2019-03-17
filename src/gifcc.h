@@ -607,6 +607,7 @@ void range_get_end(const Range *range, const char **filename, int *line,
                    int *column);
 Reader *new_reader(void);
 void reader_add_file(Reader *reader, FILE *fp, const char *filename);
+void reader_set_position(Reader *reader, int *line, const char *filename);
 char reader_peek(const Reader *reader);
 void reader_succ(Reader *reader);
 void reader_succ_n(Reader *reader, int n);
