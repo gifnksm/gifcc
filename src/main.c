@@ -124,7 +124,8 @@ static void dump_expr(Expr *expr, int level) {
     dump_expr_oneline(expr, level, "GLOBAL_VAR %s", expr->global_var.name);
     return;
   case EX_STR:
-    dump_expr_oneline(expr, level, "STR %s", format_string_literal(expr->str));
+    dump_expr_oneline(expr, level, "STR %s:%s",
+                      format_string_literal(expr->str->val), expr->str->name);
     return;
   case EX_COMPOUND:
     dump_expr_start(expr, level, "COMPOUND");
@@ -493,7 +494,7 @@ static void dump_init(Initializer *init, const Range *range, int level) {
       Initializer *val = vec_get(init->elements, i);
       dump_range_start(range);
       dump_indent(level + 1);
-      printf(".[%d] = \n", i);
+      printf("[%d] = \n", i);
       dump_init(val, range, level + 1);
     }
     dump_range_end(range);

@@ -649,7 +649,7 @@ static void emit_expr_global_var(Expr *expr) {
 static void emit_expr_str(Expr *expr) {
   assert(expr->ty == EX_STR);
 
-  printf("  lea rax, %s[rip]\n", expr->str);
+  printf("  lea rax, %s[rip]\n", expr->str->name);
   emit_push("rax");
 }
 
@@ -2184,7 +2184,7 @@ static void emit_gvar_init(Initializer *init, const Range *range,
     } else if (expr->ty == EX_COMPOUND) {
       emit_gvar_init(expr->compound, expr->range, gvar_list);
     } else if (expr->ty == EX_STR) {
-      printf("  .quad %s\n", expr->str);
+      printf("  .quad %s\n", expr->str->name);
     } else {
       range_error(range, "数値でもポインタでもありません: %d", expr->ty);
     }

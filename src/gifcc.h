@@ -406,7 +406,7 @@ typedef struct Expr {
     } global_var;
 
     // EX_STR
-    const char *str;
+    const StringLiteral *str;
 
     // EX_COMPOUND
     Initializer *compound;

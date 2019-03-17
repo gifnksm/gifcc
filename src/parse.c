@@ -1294,13 +1294,14 @@ static Expr *new_expr_ident(Scope *scope, Token *ident) {
 static Expr *new_expr_str(Scope *scope, const char *val, const Range *range) {
   Type *type = new_type_ptr(new_type(TY_CHAR, CONST_TYPE_QUALIFIER),
                             EMPTY_TYPE_QUALIFIER);
-  Expr *expr = new_expr(EX_STR, type, range);
 
-  expr->str = make_label("str");
-  StringLiteral *str = NEW(StringLiteral);
-  str->name = expr->str;
-  str->val = val;
-  vec_push(scope->global_ctxt->str_list, str);
+  StringLiteral *lit = NEW(StringLiteral);
+  lit->name = make_label("str");
+  lit->val = val;
+  vec_push(scope->global_ctxt->str_list, lit);
+
+  Expr *expr = new_expr(EX_STR, type, range);
+  expr->str = lit;
   return expr;
 }
 
