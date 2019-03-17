@@ -23,72 +23,6 @@ noreturn void error_raw_v(const char *dbg_file, int dbg_line, const char *fmt,
   exit(1);
 }
 
-static void dump_number(Number num) {
-  switch (num.type) {
-  case TY_BOOL:
-    printf("%d", num.bool_val);
-    break;
-  case TY_CHAR:
-    printf("%hhd", num.char_val);
-    break;
-  case TY_S_CHAR:
-    printf("%hhd", num.s_char_val);
-    break;
-  case TY_S_SHORT:
-    printf("%hd", num.s_short_val);
-    break;
-  case TY_S_INT:
-    printf("%d", num.s_int_val);
-    break;
-  case TY_S_LONG:
-    printf("%ld", num.s_long_val);
-    break;
-  case TY_S_LLONG:
-    printf("%lld", num.s_llong_val);
-    break;
-  case TY_U_CHAR:
-    printf("%hhu", num.u_char_val);
-    break;
-  case TY_U_SHORT:
-    printf("%hu", num.u_short_val);
-    break;
-  case TY_U_INT:
-    printf("%u", num.u_int_val);
-    break;
-  case TY_U_LONG:
-    printf("%lu", num.u_long_val);
-    break;
-  case TY_U_LLONG:
-    printf("%llu", num.u_llong_val);
-    break;
-  case TY_PTR:
-    printf("%" PRIdPTR, num.ptr_val);
-    break;
-  case TY_ENUM:
-    printf("%d", num.enum_val);
-    break;
-  case TY_FLOAT:
-    printf("%f", num.float_val);
-    break;
-  case TY_DOUBLE:
-    printf("%f", num.double_val);
-    break;
-  case TY_LDOUBLE:
-    printf("%Lf", num.ldouble_val);
-    break;
-    break;
-  case TY_VOID:
-    printf("void");
-    break;
-  case TY_ARRAY:
-  case TY_FUNC:
-  case TY_STRUCT:
-  case TY_UNION:
-  case TY_BUILTIN:
-    assert(false);
-  }
-}
-
 static void output_token(Reader *reader) {
   Tokenizer *tokenizer = new_tokenizer(reader);
   Token *token;
@@ -104,13 +38,13 @@ static void output_token(Reader *reader) {
       printf("%s", token->num);
       break;
     case TK_CHARCONST:
-      dump_number(token->char_val);
+      printf("%s", format_number(token->char_val));
       break;
     case TK_IDENT:
       printf("%s", token->ident);
       break;
     case TK_STR:
-      print_string_literal(token->str);
+      printf("%s", format_string_literal(token->str));
       break;
     default:
       break;
@@ -125,76 +59,77 @@ static void dump_range_start(const Range *range) {
   range_get_start(range, &filename, &line, &column);
   printf("%s:%d:%d\t", filename, line, column);
 }
-
 static void dump_range_end(const Range *range) {
   const char *filename;
   int line, column;
   range_get_end(range, &filename, &line, &column);
   printf("%s:%d:%d\t", filename, line, column);
 }
+
 static void dump_indent(int level) { printf("%*s", 2 * level, ""); }
 static void dump_type(Type *ty) { printf("<%s>", format_type(ty, true)); }
-static void dump_expr(Expr *expr, int level);
-static void dump_init(Initializer *init, const Range *range, int level);
-static void dump_unop_expr(Expr *expr, char *label, int level) {
+
+static __attribute__((format(printf, 3, 4))) void
+dump_expr_oneline(const Expr *expr, int level, const char *fmt, ...) {
+  va_list ap;
+  va_start(ap, fmt);
   dump_range_start(expr->range);
   dump_indent(level);
   dump_type(expr->val_type);
-  printf("(%s\n", label);
-  dump_expr(expr->unop.operand, level + 1);
+  printf("(");
+  vprintf(fmt, ap);
+  printf(")\n");
+  va_end(ap);
+}
+static __attribute__((format(printf, 3, 4))) void
+dump_expr_start(const Expr *expr, int level, const char *fmt, ...) {
+  va_list ap;
+  va_start(ap, fmt);
+  dump_range_start(expr->range);
+  dump_indent(level);
+  dump_type(expr->val_type);
+  printf("(");
+  vprintf(fmt, ap);
+  printf("\n");
+  va_end(ap);
+}
+static void dump_expr_end(const Expr *expr, int level) {
   dump_range_end(expr->range);
   dump_indent(level);
   printf(")\n");
 }
+static void dump_expr(Expr *expr, int level);
+static void dump_init(Initializer *init, const Range *range, int level);
+static void dump_unop_expr(Expr *expr, char *label, int level) {
+  dump_expr_start(expr, level, "%s", label);
+  dump_expr(expr->unop.operand, level + 1);
+  dump_expr_end(expr, level);
+}
 static void dump_binop_expr(Expr *expr, char *label, int level) {
-  dump_range_start(expr->range);
-  dump_indent(level);
-  dump_type(expr->val_type);
-  printf("(%s\n", label);
+  dump_expr_start(expr, level, "%s", label);
   dump_expr(expr->binop.lhs, level + 1);
   dump_expr(expr->binop.rhs, level + 1);
-  dump_range_end(expr->range);
-  dump_indent(level);
-  printf(")\n");
+  dump_expr_end(expr, level);
 }
 static void dump_expr(Expr *expr, int level) {
   switch (expr->ty) {
   // primary expression
   case EX_NUM:
-    dump_range_start(expr->range);
-    dump_indent(level);
-    dump_type(expr->val_type);
-    printf("(NUM ");
-    dump_number(expr->num);
-    printf(")\n");
+    dump_expr_oneline(expr, level, "NUM %s", format_number(expr->num));
     return;
   case EX_STACK_VAR:
-    dump_range_start(expr->range);
-    dump_indent(level);
-    dump_type(expr->val_type);
-    printf("(STACK_VAR %s)\n", expr->stack_var->name);
+    dump_expr_oneline(expr, level, "STACK_VAR %s", expr->stack_var->name);
     return;
   case EX_GLOBAL_VAR:
-    dump_range_start(expr->range);
-    dump_indent(level);
-    dump_type(expr->val_type);
-    printf("(GLOBAL_VAR %s)\n", expr->global_var.name);
+    dump_expr_oneline(expr, level, "GLOBAL_VAR %s", expr->global_var.name);
     return;
   case EX_STR:
-    dump_range_start(expr->range);
-    dump_indent(level);
-    dump_type(expr->val_type);
-    printf("(STR ");
-    print_string_literal(expr->str);
-    printf(")\n");
+    dump_expr_oneline(expr, level, "STR %s", format_string_literal(expr->str));
     return;
   case EX_COMPOUND:
-    dump_range_start(expr->range);
-    dump_indent(level);
-    dump_type(expr->val_type);
-    printf("(COMPOUND ");
+    dump_expr_start(expr, level, "COMPOUND");
     dump_init(expr->compound, expr->range, level + 1);
-    printf(")\n");
+    dump_expr_end(expr, level);
     return;
 
   // prefix unary operator
@@ -228,19 +163,14 @@ static void dump_expr(Expr *expr, int level) {
 
   // postfix unary operator
   case EX_CALL:
-    dump_range_start(expr->range);
-    dump_indent(level);
-    dump_type(expr->val_type);
-    printf("(CALL\n");
+    dump_expr_start(expr, level, "CALL");
     dump_expr(expr->call.callee, level + 1);
     if (expr->call.argument != NULL) {
       for (int i = 0; i < vec_len(expr->call.argument); i++) {
         dump_expr(vec_get(expr->call.argument, i), level + 1);
       }
     }
-    dump_range_end(expr->range);
-    dump_indent(level);
-    printf(")\n");
+    dump_expr_end(expr, level);
     return;
   case EX_POST_INC:
     dump_unop_expr(expr, "[++(POST)]", level);
@@ -249,17 +179,9 @@ static void dump_expr(Expr *expr, int level) {
     dump_unop_expr(expr, "[--(POST)]", level);
     return;
   case EX_DOT:
-    dump_range_start(expr->range);
-    dump_indent(level);
-    dump_type(expr->val_type);
-    printf("(DOT\n");
+    dump_expr_start(expr, level, "DOT %s", expr->dot.member->name);
     dump_expr(expr->dot.operand, level + 1);
-    dump_range_end(expr->range);
-    dump_indent(level);
-    printf("%s\n", expr->dot.member->name);
-    dump_range_end(expr->range);
-    dump_indent(level);
-    printf(")\n");
+    dump_expr_end(expr, level);
     return;
 
   // binary operator
@@ -351,186 +273,139 @@ static void dump_expr(Expr *expr, int level) {
     dump_binop_expr(expr, "[|=]", level);
     return;
   case EX_COMMA:
-    dump_range_start(expr->range);
-    dump_indent(level);
-    dump_type(expr->val_type);
-    printf("([,]\n");
+    dump_expr_start(expr, level, "[,]");
     for (int i = 0; i < vec_len(expr->comma.exprs); i++) {
       Expr *op = vec_get(expr->comma.exprs, i);
       dump_expr(op, level + 1);
     }
-    dump_range_end(expr->range);
-    dump_indent(level);
-    printf(")\n");
+    dump_expr_end(expr, level);
     return;
 
   // ternary unary operator
   case EX_COND:
-    dump_range_start(expr->range);
-    dump_indent(level);
-    dump_type(expr->val_type);
-    printf("(COND\n");
+    dump_expr_start(expr, level, "COND");
     dump_expr(expr->cond.cond, level + 1);
     dump_expr(expr->cond.then_expr, level + 1);
     dump_expr(expr->cond.else_expr, level + 1);
-    dump_range_end(expr->range);
-    dump_indent(level);
-    printf(")\n");
+    dump_expr_end(expr, level);
     return;
 
   // compiler builtins
   case EX_BUILTIN_FUNC:
-    dump_range_start(expr->range);
-    dump_indent(level);
-    dump_type(expr->val_type);
-    printf("(BUILTIN_FUNC %s)\n", expr->builtin_func.name);
+    dump_expr_oneline(expr, level, "BUILTIN_FUNC %s", expr->builtin_func.name);
     return;
 
   case EX_BUILTIN_VA_START:
-    dump_range_start(expr->range);
-    dump_indent(level);
-    dump_type(expr->val_type);
-    printf("(BUILTIN_VA_START\n");
+    dump_expr_start(expr, level, "BUILTIN_VA_START");
     dump_expr(expr->builtin_va_start.ap, level + 1);
     dump_expr(expr->builtin_va_start.last, level + 1);
-    dump_range_end(expr->range);
-    dump_indent(level);
-    printf(")\n");
+    dump_expr_end(expr, level);
     return;
   case EX_BUILTIN_VA_ARG:
-    dump_range_start(expr->range);
-    dump_indent(level);
-    dump_type(expr->val_type);
-    printf("(BUILTIN_VA_ARG\n");
+    dump_expr_start(expr, level, "BUILTIN_VA_ARG");
     dump_expr(expr->builtin_va_arg.ap, level + 1);
-    dump_range_start(expr->range);
-    dump_indent(level);
-    dump_type(expr->builtin_va_arg.type);
-    printf("\n");
-    dump_range_end(expr->range);
-    dump_indent(level);
-    printf(")\n");
+    dump_expr_end(expr, level);
     return;
   case EX_BUILTIN_VA_END:
-    dump_range_start(expr->range);
-    dump_indent(level);
-    dump_type(expr->val_type);
-    printf("(BUILTIN_VA_END\n");
+    dump_expr_start(expr, level, "BUILTIN_VA_END");
     dump_expr(expr->builtin_va_end.ap, level + 1);
-    dump_range_end(expr->range);
-    dump_indent(level);
-    printf(")\n");
+    dump_expr_end(expr, level);
     return;
   case EX_BUILTIN_VA_COPY:
-    dump_range_start(expr->range);
-    dump_indent(level);
-    dump_type(expr->val_type);
-    printf("(BUILTIN_VA_COPY\n");
+    dump_expr_start(expr, level, "BUILTIN_VA_COPY");
     dump_expr(expr->builtin_va_copy.dest, level + 1);
     dump_expr(expr->builtin_va_copy.src, level + 1);
-    dump_range_end(expr->range);
-    dump_indent(level);
-    printf(")\n");
+    dump_expr_end(expr, level);
     return;
   }
   error("未知のノードです: %d", expr->ty);
 }
 
+static __attribute__((format(printf, 3, 4))) void
+dump_stmt_oneline(const Stmt *stmt, int level, const char *fmt, ...) {
+  va_list ap;
+  va_start(ap, fmt);
+  dump_range_start(stmt->range);
+  dump_indent(level);
+  printf("{");
+  vprintf(fmt, ap);
+  printf("}\n");
+  va_end(ap);
+}
+static __attribute__((format(printf, 3, 4))) void
+dump_stmt_start(const Stmt *stmt, int level, const char *fmt, ...) {
+  va_list ap;
+  va_start(ap, fmt);
+  dump_range_start(stmt->range);
+  dump_indent(level);
+  printf("{");
+  vprintf(fmt, ap);
+  printf("\n");
+  va_end(ap);
+}
+static void dump_stmt_end(const Stmt *stmt, int level) {
+  dump_range_end(stmt->range);
+  dump_indent(level);
+  printf("}\n");
+}
+
 static void dump_stmt(Stmt *stmt, int level) {
   switch (stmt->ty) {
   case ST_EXPR:
-    dump_range_start(stmt->range);
-    dump_indent(level);
-    printf("{EXPR\n");
+    dump_stmt_start(stmt, level, "EXPR");
     dump_expr(stmt->expr, level + 1);
-    dump_range_end(stmt->range);
-    dump_indent(level);
-    printf("}\n");
+    dump_stmt_end(stmt, level);
     return;
   case ST_COMPOUND:
-    dump_range_start(stmt->range);
-    dump_indent(level);
-    printf("{COMPOUND\n");
+    dump_stmt_start(stmt, level, "COMPOUND");
     for (int i = 0; i < vec_len(stmt->stmts); i++) {
       dump_stmt(vec_get(stmt->stmts, i), level + 1);
     }
-    dump_range_end(stmt->range);
-    dump_indent(level);
-    printf("}\n");
+    dump_stmt_end(stmt, level);
     return;
   case ST_IF:
-    dump_range_start(stmt->range);
-    dump_indent(level);
-    printf("{IF\n");
+    dump_stmt_start(stmt, level, "IF");
     dump_expr(stmt->cond, level + 1);
     dump_stmt(stmt->then_stmt, level + 1);
     dump_stmt(stmt->else_stmt, level + 1);
-    dump_range_end(stmt->range);
-    dump_indent(level);
-    printf("}\n");
+    dump_stmt_end(stmt, level);
     return;
   case ST_SWITCH:
-    dump_range_start(stmt->range);
-    dump_indent(level);
-    printf("{SWITCH\n");
+    dump_stmt_start(stmt, level, "SWITCH");
     dump_expr(stmt->cond, level + 1);
     dump_stmt(stmt->body, level + 1);
-    dump_range_end(stmt->range);
-    dump_indent(level);
-    printf("}\n");
+    dump_stmt_end(stmt, level);
     return;
   case ST_CASE:
-    dump_range_start(stmt->range);
-    dump_indent(level);
-    printf("{CASE\n");
+    dump_stmt_start(stmt, level, "CASE");
     dump_expr(stmt->expr, level + 1);
     dump_stmt(stmt->body, level + 1);
-    dump_range_end(stmt->range);
-    dump_indent(level);
-    printf("}\n");
+    dump_stmt_end(stmt, level);
     return;
   case ST_DEFAULT:
-    dump_range_start(stmt->range);
-    dump_indent(level);
-    printf("{DEFAULT\n");
+    dump_stmt_start(stmt, level, "DEFAULT");
     dump_stmt(stmt->body, level + 1);
-    dump_range_end(stmt->range);
-    dump_indent(level);
-    printf("}\n");
+    dump_stmt_end(stmt, level);
     return;
   case ST_LABEL:
-    dump_range_start(stmt->range);
-    dump_indent(level);
-    printf("{LABEL %s\n", stmt->name);
+    dump_stmt_start(stmt, level, "LABEL %s", stmt->name);
     dump_stmt(stmt->body, level + 1);
-    dump_range_end(stmt->range);
-    dump_indent(level);
-    printf("}\n");
+    dump_stmt_end(stmt, level);
     return;
   case ST_WHILE:
-    dump_range_start(stmt->range);
-    dump_indent(level);
-    printf("{WHILE\n");
+    dump_stmt_start(stmt, level, "WHILE");
     dump_expr(stmt->cond, level + 1);
     dump_stmt(stmt->body, level + 1);
-    dump_range_end(stmt->range);
-    dump_indent(level);
-    printf("\n");
+    dump_stmt_end(stmt, level);
     return;
   case ST_DO_WHILE:
-    dump_range_start(stmt->range);
-    dump_indent(level);
-    printf("{DO_WHILE\n");
+    dump_stmt_start(stmt, level, "DO_WHILE");
     dump_expr(stmt->cond, level + 1);
     dump_stmt(stmt->body, level + 1);
-    dump_range_end(stmt->range);
-    dump_indent(level);
-    printf("\n");
+    dump_stmt_end(stmt, level);
     return;
   case ST_FOR:
-    dump_range_start(stmt->range);
-    dump_indent(level);
-    printf("{FOR\n");
+    dump_stmt_start(stmt, level, "FOR");
     if (stmt->init != NULL) {
       dump_expr(stmt->init, level + 1);
     } else {
@@ -553,42 +428,28 @@ static void dump_stmt(Stmt *stmt, int level) {
       printf("<void>(NULL)\n");
     }
     dump_stmt(stmt->body, level + 1);
-    dump_range_end(stmt->range);
-    dump_indent(level);
-    printf("\n");
+    dump_stmt_end(stmt, level);
     return;
   case ST_GOTO:
-    dump_range_start(stmt->range);
-    dump_indent(level);
-    printf("{GOTO %s}\n", stmt->name);
+    dump_stmt_oneline(stmt, level, "GOTO %s", stmt->name);
     return;
   case ST_BREAK:
-    dump_range_start(stmt->range);
-    dump_indent(level);
-    printf("{BREAK}\n");
+    dump_stmt_oneline(stmt, level, "BREAK");
     return;
   case ST_CONTINUE:
-    dump_range_start(stmt->range);
-    dump_indent(level);
-    printf("{CONTINUE}\n");
+    dump_stmt_oneline(stmt, level, "CONTINUE");
     return;
   case ST_RETURN:
-    dump_range_start(stmt->range);
-    dump_indent(level);
     if (stmt->expr != NULL) {
-      printf("{RETURN\n");
+      dump_stmt_start(stmt, level, "RETURN");
       dump_expr(stmt->expr, level + 1);
-      dump_range_end(stmt->range);
-      dump_indent(level);
-      printf("}\n");
+      dump_stmt_end(stmt, level);
     } else {
-      printf("{RETURN}\n");
+      dump_stmt_oneline(stmt, level, "RETURN");
     }
     return;
   case ST_NULL:
-    dump_range_start(stmt->range);
-    dump_indent(level);
-    printf("{NULL}\n");
+    dump_stmt_oneline(stmt, level, "NULL");
     return;
   }
   error("未知のノードです: %d\n", stmt->ty);

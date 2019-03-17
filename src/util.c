@@ -2,45 +2,48 @@
 #include <ctype.h>
 #include <stdarg.h>
 
-void print_string_literal(const char *str) {
-  printf("\"");
+char *format_string_literal(const char *str) {
+  String *buf = new_string();
+  str_push(buf, '"');
   for (int i = 0; str[i] != '\0'; i++) {
     switch (str[i]) {
     case '\'':
     case '\"':
     case '\\':
-      printf("\\%c", str[i]);
+      str_append(buf, format("\\%c", str[i]));
       break;
     case '\a':
-      printf("\\a");
+      str_append(buf, format("\\a"));
       break;
     case '\b':
-      printf("\\b");
+      str_append(buf, format("\\b"));
       break;
     case '\f':
-      printf("\\f");
+      str_append(buf, format("\\f"));
       break;
     case '\n':
-      printf("\\n");
+      str_append(buf, format("\\n"));
       break;
     case '\r':
-      printf("\\r");
+      str_append(buf, format("\\r"));
       break;
     case '\t':
-      printf("\\t");
+      str_append(buf, format("\\t"));
       break;
     case '\v':
-      printf("\\v");
+      str_append(buf, format("\\v"));
       break;
     default:
       if (isgraph(str[i]) || isspace(str[i])) {
-        printf("%c", str[i]);
+        str_append(buf, format("%c", str[i]));
       } else {
-        printf("\\%hho", str[i]);
+        str_append(buf, format("\\%hho", str[i]));
       }
     }
   }
-  printf("\"");
+  str_push(buf, '"');
+  str_push(buf, '\0');
+  return str_get_raw(buf);
 }
 
 static int alloc_printf_v(char **strp, const char *fmt, va_list ap) {

@@ -445,7 +445,6 @@ typedef struct Expr {
     // EX_BUILTIN_VA_ARG
     struct {
       Expr *ap;
-      Type *type;
     } builtin_va_arg;
 
     // EX_BUILTIN_VA_END
@@ -590,7 +589,7 @@ void *map_get(Map *map, const char *key);
 bool map_remove(Map *map, const char *key);
 
 // util.c
-void print_string_literal(const char *str);
+char *format_string_literal(const char *str);
 char *__attribute__((format(printf, 1, 2))) format(const char *fmt, ...);
 
 // util_test.c
@@ -673,6 +672,7 @@ Number new_number_int(int val);
 Number new_number_size_t(size_t val);
 Number new_number_ptrdiff_t(ptrdiff_t val);
 Number new_number_wchar_t(wchar_t val);
+char *format_number(Number num);
 
 // tokenize.c
 Tokenizer *new_tokenizer(Reader *reader);

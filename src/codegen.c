@@ -1203,7 +1203,7 @@ static void emit_expr_builtin_va_arg(Expr *expr) {
   int num_int = 0;
   int num_sse = 0;
 
-  Type *type = expr->builtin_va_arg.type;
+  Type *type = expr->val_type;
 
   Expr *ap = expr->builtin_va_arg.ap;
   arg_class_t class = classify_arg_type(type, expr->range, &num_int, &num_sse);
@@ -2258,9 +2258,7 @@ static void emit_gvar(GlobalVar *gvar, Vector *gvar_list) {
 
 static void emit_str(StringLiteral *str) {
   printf("%s:\n", str->name);
-  printf("  .string ");
-  print_string_literal(str->val);
-  printf("\n");
+  printf("  .string %s\n", format_string_literal(str->val));
 }
 
 void gen(TranslationUnit *tunit) {

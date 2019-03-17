@@ -1412,7 +1412,6 @@ static Expr *new_expr_builtin_va_arg(Scope *scope __attribute__((unused)),
   Type *type = type_expr->val_type->ptrof;
   Expr *expr = new_expr(EX_BUILTIN_VA_ARG, type, range);
   expr->builtin_va_arg.ap = ap;
-  expr->builtin_va_arg.type = type;
   return expr;
 }
 
