@@ -2547,6 +2547,17 @@ static void test79(void) {
   TEST_PRINTF("%Lf", val);
 }
 
+typedef struct Test80_S {
+  int a;
+  int b;
+  int c[];
+} Test80_S;
+Test80_S test80_s = {1, 2, {3, 4, 5}};
+static void test80(void) {
+  CHECK_INT(sizeof(int) * 2, sizeof(Test80_S));
+  CHECK_INT(sizeof(int) * 2, sizeof(test80_s));
+}
+
 int main(void) {
   Test test_list[] = {
       TEST(test01), TEST(test02), TEST(test03), TEST(test04), TEST(test05),
@@ -2564,7 +2575,8 @@ int main(void) {
       TEST(test61), TEST(test62), TEST(test63), TEST(test64), TEST(test65),
       TEST(test66), TEST(test67), TEST(test68), TEST(test69), TEST(test70),
       TEST(test71), TEST(test72), TEST(test73), TEST(test74), TEST(test75),
-      TEST(test76), TEST(test77), TEST(test78), TEST(test79), {NULL, NULL},
+      TEST(test76), TEST(test77), TEST(test78), TEST(test79), TEST(test80),
+      {NULL, NULL},
   };
   RUN_TEST(test_list);
 

@@ -117,21 +117,40 @@ void register_struct_member(Type *type, char *member_name, Type *member_type,
 
   StructBody *body = type->struct_body;
 
+  if (body->has_flex_array) {
+    range_error(range, "flexible array member is not at the end of struct");
+  }
+
+  int mem_size, mem_align;
+  if (member_type->ty == TY_ARRAY && member_type->array_len < 0) {
+    body->has_flex_array = true;
+    mem_size = 0;
+    mem_align = get_val_align(member_type->ptrof, range);
+  } else if ((member_type->ty == TY_STRUCT || member_type->ty == TY_UNION) &&
+             member_type->struct_body->has_flex_array) {
+    StructBody *mem_body = member_type->struct_body;
+    body->has_flex_array = true;
+    mem_size = mem_body->member_size;
+    mem_align = mem_body->member_align;
+  } else {
+    mem_size = get_val_size(member_type, range);
+    mem_align = get_val_align(member_type, range);
+  }
+
   int offset;
   if (type->ty == TY_STRUCT) {
-    body->member_size =
-        align(body->member_size, get_val_align(member_type, range));
+    body->member_size = align(body->member_size, mem_align);
     offset = body->member_size;
-    body->member_size += get_val_size(member_type, range);
+    body->member_size += mem_size;
   } else {
-    if (get_val_size(member_type, range) > body->member_size) {
-      body->member_size = get_val_size(member_type, range);
+    if (mem_size > body->member_size) {
+      body->member_size = mem_size;
     }
     offset = 0;
   }
 
-  if (body->member_align < get_val_align(member_type, range)) {
-    body->member_align = get_val_align(member_type, range);
+  if (body->member_align < mem_align) {
+    body->member_align = mem_align;
   }
 
   int index = vec_len(body->member_list);

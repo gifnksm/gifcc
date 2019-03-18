@@ -2218,7 +2218,7 @@ static void emit_gvar_init(Initializer *init, const Range *range,
       printf("  .zero %d\n", ty_size - offset);
       offset = ty_size;
     }
-    assert(offset == ty_size);
+    assert(body->has_flex_array || offset == ty_size);
     return;
   }
 

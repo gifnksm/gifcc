@@ -328,6 +328,7 @@ typedef struct StructBody {
   Vector *member_list;
   int member_size;
   int member_align;
+  bool has_flex_array;
 } StructBody;
 
 typedef struct Type {
