@@ -98,7 +98,7 @@ void init_struct_body(StructBody *body) {
   body->member_align = 0;
 }
 
-static Member *new_member(char *name, Type *type, int offset,
+static Member *new_member(char *name, Type *type, int offset, int index,
                           const Range *range) {
   if (type->ty == TY_VOID) {
     range_error(range, "void型のメンバーです: %s", name);
@@ -107,6 +107,7 @@ static Member *new_member(char *name, Type *type, int offset,
   member->name = name;
   member->type = type;
   member->offset = offset;
+  member->index = index;
   return member;
 }
 
@@ -133,7 +134,8 @@ void register_struct_member(Type *type, char *member_name, Type *member_type,
     body->member_align = get_val_align(member_type, range);
   }
 
-  Member *member = new_member(member_name, member_type, offset, range);
+  int index = vec_len(body->member_list);
+  Member *member = new_member(member_name, member_type, offset, index, range);
   vec_push(body->member_list, member);
   if (member_name == NULL) {
     assert(member_type->ty == TY_STRUCT || member_type->ty == TY_UNION);
@@ -141,8 +143,8 @@ void register_struct_member(Type *type, char *member_name, Type *member_type,
     Map *inner_members = member_body->member_name_map;
     for (int i = 0; i < map_size(inner_members); i++) {
       Member *inner = map_get_by_index(inner_members, i, NULL);
-      Member *inner_member =
-          new_member(inner->name, inner->type, offset + inner->offset, range);
+      Member *inner_member = new_member(inner->name, inner->type,
+                                        offset + inner->offset, index, range);
       if (map_get(body->member_name_map, inner_member->name)) {
         range_error(range, "同じ名前のメンバ変数が複数あります: %s",
                     inner_member->name);
@@ -156,6 +158,16 @@ void register_struct_member(Type *type, char *member_name, Type *member_type,
     }
     map_put(body->member_name_map, member->name, member);
   }
+}
+
+const Member *lookup_struct_member(Type *type, const char *name) {
+  assert(type->ty == TY_STRUCT || type->ty == TY_UNION);
+  StructBody *body = type->struct_body;
+  Member *member = map_get(body->member_name_map, name);
+  if (member == NULL) {
+    return NULL;
+  }
+  return vec_get(body->member_list, member->index);
 }
 
 bool is_sametype(Type *ty1, Type *ty2) {

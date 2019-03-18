@@ -222,7 +222,7 @@ typedef struct {
 
 typedef enum {
   // primary expression
-  EX_NUM = 256, // 整数のノードの型
+  EX_NUM, // 整数のノードの型
   EX_STACK_VAR,
   EX_GLOBAL_VAR,
   EX_STR,
@@ -352,7 +352,7 @@ typedef struct Initializer {
 
 typedef struct Member Member;
 typedef struct MemberInitializer {
-  Member *member;
+  const Member *member;
   Initializer *init;
 } MemberInitializer;
 
@@ -515,6 +515,7 @@ typedef struct Member {
   char *name;
   Type *type;
   int offset;
+  int index;
 } Member;
 
 typedef struct Function {
@@ -708,6 +709,7 @@ Type *new_type_builtin_va_list(const Range *range);
 void init_struct_body(StructBody *body);
 void register_struct_member(Type *type, char *member_name, Type *member_type,
                             const Range *range);
+const Member *lookup_struct_member(Type *type, const char *name);
 bool is_sametype(Type *ty1, Type *ty2);
 bool is_integer_type(Type *ty);
 bool is_float_type(Type *ty);

@@ -2186,7 +2186,8 @@ static void emit_gvar_init(Initializer *init, const Range *range,
     } else if (expr->ty == EX_STR) {
       printf("  .quad %s\n", expr->str->name);
     } else {
-      range_error(range, "数値でもポインタでもありません: %d", expr->ty);
+      range_error(range, "数値でもポインタでもありません: %d %s", expr->ty,
+                  format_type(expr->val_type, false));
     }
     return;
   }
