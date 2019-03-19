@@ -1937,8 +1937,9 @@ static void emit_func(Function *func) {
     int column;
     range_get_start(svar->range, &filename, &line, &column);
     printf("  # %s:%d:%d\n", filename, line, column);
-    printf("  # [rbp - %d]: svar %s (%s:%d:%d)\n", svar->offset, svar->name,
-           filename, line, column);
+    printf("  # [rbp - %d]: svar %s (size=%d) (%s:%d:%d)\n", svar->offset,
+           svar->name, get_val_size(svar->type, svar->range), filename, line,
+           column);
   }
 
   stack_pos = 0;

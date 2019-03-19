@@ -566,7 +566,7 @@ noreturn void error_raw_v(const char *dbg_file, int dbg_line, const char *fmt,
                           va_list ap);
 
 static inline int align(int n, int s) {
-  return (s != 0) ? ((n + (s - 1)) / s) * s : 0;
+  return (s != 0) ? ((n + (s - 1)) / s) * s : n;
 }
 
 // vector.c
