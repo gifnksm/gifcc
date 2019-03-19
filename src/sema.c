@@ -131,6 +131,15 @@ static void eval_cast(Expr *expr) {
     return;
   }
 
+  if (is_ptr_type(expr->val_type) && is_ptr_type(operand->val_type)) {
+    Type *type = expr->val_type;
+    const Range *range = expr->range;
+    *expr = *operand;
+    expr->val_type = type;
+    expr->range = range;
+    return;
+  }
+
   if (operand->ty != EX_NUM) {
     return;
   }
