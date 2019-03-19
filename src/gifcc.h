@@ -83,6 +83,7 @@ enum {
   TK_VOLATILE,      // `volatile`
   TK_INLINE,        // `inline`
   TK_NORETURN,      // `_Noreturn`
+  TK_GENERIC,       // `_Generic`
   TK_EOF,           // 入力の終わりを表すトークン
 };
 

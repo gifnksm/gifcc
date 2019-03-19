@@ -60,6 +60,12 @@ typedef struct VarDef {
   Function *func;
 } VarDef;
 
+typedef struct GenericAssociation {
+  const Range *range;
+  Type *type;
+  Expr *expr;
+} GenericAssociation;
+
 typedef struct TypeSpecifier {
   const Range *range;
   enum {
@@ -164,6 +170,7 @@ static Expr *new_expr(int ty, Type *val_type, const Range *range);
 static Expr *new_expr_num(Number val, const Range *range);
 static Expr *new_expr_ident(Scope *scope, Token *ident);
 static Expr *new_expr_str(Scope *scope, const char *val, const Range *range);
+static Expr *new_expr_generic(Scope *scope, Expr *cond, Vector *assoc_list);
 static Expr *new_expr_call(Scope *scope, Expr *callee, Vector *argument,
                            const Range *range);
 static Expr *new_expr_builtin_va_start(Scope *scope, Expr *callee,
@@ -1356,6 +1363,36 @@ static Expr *new_expr_str(Scope *scope, const char *val, const Range *range) {
   return expr;
 }
 
+static Expr *new_expr_generic(Scope *scope, Expr *control, Vector *assoc_list) {
+  control = coerce_func2ptr(scope, control);
+  control = coerce_array2ptr(scope, control);
+
+  Type *type = clone_type(control->val_type);
+  type->qualifier = EMPTY_TYPE_QUALIFIER;
+
+  Expr *default_expr = NULL;
+  for (int i = 0; i < vec_len(assoc_list); i++) {
+    GenericAssociation *assoc = vec_get(assoc_list, i);
+    if (assoc->type == NULL) {
+      if (default_expr != NULL) {
+        range_error(assoc->range, "duplicate default generic association");
+      }
+      default_expr = assoc->expr;
+      continue;
+    }
+    if (is_sametype(assoc->type, type)) {
+      return assoc->expr;
+    }
+  }
+  if (default_expr == NULL) {
+    range_error(control->range,
+                "controlling expression type '%s' not compatible with any "
+                "generic association type",
+                format_type(type, false));
+  }
+  return default_expr;
+}
+
 static Expr *new_expr_call(Scope *scope, Expr *callee, Vector *argument,
                            const Range *range) {
   if (callee->ty == EX_BUILTIN_FUNC) {
@@ -2233,6 +2270,32 @@ static Expr *primary_expression(Tokenizer *tokenizer, Scope *scope) {
     Token *end = token_expect(tokenizer, ')');
     expr->range = range_join(token->range, end->range);
     return expr;
+  }
+
+  if ((token = token_consume(tokenizer, TK_GENERIC)) != NULL) {
+    token_expect(tokenizer, '(');
+    Expr *control = assignment_expression(tokenizer, scope);
+    token_expect(tokenizer, ',');
+    Vector *assoc_list = new_vector();
+    while (token_peek(tokenizer)->ty != ')') {
+      GenericAssociation *assoc = NEW(GenericAssociation);
+      if ((token = token_consume(tokenizer, TK_DEFAULT)) != NULL) {
+        assoc->type = NULL;
+        assoc->range = token->range;
+      } else {
+        assoc->range = token_peek(tokenizer)->range;
+        assoc->type = type_name(scope, tokenizer);
+      }
+      Token *colon = token_expect(tokenizer, ':');
+      assoc->range = range_join(assoc->range, colon->range);
+      assoc->expr = assignment_expression(tokenizer, scope);
+      vec_push(assoc_list, assoc);
+      if (!token_consume(tokenizer, ',')) {
+        break;
+      }
+    }
+    token_expect(tokenizer, ')');
+    return new_expr_generic(scope, control, assoc_list);
   }
 
   range_error(token_peek(tokenizer)->range,

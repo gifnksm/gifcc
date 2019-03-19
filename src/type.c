@@ -205,6 +205,18 @@ bool is_sametype(Type *ty1, Type *ty2) {
     return false;
   }
 
+  const TypeQualifier *tq1 = &ty1->qualifier;
+  const TypeQualifier *tq2 = &ty2->qualifier;
+  if (tq1->is_const != tq2->is_const) {
+    return false;
+  }
+  if (tq1->is_restrict != tq2->is_restrict) {
+    return false;
+  }
+  if (tq1->is_volatile != tq2->is_volatile) {
+    return false;
+  }
+
   switch (ty1->ty) {
   case TY_VOID:
   case TY_BOOL:

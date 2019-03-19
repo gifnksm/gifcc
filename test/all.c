@@ -2558,6 +2558,29 @@ static void test80(void) {
   CHECK_INT(sizeof(int) * 2, sizeof(test80_s));
 }
 
+static void test81(void) {
+  int a = 10;
+  long b = 20;
+  typedef struct X {
+  } X;
+  typedef struct Y {
+  } Y;
+  X x;
+  Y y;
+
+  CHECK_INT(2, _Generic(a, X : 0, Y : 1, default : 2));
+  CHECK_INT(2, _Generic(b, int : 0, default : 1, long : 2));
+  CHECK_INT(1, _Generic(x, int : 0, X : 1, Y : 2, default : 3));
+  CHECK_INT(2, _Generic(y, int : 0, X : 1, Y : 2, default : 3));
+  // clang-format off
+  CHECK_INT(10, _Generic(a,
+                         short: a * 0,
+                         int: a * 1,
+                         long: a * 2,
+                         default : a * 3));
+  // clang-format on
+}
+
 int main(void) {
   Test test_list[] = {
       TEST(test01), TEST(test02), TEST(test03), TEST(test04), TEST(test05),
@@ -2576,7 +2599,7 @@ int main(void) {
       TEST(test66), TEST(test67), TEST(test68), TEST(test69), TEST(test70),
       TEST(test71), TEST(test72), TEST(test73), TEST(test74), TEST(test75),
       TEST(test76), TEST(test77), TEST(test78), TEST(test79), TEST(test80),
-      {NULL, NULL},
+      TEST(test81), {NULL, NULL},
   };
   RUN_TEST(test_list);
 
