@@ -2161,13 +2161,13 @@ static void emit_gvar_init(Initializer *init, const Range *range,
         range_error(range, "int型ではありません");
       }
     } else if (expr->ty == EX_ADDRESS) {
-      if (expr->unop.operand->ty == EX_GLOBAL_VAR) {
-        Expr *gvar = expr->unop.operand;
-        printf("  .quad %s\n", gvar->global_var.name);
+      Expr *operand = expr->unop.operand;
+      if (operand->ty == EX_GLOBAL_VAR) {
+        printf("  .quad %s\n", operand->global_var.name);
         return;
       }
-      if (expr->unop.operand->ty == EX_COMPOUND) {
-        Expr *compound = expr->unop.operand;
+      if (operand->ty == EX_COMPOUND) {
+        Expr *compound = operand;
         GlobalVar *gvar = NEW(GlobalVar);
         gvar->name = make_label("compound");
         gvar->type = compound->val_type;

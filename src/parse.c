@@ -1350,8 +1350,9 @@ static Expr *new_expr_ident(Scope *scope, Token *ident) {
 }
 
 static Expr *new_expr_str(Scope *scope, const char *val, const Range *range) {
-  Type *type = new_type_ptr(new_type(TY_CHAR, CONST_TYPE_QUALIFIER),
-                            EMPTY_TYPE_QUALIFIER);
+  Type *type =
+      new_type_array(new_type(TY_CHAR, EMPTY_TYPE_QUALIFIER),
+                     new_number_int(strlen(val)), EMPTY_TYPE_QUALIFIER);
 
   StringLiteral *lit = NEW(StringLiteral);
   lit->name = make_label("str");
@@ -1638,11 +1639,17 @@ static Expr *new_expr_unary(Scope *scope, int op, Expr *operand,
     val_type = operand->val_type;
     break;
   case EX_ADDRESS: {
-    if (is_array_type(operand->val_type)) {
-      val_type =
-          new_type_ptr(operand->val_type->array.elem, EMPTY_TYPE_QUALIFIER);
+    if (operand->ty == EX_STR) {
+      operand->val_type = new_type_ptr(new_type(TY_CHAR, EMPTY_TYPE_QUALIFIER),
+                                       EMPTY_TYPE_QUALIFIER);
+      return operand;
     } else {
-      val_type = new_type_ptr(operand->val_type, EMPTY_TYPE_QUALIFIER);
+      if (is_array_type(operand->val_type)) {
+        val_type =
+            new_type_ptr(operand->val_type->array.elem, EMPTY_TYPE_QUALIFIER);
+      } else {
+        val_type = new_type_ptr(operand->val_type, EMPTY_TYPE_QUALIFIER);
+      }
     }
     break;
   }
