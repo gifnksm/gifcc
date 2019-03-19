@@ -312,8 +312,8 @@ static char *num2str(Number num, const Range *range) {
 }
 
 static int get_incdec_size(Expr *expr) {
-  if (expr->val_type->ty == TY_PTR) {
-    return get_val_size(expr->val_type->ptrof, expr->range);
+  if (is_ptr_type(expr->val_type)) {
+    return get_val_size(expr->val_type->ptr, expr->range);
   }
   return 1;
 }
@@ -662,12 +662,12 @@ static void emit_expr_call(Expr *expr) {
   if (expr->call.callee->val_type->ty == TY_FUNC) {
     call_direct = true;
     functype = expr->call.callee->val_type;
-    ret_type = functype->func_ret;
-  } else if (expr->call.callee->val_type->ty == TY_PTR &&
-             expr->call.callee->val_type->ptrof->ty == TY_FUNC) {
+    ret_type = functype->func.ret;
+  } else if (is_ptr_type(expr->call.callee->val_type) &&
+             is_func_type(expr->call.callee->val_type->ptr)) {
     call_direct = false;
-    functype = expr->call.callee->val_type->ptrof;
-    ret_type = functype->func_ret;
+    functype = expr->call.callee->val_type->ptr;
+    ret_type = functype->func.ret;
   } else {
     range_error(expr->call.callee->range,
                 "関数または関数ポインタ以外を呼び出そうとしました: %s",
@@ -771,7 +771,7 @@ static void emit_expr_call(Expr *expr) {
         assert(size <= 8);
         emit_pop_xmm(sse_reg_idx);
         sse_reg_idx++;
-        if (functype->func_has_varargs && i >= vec_len(functype->func_param)) {
+        if (functype->func.has_varargs && i >= vec_len(functype->func.param)) {
           num_vararg_sse_reg++;
         }
         continue;
@@ -1842,7 +1842,7 @@ static void emit_stmt(Stmt *stmt) {
   case ST_RETURN: {
     int base_stack_pos = stack_pos;
     if (stmt->expr != NULL) {
-      Type *ret_type = func_ctxt->type->func_ret;
+      Type *ret_type = func_ctxt->type->func.ret;
       emit_expr(stmt->expr);
 
       int int_reg_idx = 0;
@@ -1943,11 +1943,11 @@ static void emit_func(Function *func) {
 
   stack_pos = 0;
   int reg_save_area_size = 0;
-  if (func->type->func_has_varargs) {
+  if (func->type->func.has_varargs) {
     reg_save_area_size += 8 * NUM_INT_REG + 16 * NUM_SSE_REG;
   }
   emit_stack_sub(align(stack_size, 16) + align(reg_save_area_size, 16));
-  if (func->type->func_has_varargs) {
+  if (func->type->func.has_varargs) {
     reg_save_area_pos = stack_pos;
     printf("  # [rbp - %d]: reg_save_area\n", stack_pos);
 
@@ -1969,10 +1969,10 @@ static void emit_func(Function *func) {
   int ret_stack_offset = 0;
   int int_reg_idx = 0;
   int sse_reg_idx = 0;
-  if (func->type->func_ret->ty != TY_VOID) {
+  if (func->type->func.ret->ty != TY_VOID) {
     int num_int_reg = 0;
     int num_sse_reg = 0;
-    arg_class_t class = classify_arg_type(func->type->func_ret, func->range,
+    arg_class_t class = classify_arg_type(func->type->func.ret, func->range,
                                           &num_int_reg, &num_sse_reg);
     if (class == ARG_CLASS_MEMORY) {
       // 戻り値をメモリで返す場合は、格納先のポインタをpushしておく
@@ -1984,11 +1984,11 @@ static void emit_func(Function *func) {
   }
 
   // 引数をスタックへコピー
-  if (func->type->func_param != NULL) {
+  if (func->type->func.param != NULL) {
     IntVector *param_class =
-        classify_param(func->type->func_param, int_reg_idx);
-    for (int i = 0; i < vec_len(func->type->func_param); i++) {
-      Param *param = vec_get(func->type->func_param, i);
+        classify_param(func->type->func.param, int_reg_idx);
+    for (int i = 0; i < vec_len(func->type->func.param); i++) {
+      Param *param = vec_get(func->type->func.param, i);
       StackVar *var = param->stack_var;
       assert(var != NULL);
       arg_class_t class = int_vec_get(param_class, i);
@@ -2227,7 +2227,7 @@ static void emit_gvar_init(Initializer *init, const Range *range,
     for (int i = 0; i < vec_len(init->elements); i++) {
       Initializer *meminit = vec_get(init->elements, i);
       if (meminit == NULL) {
-        printf("  .zero %d\n", get_val_size(init->type->ptrof, range));
+        printf("  .zero %d\n", get_val_size(init->type->array.elem, range));
         continue;
       }
       emit_gvar_init(meminit, range, gvar_list);

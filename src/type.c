@@ -18,7 +18,7 @@ Type *clone_type(Type *type) {
 
 Type *new_type_ptr(Type *base_type, TypeQualifier tq) {
   Type *ptrtype = new_type(TY_PTR, tq);
-  ptrtype->ptrof = base_type;
+  ptrtype->ptr = base_type;
   return ptrtype;
 }
 
@@ -27,24 +27,24 @@ Type *new_type_array(Type *base_type, Number len, TypeQualifier tq) {
   SET_NUMBER_VAL(l, &len);
   Type *ptrtype = new_type(TY_ARRAY, tq);
   ptrtype->ty = TY_ARRAY;
-  ptrtype->ptrof = base_type;
-  ptrtype->array_len = l;
+  ptrtype->array.len = l;
+  ptrtype->array.elem = base_type;
   return ptrtype;
 }
 
 Type *new_type_unsized_array(Type *base_type, TypeQualifier tq) {
   Type *ptrtype = new_type(TY_ARRAY, tq);
-  ptrtype->ptrof = base_type;
-  ptrtype->array_len = -1;
+  ptrtype->array.len = -1;
+  ptrtype->array.elem = base_type;
   return ptrtype;
 }
 
 Type *new_type_func(Type *ret_type, Vector *func_param, bool has_varargs,
                     TypeQualifier tq) {
   Type *funtype = new_type(TY_FUNC, tq);
-  funtype->func_ret = ret_type;
-  funtype->func_param = func_param;
-  funtype->func_has_varargs = has_varargs;
+  funtype->func.ret = ret_type;
+  funtype->func.param = func_param;
+  funtype->func.has_varargs = has_varargs;
   return funtype;
 }
 
@@ -122,10 +122,10 @@ void register_struct_member(Type *type, char *member_name, Type *member_type,
   }
 
   int mem_size, mem_align;
-  if (member_type->ty == TY_ARRAY && member_type->array_len < 0) {
+  if (member_type->ty == TY_ARRAY && member_type->array.len < 0) {
     body->has_flex_array = true;
     mem_size = 0;
-    mem_align = get_val_align(member_type->ptrof, range);
+    mem_align = get_val_align(member_type->array.elem, range);
   } else if ((member_type->ty == TY_STRUCT || member_type->ty == TY_UNION) &&
              member_type->struct_body->has_flex_array) {
     StructBody *mem_body = member_type->struct_body;
@@ -193,11 +193,12 @@ bool is_sametype(Type *ty1, Type *ty2) {
   if (ty1->ty != ty2->ty) {
     return false;
   }
-  if (ty1->ty == TY_PTR) {
-    return is_sametype(ty1->ptrof, ty2->ptrof);
+  if (is_ptr_type(ty1)) {
+    return is_sametype(ty1->ptr, ty2->ptr);
   }
   return true;
 }
+
 bool is_integer_type(Type *ty) {
   switch (ty->ty) {
   case TY_BOOL:
@@ -396,38 +397,38 @@ char *format_type(const Type *type, bool detail) {
     type_str = "long double";
     break;
   case TY_PTR:
-    type_str = format("PTR(%s)", format_type(type->ptrof, false));
+    type_str = format("PTR(%s)", format_type(type->ptr, false));
     break;
   case TY_ARRAY:
-    type_str = format("ARRAY[%d](%s)", type->array_len,
-                      format_type(type->ptrof, false));
+    type_str = format("ARRAY[%d](%s)", type->array.len,
+                      format_type(type->array.elem, false));
     break;
   case TY_FUNC:
     type_str = format("FUNC(");
-    if (type->func_param != NULL) {
-      for (int i = 0; i < vec_len(type->func_param); i++) {
+    if (type->func.param != NULL) {
+      for (int i = 0; i < vec_len(type->func.param); i++) {
         if (i > 0) {
           type_str = format("%s, ", type_str);
         }
-        Param *param = vec_get(type->func_param, i);
+        Param *param = vec_get(type->func.param, i);
         type_str = format("%s%s", type_str, format_type(param->type, false));
         if (param->name != NULL) {
           type_str = format("%s %s", type_str, param->name->ident);
         }
       }
-      if (type->func_has_varargs) {
-        if (vec_len(type->func_param) > 0) {
+      if (type->func.has_varargs) {
+        if (vec_len(type->func.param) > 0) {
           type_str = format("%s, ", type_str);
         }
         type_str = format("%s...", type_str);
       } else {
-        if (vec_len(type->func_param) == 0) {
+        if (vec_len(type->func.param) == 0) {
           type_str = format("%svoid", type_str);
         }
       }
     }
     type_str =
-        format("%s) -> %s", type_str, format_type(type->func_ret, false));
+        format("%s) -> %s", type_str, format_type(type->func.ret, false));
     break;
   case TY_STRUCT:
   case TY_UNION: {

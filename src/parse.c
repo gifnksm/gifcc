@@ -338,7 +338,7 @@ static Initializer *new_initializer(Type *type) {
   }
   case TY_ARRAY:
     init->elements = new_vector();
-    vec_extend(init->elements, type->array_len);
+    vec_extend(init->elements, type->array.len);
     break;
   default:
     break;
@@ -1132,11 +1132,11 @@ int get_val_size(const Type *ty, const Range *range) {
   case TY_PTR:
     return sizeof(void *);
   case TY_ARRAY:
-    if (ty->array_len < 0) {
+    if (ty->array.len < 0) {
       range_error(range, "不完全な配列型のサイズを取得しようとしました: %s",
                   format_type(ty, false));
     }
-    return get_val_size(ty->ptrof, range) * ty->array_len;
+    return get_val_size(ty->array.elem, range) * ty->array.len;
   case TY_FUNC:
     range_error(range, "関数型の値サイズを取得しようとしました: %s",
                 format_type(ty, false));
@@ -1194,7 +1194,7 @@ int get_val_align(const Type *ty, const Range *range) {
   case TY_PTR:
     return alignof(void *);
   case TY_ARRAY:
-    return get_val_align(ty->ptrof, range);
+    return get_val_align(ty->array.elem, range);
   case TY_FUNC:
     range_error(range, "関数型の値アラインメントを取得しようとしました: %s",
                 format_type(ty, false));
@@ -1369,15 +1369,15 @@ static Expr *new_expr_call(Scope *scope, Expr *callee, Vector *argument,
   if (is_func_type(callee->val_type)) {
     func_type = callee->val_type;
   } else if (is_ptr_type(callee->val_type) &&
-             is_func_type(callee->val_type->ptrof)) {
-    func_type = callee->val_type->ptrof;
+             is_func_type(callee->val_type->ptr)) {
+    func_type = callee->val_type->ptr;
   } else {
     range_warn(range, "未知の関数です");
     func_type = new_type_func(new_type(TY_S_INT, EMPTY_TYPE_QUALIFIER), NULL,
                               false, EMPTY_TYPE_QUALIFIER);
   }
 
-  ret_type = func_type->func_ret;
+  ret_type = func_type->func.ret;
 
   int narg = 0;
   if (argument != NULL) {
@@ -1388,10 +1388,10 @@ static Expr *new_expr_call(Scope *scope, Expr *callee, Vector *argument,
     narg = vec_len(argument);
   }
 
-  Vector *params = func_type->func_param;
+  Vector *params = func_type->func.param;
   int nparam = params != NULL ? vec_len(params) : 0;
   if (params != NULL) {
-    if ((narg < nparam) || (narg > nparam && !func_type->func_has_varargs)) {
+    if ((narg < nparam) || (narg > nparam && !func_type->func.has_varargs)) {
       range_error(range,
                   "関数の引数の個数が一致しません: argument=%d, parameter=%d",
                   narg, nparam);
@@ -1470,7 +1470,7 @@ static Expr *new_expr_builtin_va_arg(Scope *scope __attribute__((unused)),
                 format_type(type_expr->val_type, false));
   }
 
-  Type *type = type_expr->val_type->ptrof;
+  Type *type = type_expr->val_type->ptr;
   Expr *expr = new_expr(EX_BUILTIN_VA_ARG, type, range);
   expr->builtin_va_arg.ap = ap;
   return expr;
@@ -1602,21 +1602,22 @@ static Expr *new_expr_unary(Scope *scope, int op, Expr *operand,
     break;
   case EX_ADDRESS: {
     if (is_array_type(operand->val_type)) {
-      val_type = new_type_ptr(operand->val_type->ptrof, EMPTY_TYPE_QUALIFIER);
+      val_type =
+          new_type_ptr(operand->val_type->array.elem, EMPTY_TYPE_QUALIFIER);
     } else {
       val_type = new_type_ptr(operand->val_type, EMPTY_TYPE_QUALIFIER);
     }
     break;
   }
   case EX_INDIRECT: {
-    if (operand->val_type->ty != TY_PTR) {
+    if (!is_ptr_type(operand->val_type)) {
       range_error(range, "ポインタ型でない値に対するデリファレンスです: %s",
                   format_type(operand->val_type, false));
     }
-    if (operand->val_type->ptrof->ty == TY_FUNC) {
+    if (operand->val_type->ptr->ty == TY_FUNC) {
       return operand;
     }
-    val_type = operand->val_type->ptrof;
+    val_type = operand->val_type->ptr;
     break;
   }
   case EX_PLUS:
@@ -1685,7 +1686,7 @@ static Expr *new_expr_binop(Scope *scope, int op, Expr *lhs, Expr *rhs,
 
       // ptr + int => ptr + (size * int)
       Expr *size = new_expr_num(
-          new_number_size_t(get_val_size(lhs->val_type->ptrof, lhs->range)),
+          new_number_size_t(get_val_size(lhs->val_type->ptr, lhs->range)),
           range);
       rhs = new_expr_binop(scope, EX_MUL, rhs, size, range);
       val_type = lhs->val_type;
@@ -1699,7 +1700,7 @@ static Expr *new_expr_binop(Scope *scope, int op, Expr *lhs, Expr *rhs,
 
       // int + ptr => (size * int) + ptr
       Expr *size = new_expr_num(
-          new_number_size_t(get_val_size(rhs->val_type->ptrof, rhs->range)),
+          new_number_size_t(get_val_size(rhs->val_type->ptr, rhs->range)),
           range);
       lhs = new_expr_binop(scope, EX_MUL, lhs, size, range);
       val_type = rhs->val_type;
@@ -1724,16 +1725,16 @@ static Expr *new_expr_binop(Scope *scope, int op, Expr *lhs, Expr *rhs,
             new_expr(EX_SUB, new_type(TY_S_LONG, EMPTY_TYPE_QUALIFIER), range);
         sub->binop.lhs = lhs;
         sub->binop.rhs = rhs;
-        Expr *size = new_expr_num(new_number_ptrdiff_t(get_val_size(
-                                      lhs->val_type->ptrof, lhs->range)),
-                                  range);
+        Expr *size = new_expr_num(
+            new_number_ptrdiff_t(get_val_size(lhs->val_type->ptr, lhs->range)),
+            range);
         return new_expr_binop(scope, EX_DIV, sub, size, range);
       }
 
       if (is_integer_type(rhs->val_type)) {
         // int - int
         Expr *size = new_expr_num(
-            new_number_size_t(get_val_size(lhs->val_type->ptrof, lhs->range)),
+            new_number_size_t(get_val_size(lhs->val_type->ptr, lhs->range)),
             range);
         rhs = new_expr_binop(scope, EX_MUL, rhs, size, range);
         val_type = lhs->val_type;
@@ -1895,9 +1896,9 @@ static Expr *new_expr_cond(Scope *scope, Expr *cond, Expr *then_expr,
     val_type = arith_converted(scope, &then_expr, &else_expr);
   } else if (is_ptr_type(then_expr->val_type) &&
              is_ptr_type(else_expr->val_type)) {
-    if (then_expr->val_type->ptrof->ty == TY_VOID) {
+    if (then_expr->val_type->ptr->ty == TY_VOID) {
       val_type = else_expr->val_type;
-    } else if (else_expr->val_type->ptrof->ty == TY_VOID) {
+    } else if (else_expr->val_type->ptr->ty == TY_VOID) {
       val_type = then_expr->val_type;
     } else {
       if (!is_sametype(then_expr->val_type, else_expr->val_type)) {
@@ -1959,13 +1960,13 @@ static Expr *new_expr_arrow(Scope *scope, Expr *operand, const char *name,
   operand = coerce_array2ptr(scope, operand);
   operand = coerce_func2ptr(scope, operand);
   if (operand->val_type->ty != TY_PTR ||
-      (operand->val_type->ptrof->ty != TY_STRUCT &&
-       operand->val_type->ptrof->ty != TY_UNION)) {
+      (operand->val_type->ptr->ty != TY_STRUCT &&
+       operand->val_type->ptr->ty != TY_UNION)) {
     range_error(range, "構造体または共用体以外のメンバへのアクセスです: %s",
                 format_type(operand->val_type, false));
   }
 
-  StructBody *body = operand->val_type->ptrof->struct_body;
+  StructBody *body = operand->val_type->ptr->struct_body;
   Member *member =
       body->member_name_map ? map_get(body->member_name_map, name) : NULL;
   if (member == NULL) {
@@ -2068,7 +2069,7 @@ static Stmt *new_stmt_goto(char *name, const Range *range) {
 static Stmt *new_stmt_return(Scope *scope, Expr *expr, const Range *range) {
   Stmt *stmt = new_stmt(ST_RETURN, range);
   if (expr != NULL) {
-    stmt->expr = new_expr_cast(scope, scope->func_ctxt->type->func_ret, expr,
+    stmt->expr = new_expr_cast(scope, scope->func_ctxt->type->func.ret, expr,
                                expr->range);
   } else {
     stmt->expr = NULL;
@@ -2828,9 +2829,8 @@ static void direct_declarator_common(Scope *scope, Tokenizer *tokenizer,
           Param *param = parameter_declaration(scope, tokenizer);
           if (is_array_type(param->type)) {
             // array型の引数はポインタ型とみなす
-            Type *type = NEW(Type);
-            *type = *param->type;
-            type->ty = TY_PTR;
+            Type *type =
+                new_type_ptr(param->type->array.elem, param->type->qualifier);
             param->type = type;
           }
           vec_push(params, param);
@@ -3092,36 +3092,39 @@ static bool consume_array_designator(Type *type, InitElem *elem, int *elemidx) {
         format_type(type, false));
   }
   SET_NUMBER_VAL(*elemidx, &desig->index);
-  if (type->array_len >= 0 && *elemidx >= type->array_len) {
+  if (type->array.len >= 0 && *elemidx >= type->array.len) {
     range_error(desig->range,
                 "array designator index (%d) exceeds array bounds (%d)",
-                *elemidx, type->array_len);
+                *elemidx, type->array.len);
   }
   return true;
 }
 
 static bool consume_str_for_array(ParseInit *pinit, Type *type,
                                   Initializer **init) {
+  assert(is_array_type(type));
   if (pinit->expr == NULL || pinit->expr->ty != EX_STR) {
     return false;
   }
 
+  Type *elem_type = type->array.elem;
+
   Expr *str = pinit->expr;
-  if (type->ptrof->ty != TY_CHAR && type->ptrof->ty != TY_S_CHAR &&
-      type->ptrof->ty != TY_U_CHAR) {
+  if (elem_type->ty != TY_CHAR && elem_type->ty != TY_S_CHAR &&
+      elem_type->ty != TY_U_CHAR) {
     range_error(str->range,
                 "cannot initialize non-char array with string literal");
   }
 
-  if (type->array_len < 0) {
-    type->array_len = strlen(str->str->val) + 1;
-    vec_extend((*init)->elements, type->array_len);
+  if (type->array.len < 0) {
+    type->array.len = strlen(str->str->val) + 1;
+    vec_extend((*init)->elements, type->array.len);
   }
 
-  for (int i = 0; i < type->array_len; i++) {
-    Initializer *eleminit = new_initializer(type->ptrof);
+  for (int i = 0; i < type->array.len; i++) {
+    Initializer *eleminit = new_initializer(elem_type);
     eleminit->expr =
-        new_expr_num(new_number(type->ptrof->ty, str->str->val[i]), str->range);
+        new_expr_num(new_number(elem_type->ty, str->str->val[i]), str->range);
     vec_set((*init)->elements, i, eleminit);
     if (str->str->val[i] == '\0') {
       break;
@@ -3156,23 +3159,24 @@ static void assign_array_initializer(Scope *scope, Vector *list, bool is_root,
     is_first = false;
 
     if (!consume_array_designator(type, elem, &elemidx)) {
-      if (type->array_len >= 0 && elemidx >= type->array_len) {
+      if (type->array.len >= 0 && elemidx >= type->array.len) {
         break;
       }
     }
 
-    if (type->array_len < 0) {
+    if (type->array.len < 0) {
       vec_extend((*init)->elements, elemidx + 1);
     }
 
     Initializer *eleminit = NULL;
-    assign_initializer_list(scope, list, false, type->ptrof, range, &eleminit);
+    assign_initializer_list(scope, list, false, type->array.elem, range,
+                            &eleminit);
     vec_set((*init)->elements, elemidx, eleminit);
     elemidx++;
   }
 
-  if (type->array_len < 0) {
-    type->array_len = vec_len((*init)->elements);
+  if (type->array.len < 0) {
+    type->array.len = vec_len((*init)->elements);
   }
 }
 
@@ -3443,11 +3447,11 @@ static void gen_init(Scope *scope, Expr **expr, Initializer *init, Expr *dest,
     if (init->elements != NULL) {
       range_assert(dest->range, type->ty == TY_ARRAY, "type is not array: %s",
                    format_type(type, false));
-      for (int i = 0; i < type->array_len; i++) {
+      for (int i = 0; i < type->array.len; i++) {
         Expr *index = new_expr_num(new_number_int(i), dest->range);
         Initializer *eleminit = vec_get(init->elements, i);
         Expr *elem = new_expr_index(scope, dest, index, dest->range);
-        gen_init(scope, expr, eleminit, elem, type->ptrof);
+        gen_init(scope, expr, eleminit, elem, type->array.elem);
       }
       return;
     }
@@ -3499,10 +3503,10 @@ static void gen_init(Scope *scope, Expr **expr, Initializer *init, Expr *dest,
     return;
   }
   case TY_ARRAY: {
-    for (int i = 0; i < type->array_len; i++) {
+    for (int i = 0; i < type->array.len; i++) {
       Expr *index = new_expr_num(new_number_int(i), dest->range);
       Expr *elem = new_expr_index(scope, dest, index, dest->range);
-      gen_init(scope, expr, NULL, elem, type->ptrof);
+      gen_init(scope, expr, NULL, elem, type->array.elem);
     }
     return;
   }
@@ -3590,9 +3594,9 @@ static Function *function_definition(Tokenizer *tokenizer, Scope *global_scope,
                                      FunctionSpecifier fs, const Range *start) {
   FuncCtxt *fcx = new_func_ctxt(name, type);
   Scope *scope = new_func_scope(global_scope, fcx);
-  if (type->func_param != NULL) {
-    for (int i = 0; i < vec_len(type->func_param); i++) {
-      Param *param = vec_get(type->func_param, i);
+  if (type->func.param != NULL) {
+    for (int i = 0; i < vec_len(type->func.param); i++) {
+      Param *param = vec_get(type->func.param, i);
       param->stack_var =
           register_stack_var(scope, param->name, param->type, param->range);
     }

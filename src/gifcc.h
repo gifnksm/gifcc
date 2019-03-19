@@ -331,16 +331,31 @@ typedef struct StructBody {
   bool has_flex_array;
 } StructBody;
 
+typedef struct Type Type;
 typedef struct Type {
   type_t ty;
   TypeQualifier qualifier;
-  struct Type *ptrof;
-  int array_len;
-  struct Type *func_ret;
-  Vector *func_param;
-  bool func_has_varargs;
   const char *tag;
-  StructBody *struct_body;
+  union {
+    // TY_PTR
+    Type *ptr;
+
+    // TY_ARRAY
+    struct {
+      int len;
+      Type *elem;
+    } array;
+
+    // TY_FUNC
+    struct {
+      Type *ret;
+      Vector *param;
+      bool has_varargs;
+    } func;
+
+    // TY_STRUCT/TY_UNION
+    StructBody *struct_body;
+  };
 } Type;
 
 typedef struct Expr Expr;
