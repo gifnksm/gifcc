@@ -2845,7 +2845,7 @@ static void direct_declarator_common(Scope *scope, Tokenizer *tokenizer,
       range_error(token_peek(tokenizer)->range, "識別子がありません");
     }
     *name = NULL;
-    *type = base_type;
+    *type = placeholder;
     *range = *range;
     break;
   }
