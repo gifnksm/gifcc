@@ -324,6 +324,7 @@ typedef struct FunctionSpecifier {
 } FunctionSpecifier;
 
 typedef struct StructBody {
+  int struct_id;
   Map *member_name_map;
   Vector *member_list;
   int member_size;
@@ -355,6 +356,11 @@ typedef struct Type {
 
     // TY_STRUCT/TY_UNION
     StructBody *struct_body;
+
+    // TY_ENUM
+    struct {
+      int enum_id;
+    } enum_body;
   };
 } Type;
 

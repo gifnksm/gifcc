@@ -3,6 +3,8 @@
 const TypeQualifier EMPTY_TYPE_QUALIFIER = {};
 const TypeQualifier CONST_TYPE_QUALIFIER = {.is_const = true};
 
+static StructBody *new_struct_body(void);
+
 Type *new_type(int ty, TypeQualifier tq) {
   Type *type = NEW(Type);
   type->ty = ty;
@@ -53,7 +55,7 @@ Type *new_type_struct(type_t ty, const char *tag, TypeQualifier tq) {
 
   Type *type = new_type(ty, tq);
   type->tag = tag;
-  type->struct_body = NEW(StructBody);
+  type->struct_body = new_struct_body();
   init_struct_body(type->struct_body);
 
   return type;
@@ -63,20 +65,29 @@ Type *new_type_opaque_struct(type_t ty, const char *tag, TypeQualifier tq) {
   assert(ty == TY_STRUCT || ty == TY_UNION);
   Type *type = new_type(ty, tq);
   type->tag = tag;
-  type->struct_body = NEW(StructBody);
+  type->struct_body = new_struct_body();
   return type;
 }
 
+static StructBody *new_struct_body(void) {
+  static int struct_id = 0;
+  StructBody *body = NEW(StructBody);
+  body->struct_id = struct_id++;
+  return body;
+}
+
 Type *new_type_enum(const char *tag, TypeQualifier tq) {
+  static int enum_id = 0;
   Type *type = new_type(TY_ENUM, tq);
   type->tag = tag;
+  type->enum_body.enum_id = enum_id++;
   return type;
 }
 
 Type *new_type_builtin_va_list(const Range *range) {
   Type *elem = new_type(TY_STRUCT, EMPTY_TYPE_QUALIFIER);
   elem->tag = "__builtin_va_elem";
-  elem->struct_body = NEW(StructBody);
+  elem->struct_body = new_struct_body();
   init_struct_body(elem->struct_body);
 
   Type *ty_offset = new_type(TY_U_INT, EMPTY_TYPE_QUALIFIER);
@@ -193,10 +204,63 @@ bool is_sametype(Type *ty1, Type *ty2) {
   if (ty1->ty != ty2->ty) {
     return false;
   }
-  if (is_ptr_type(ty1)) {
+
+  switch (ty1->ty) {
+  case TY_VOID:
+  case TY_BOOL:
+  case TY_CHAR:
+  case TY_S_CHAR:
+  case TY_S_SHORT:
+  case TY_S_INT:
+  case TY_S_LONG:
+  case TY_S_LLONG:
+  case TY_U_CHAR:
+  case TY_U_SHORT:
+  case TY_U_INT:
+  case TY_U_LONG:
+  case TY_U_LLONG:
+  case TY_FLOAT:
+  case TY_DOUBLE:
+  case TY_LDOUBLE:
+    return true;
+  case TY_PTR:
     return is_sametype(ty1->ptr, ty2->ptr);
+  case TY_ARRAY:
+    return (ty1->array.len == ty2->array.len) &&
+           is_sametype(ty1->array.elem, ty2->array.elem);
+  case TY_FUNC: {
+    if (!is_sametype(ty1->func.ret, ty2->func.ret)) {
+      return false;
+    }
+    if ((ty1->func.has_varargs ^ ty2->func.has_varargs) != 0) {
+      return false;
+    }
+    if (((ty1->func.param == NULL) ^ (ty2->func.param == NULL)) != 0) {
+      return false;
+    }
+    if (ty1->func.param != NULL) {
+      if (vec_len(ty1->func.param) != vec_len(ty2->func.param)) {
+        return false;
+      }
+      for (int i = 0; i < vec_len(ty1->func.param); i++) {
+        Param *p1 = vec_get(ty1->func.param, i);
+        Param *p2 = vec_get(ty2->func.param, i);
+        if (!is_sametype(p1->type, p2->type)) {
+          return false;
+        }
+      }
+    }
+    return true;
   }
-  return true;
+  case TY_STRUCT:
+  case TY_UNION:
+    return ty1->struct_body->struct_id == ty2->struct_body->struct_id;
+  case TY_ENUM:
+    return ty1->enum_body.enum_id == ty2->enum_body.enum_id;
+  case TY_BUILTIN:
+    return true;
+  }
+  assert(false);
 }
 
 bool is_integer_type(Type *ty) {
