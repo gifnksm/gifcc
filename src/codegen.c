@@ -251,64 +251,48 @@ char *make_label(const char *s) {
 }
 
 static char *num2str(Number num, const Range *range) {
-  char buf[1024];
   switch (num.type) {
   case TY_BOOL:
-    sprintf(buf, "%d", num.bool_val);
-    break;
+    return format("%d", num.bool_val);
   case TY_CHAR:
-    sprintf(buf, "0x%02hhx", num.char_val);
-    break;
+    return format("0x%02hhx", num.char_val);
   case TY_S_CHAR:
-    sprintf(buf, "0x%02hhx", num.s_char_val);
-    break;
+    return format("0x%02hhx", num.s_char_val);
   case TY_S_SHORT:
-    sprintf(buf, "0x%04hx", num.s_short_val);
-    break;
+    return format("0x%04hx", num.s_short_val);
   case TY_S_INT:
-    sprintf(buf, "0x%08x", num.s_int_val);
-    break;
+    return format("0x%08x", num.s_int_val);
   case TY_S_LONG:
-    sprintf(buf, "0x%016lx", num.s_long_val);
-    break;
+    return format("0x%016lx", num.s_long_val);
   case TY_S_LLONG:
-    sprintf(buf, "0x%016llx", num.s_llong_val);
-    break;
+    return format("0x%016llx", num.s_llong_val);
   case TY_U_CHAR:
-    sprintf(buf, "0x%02hhx", num.u_char_val);
-    break;
+    return format("0x%02hhx", num.u_char_val);
   case TY_U_SHORT:
-    sprintf(buf, "0x%04hx", num.u_short_val);
-    break;
+    return format("0x%04hx", num.u_short_val);
   case TY_U_INT:
   case TY_FLOAT:
-    sprintf(buf, "0x%08x", num.u_int_val);
-    break;
+    return format("0x%08x", num.u_int_val);
   case TY_DOUBLE:
   case TY_U_LONG:
-    sprintf(buf, "0x%016lx", num.u_long_val);
-    break;
+    return format("0x%016lx", num.u_long_val);
   case TY_U_LLONG:
-    sprintf(buf, "0x%016llx", num.u_llong_val);
-    break;
+    return format("0x%016llx", num.u_llong_val);
   case TY_PTR:
-    sprintf(buf, "%" PRIdPTR, num.ptr_val);
-    break;
+    return format("%" PRIdPTR, num.ptr_val);
   case TY_ENUM:
-    sprintf(buf, "0x%08x", num.enum_val);
-    break;
+    return format("0x%08x", num.enum_val);
   case TY_VOID:
-    sprintf(buf, "0");
-    break;
+    return format("0");
   case TY_LDOUBLE:
   case TY_ARRAY:
   case TY_FUNC:
   case TY_STRUCT:
   case TY_UNION:
   case TY_BUILTIN:
-    range_error(range, "不正な型の数値です: %d", num.type);
+    break;
   }
-  return strdup(buf);
+  range_error(range, "不正な型の数値です: %d", num.type);
 }
 
 static int get_incdec_size(Expr *expr) {
@@ -2120,62 +2104,26 @@ static void emit_gvar_init(Initializer *init, const Range *range,
   if (init->expr != NULL) {
     Expr *expr = init->expr;
     if (expr->ty == EX_NUM) {
-      switch (expr->val_type->ty) {
-      case TY_BOOL:
-        printf("  .byte %d\n", expr->num.bool_val);
+      int size = get_val_size(expr->val_type, expr->range);
+      switch (size) {
+      case 1:
+        printf("  .byte %s\n", num2str(expr->num, expr->range));
         break;
-      case TY_CHAR:
-        printf("  .byte 0x%02hhx\n", expr->num.char_val);
+      case 2:
+        printf("  .word %s\n", num2str(expr->num, expr->range));
         break;
-      case TY_S_CHAR:
-        printf("  .byte 0x%02hhx\n", expr->num.s_char_val);
+      case 4:
+        printf("  .long %s\n", num2str(expr->num, expr->range));
         break;
-      case TY_S_SHORT:
-        printf("  .word 0x%04hx\n", expr->num.s_short_val);
+      case 8:
+        printf("  .quad %s\n", num2str(expr->num, expr->range));
         break;
-      case TY_S_INT:
-        printf("  .long 0x%08x\n", expr->num.s_int_val);
-        break;
-      case TY_S_LONG:
-        printf("  .quad 0x%016lx\n", expr->num.s_long_val);
-        break;
-      case TY_S_LLONG:
-        printf("  .quad 0x%016llx\n", expr->num.s_llong_val);
-        break;
-      case TY_U_CHAR:
-        printf("  .byte 0x%02hhx\n", expr->num.u_char_val);
-        break;
-      case TY_U_SHORT:
-        printf("  .word 0x%04hx\n", expr->num.u_short_val);
-        break;
-      case TY_FLOAT:
-      case TY_U_INT:
-        printf("  .long 0x%08x\n", expr->num.u_int_val);
-        break;
-      case TY_DOUBLE:
-      case TY_U_LONG:
-        printf("  .quad 0x%016lx\n", expr->num.u_long_val);
-        break;
-      case TY_U_LLONG:
-        printf("  .quad 0x%016llx\n", expr->num.u_llong_val);
-        break;
-      case TY_PTR:
-        printf("  .quad %" PRIdPTR "\n", expr->num.ptr_val);
-        break;
-      case TY_ENUM:
-        printf("  .long 0x%08x\n", expr->num.enum_val);
-        break;
-      case TY_LDOUBLE:
+      case 16:
         printf("  .quad 0x%016lx\n", expr->num.bytes[0]);
         printf("  .quad 0x%016lx\n", expr->num.bytes[1]);
         break;
-      case TY_VOID:
-      case TY_ARRAY:
-      case TY_FUNC:
-      case TY_STRUCT:
-      case TY_UNION:
-      case TY_BUILTIN:
-        range_error(range, "int型ではありません");
+      default:
+        range_internal_error(range, "invalid value size: %d", size);
       }
     } else if (expr->ty == EX_ADDRESS) {
       Expr *operand = expr->unop.operand;
