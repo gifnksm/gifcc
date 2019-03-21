@@ -5,6 +5,9 @@ CURDIR=$(readlink -f $(dirname $0))
 REPOROOT=$(readlink -f ${CURDIR}/..)
 PATH="$(readlink -f ${CURDIR}/../target/${STAGE}):${PATH}"
 
+export OUTDIR="$(readlink -f ${CURDIR}/../target/${STAGE}/c-testsuite)"
+mkdir -p "${OUTDIR}"
+
 cd ${REPOROOT}
 git submodule update --init
 
@@ -14,7 +17,7 @@ if ! [ -d ./.tmsu ]; then
 fi
 
 cp ${REPOROOT}/scripts/gifcc-x86_64 ${REPOROOT}/external/c-testsuite/runners/single-exec/
-OUTPUT="${REPOROOT}/target/${STAGE}/c-testsuite"
+OUTPUT="${REPOROOT}/target/${STAGE}/c-testsuite/result.tap"
 ./single-exec gifcc-x86_64 | tee ${OUTPUT} | grep -v '^#'
 
 PASS="$(grep '^ok' ${OUTPUT} | grep -v '# SKIP' | wc -l)"

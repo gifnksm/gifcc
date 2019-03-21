@@ -65,7 +65,7 @@ jobs:
       - run:
           command: |
             mkdir -p target/test-results/stage1-c-testsuite
-            tap-xunit < target/stage1/c-testsuite > target/test-results/stage1-c-testsuite/results.xml || true
+            tap-xunit < target/stage1/c-testsuite/result.tap > target/test-results/stage1-c-testsuite/results.xml || true
       - store_test_results:
           path: target/test-results
   stage2-test:
@@ -80,7 +80,7 @@ jobs:
       - run:
           command: |
             mkdir -p target/test-results/stage2-c-testsuite
-            tap-xunit < target/stage2/c-testsuite > target/test-results/stage2-c-testsuite/results.xml || true
+            tap-xunit < target/stage2/c-testsuite/result.tap > target/test-results/stage2-c-testsuite/results.xml || true
       - store_test_results:
           path: target/test-results
   stage3-test:
@@ -95,7 +95,7 @@ jobs:
       - run:
           command: |
             mkdir -p target/test-results/stage3-c-testsuite
-            tap-xunit < target/stage3/c-testsuite > target/test-results/stage3-c-testsuite/results.xml || true
+            tap-xunit < target/stage3/c-testsuite/result.tap > target/test-results/stage3-c-testsuite/results.xml || true
       - store_test_results:
           path: target/test-results
 

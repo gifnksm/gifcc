@@ -1,36 +1,32 @@
-#! /bin/sh
+#!/bin/bash
 
 set -e
 set -u
 
-if ! test "x86_64" = "$(uname -m)"
-then
+if ! test "x86_64" = "$(uname -m)"; then
     echo "incorrect host for test" 1>&2
     exit 1
 fi
 
-t=$1
+input=$1
+test=$(basename ${input})
 
-cat $t
+cat ${input}
 
 set -x
 
-if ! gifcc "$t" > "$t.s"
-then
+if ! gifcc "${input}" > "${OUTDIR}/${test}.s"; then
     exit 1
 fi
 
-if ! gcc -lm -o "$t.bin" "$t.s"
-then
+if ! gcc -lm -o "${OUTDIR}/${test}.bin" "${OUTDIR}/${test}.s"; then
     exit 1
 fi
 
-if ! "$t.bin" > "$t.output" 2>&1
-then
+if ! "${OUTDIR}/${test}.bin" > "${OUTDIR}/${test}.output" 2>&1; then
     exit 1
 fi
 
-if ! diff -u "$t.expected" "$t.output"
-then
+if ! diff -u "${input}.expected" "${OUTDIR}/${test}.output"; then
     exit 1
 fi
