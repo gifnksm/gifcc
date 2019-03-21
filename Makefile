@@ -47,7 +47,7 @@ all: stage1
 .PHONY: all
 test: gcc-test stage1-test
 .PHONY: test
-test-full: test stage1-test-full
+test-full: stage1-test-full
 .PHONY: test-full
 
 stage1: $(STAGE1_GIFCC) target/stage1/
@@ -67,7 +67,7 @@ gcc-test: gcc-test-compile
 define stage-test
 stage$(1)-test:
 .PHONY: stage$(1)-test
-stage$(1)-test-full:
+stage$(1)-test-full: stage$(1)-test
 .PHONY: stage$(1)-test-full
 
 stage$(1)-test-gifcc: $(STAGE$(1)_GIFCC)
