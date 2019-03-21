@@ -1483,8 +1483,8 @@ static void emit_expr_binop_sse(Expr *expr) {
   }
   case EX_LT: {
     const Reg *r = get_int_reg(expr->val_type, expr->range);
-    printf("  %s xmm0, xmm1\n", op->comi);
-    printf("  setl al\n");
+    printf("  %s xmm1, xmm0\n", op->comi);
+    printf("  seta al\n");
     printf("  movzx %s, al\n", r->rax);
     emit_push("rax");
     break;
@@ -1492,15 +1492,15 @@ static void emit_expr_binop_sse(Expr *expr) {
   case EX_GT: {
     const Reg *r = get_int_reg(expr->val_type, expr->range);
     printf("  %s xmm0, xmm1\n", op->comi);
-    printf("  setg al\n");
+    printf("  seta al\n");
     printf("  movzx %s, al\n", r->rax);
     emit_push("rax");
     break;
   }
   case EX_LTEQ: {
     const Reg *r = get_int_reg(expr->val_type, expr->range);
-    printf("  %s xmm0, xmm1\n", op->comi);
-    printf("  setle al\n");
+    printf("  %s xmm1, xmm0\n", op->comi);
+    printf("  setnb al\n");
     printf("  movzx %s, al\n", r->rax);
     emit_push("rax");
     break;
@@ -1508,7 +1508,7 @@ static void emit_expr_binop_sse(Expr *expr) {
   case EX_GTEQ: {
     const Reg *r = get_int_reg(expr->val_type, expr->range);
     printf("  %s xmm0, xmm1\n", op->comi);
-    printf("  setge al\n");
+    printf("  setnb al\n");
     printf("  movzx %s, al\n", r->rax);
     emit_push("rax");
     break;
@@ -1527,32 +1527,39 @@ static void emit_expr_binop_x87(Expr *expr) {
   emit_expr(expr->binop.lhs);
   emit_expr(expr->binop.rhs);
 
-  printf("  fld TBYTE PTR [rsp + 16]\n");
-  printf("  fld TBYTE PTR [rsp]\n");
-
   switch (expr->ty) {
   case EX_ADD:
+    printf("  fld TBYTE PTR [rsp + 16]\n");
+    printf("  fld TBYTE PTR [rsp]\n");
     printf("  faddp st(1), st\n");
     printf("  fstp TBYTE PTR [rsp + 16]\n");
     emit_stack_add(16);
     break;
   case EX_SUB:
+    printf("  fld TBYTE PTR [rsp + 16]\n");
+    printf("  fld TBYTE PTR [rsp]\n");
     printf("  fsubp st(1), st\n");
     printf("  fstp TBYTE PTR [rsp + 16]\n");
     emit_stack_add(16);
     break;
   case EX_MUL:
+    printf("  fld TBYTE PTR [rsp + 16]\n");
+    printf("  fld TBYTE PTR [rsp]\n");
     printf("  fmulp st(1), st\n");
     printf("  fstp TBYTE PTR [rsp + 16]\n");
     emit_stack_add(16);
     break;
   case EX_DIV:
+    printf("  fld TBYTE PTR [rsp + 16]\n");
+    printf("  fld TBYTE PTR [rsp]\n");
     printf("  fdivp st(1), st\n");
     printf("  fstp TBYTE PTR [rsp + 16]\n");
     emit_stack_add(16);
     break;
   case EX_EQEQ: {
     const Reg *r = get_int_reg(expr->val_type, expr->range);
+    printf("  fld TBYTE PTR [rsp + 16]\n");
+    printf("  fld TBYTE PTR [rsp]\n");
     printf("  fcomip st, st(1)\n");
     printf("  fstp st(0)\n");
     printf("  sete al\n");
@@ -1565,6 +1572,8 @@ static void emit_expr_binop_x87(Expr *expr) {
   }
   case EX_NOTEQ: {
     const Reg *r = get_int_reg(expr->val_type, expr->range);
+    printf("  fld TBYTE PTR [rsp + 16]\n");
+    printf("  fld TBYTE PTR [rsp]\n");
     printf("  fcomip st, st(1)\n");
     printf("  fstp st(0)\n");
     printf("  setne al\n");
@@ -1577,9 +1586,11 @@ static void emit_expr_binop_x87(Expr *expr) {
   }
   case EX_LT: {
     const Reg *r = get_int_reg(expr->val_type, expr->range);
+    printf("  fld TBYTE PTR [rsp + 16]\n");
+    printf("  fld TBYTE PTR [rsp]\n");
     printf("  fcomip st, st(1)\n");
     printf("  fstp st(0)\n");
-    printf("  setl al\n");
+    printf("  seta al\n");
     printf("  movzx %s, al\n", r->rax);
     emit_stack_add(32);
     emit_push("rax");
@@ -1587,9 +1598,11 @@ static void emit_expr_binop_x87(Expr *expr) {
   }
   case EX_GT: {
     const Reg *r = get_int_reg(expr->val_type, expr->range);
+    printf("  fld TBYTE PTR [rsp]\n");
+    printf("  fld TBYTE PTR [rsp + 16]\n");
     printf("  fcomip st, st(1)\n");
     printf("  fstp st(0)\n");
-    printf("  setg al\n");
+    printf("  seta al\n");
     printf("  movzx %s, al\n", r->rax);
     emit_stack_add(32);
     emit_push("rax");
@@ -1597,9 +1610,11 @@ static void emit_expr_binop_x87(Expr *expr) {
   }
   case EX_LTEQ: {
     const Reg *r = get_int_reg(expr->val_type, expr->range);
+    printf("  fld TBYTE PTR [rsp + 16]\n");
+    printf("  fld TBYTE PTR [rsp]\n");
     printf("  fcomip st, st(1)\n");
     printf("  fstp st(0)\n");
-    printf("  setle al\n");
+    printf("  setnb al\n");
     printf("  movzx %s, al\n", r->rax);
     emit_stack_add(32);
     emit_push("rax");
@@ -1607,9 +1622,11 @@ static void emit_expr_binop_x87(Expr *expr) {
   }
   case EX_GTEQ: {
     const Reg *r = get_int_reg(expr->val_type, expr->range);
+    printf("  fld TBYTE PTR [rsp]\n");
+    printf("  fld TBYTE PTR [rsp + 16]\n");
     printf("  fcomip st, st(1)\n");
     printf("  fstp st(0)\n");
-    printf("  setge al\n");
+    printf("  setnb al\n");
     printf("  movzx %s, al\n", r->rax);
     emit_stack_add(32);
     emit_push("rax");

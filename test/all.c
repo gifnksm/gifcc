@@ -2373,6 +2373,13 @@ static void test74(void) {
   CHECK_INT(0, fy == fx);
   CHECK_INT(1, fy != fx);
 
+  CHECK_INT(0, fx > fy);
+  CHECK_INT(1, fx < fy);
+  CHECK_INT(0, fx >= fy);
+  CHECK_INT(1, fx <= fy);
+  CHECK_INT(0, fx == fy);
+  CHECK_INT(1, fx != fy);
+
   CHECK_INT(0, fy > fz);
   CHECK_INT(0, fy < fz);
   CHECK_INT(1, fy >= fz);
@@ -2392,6 +2399,13 @@ static void test74(void) {
   CHECK_INT(0, dy <= dx);
   CHECK_INT(0, dy == dx);
   CHECK_INT(1, dy != dx);
+
+  CHECK_INT(0, dx > dy);
+  CHECK_INT(1, dx < dy);
+  CHECK_INT(0, dx >= dy);
+  CHECK_INT(1, dx <= dy);
+  CHECK_INT(0, dx == dy);
+  CHECK_INT(1, dx != dy);
 
   CHECK_INT(0, dy > dz);
   CHECK_INT(0, dy < dz);
@@ -2415,6 +2429,13 @@ static void test74(void) {
   CHECK_INT(0, ldy <= ldx);
   CHECK_INT(0, ldy == ldx);
   CHECK_INT(1, ldy != ldx);
+
+  CHECK_INT(0, ldx > ldy);
+  CHECK_INT(1, ldx < ldy);
+  CHECK_INT(0, ldx >= ldy);
+  CHECK_INT(1, ldx <= ldy);
+  CHECK_INT(0, ldx == ldy);
+  CHECK_INT(1, ldx != ldy);
 
   CHECK_INT(0, ldy > ldz);
   CHECK_INT(0, ldy < ldz);
