@@ -1266,7 +1266,7 @@ static bool is_null_ptr_const(Expr *expr) {
 static Expr *new_expr(int ty, Type *val_type, const Range *range) {
   Expr *expr = NEW(Expr);
   expr->ty = ty;
-  expr->val_type = val_type;
+  expr->val_type = to_unqualified(val_type);
   expr->range = range;
   return expr;
 }
@@ -1368,9 +1368,6 @@ static Expr *new_expr_generic(Scope *scope, Expr *control, Vector *assoc_list) {
   control = coerce_func2ptr(scope, control);
   control = coerce_array2ptr(scope, control);
 
-  Type *type = clone_type(control->val_type);
-  type->qualifier = EMPTY_TYPE_QUALIFIER;
-
   Expr *default_expr = NULL;
   for (int i = 0; i < vec_len(assoc_list); i++) {
     GenericAssociation *assoc = vec_get(assoc_list, i);
@@ -1381,7 +1378,7 @@ static Expr *new_expr_generic(Scope *scope, Expr *control, Vector *assoc_list) {
       default_expr = assoc->expr;
       continue;
     }
-    if (is_sametype(assoc->type, type)) {
+    if (is_sametype(assoc->type, control->val_type)) {
       return assoc->expr;
     }
   }
@@ -1389,7 +1386,7 @@ static Expr *new_expr_generic(Scope *scope, Expr *control, Vector *assoc_list) {
     range_error(control->range,
                 "controlling expression type '%s' not compatible with any "
                 "generic association type",
-                format_type(type, false));
+                format_type(control->val_type, false));
   }
   return default_expr;
 }

@@ -720,6 +720,7 @@ extern const TypeQualifier EMPTY_TYPE_QUALIFIER;
 extern const TypeQualifier CONST_TYPE_QUALIFIER;
 Type *new_type(int ty, TypeQualifier tq);
 Type *clone_type(Type *type);
+Type *to_unqualified(Type *type);
 Type *new_type_ptr(Type *base_type, TypeQualifier tq);
 Type *new_type_array(Type *base_type, Number len, TypeQualifier tq);
 Type *new_type_unsized_array(Type *base_type, TypeQualifier tq);
@@ -733,6 +734,8 @@ void init_struct_body(StructBody *body);
 void register_struct_member(Type *type, char *member_name, Type *member_type,
                             const Range *range);
 const Member *lookup_struct_member(Type *type, const char *name);
+bool is_unqualified_type(const Type *type);
+bool is_same_type_qualifier(const TypeQualifier *tq1, const TypeQualifier *tq2);
 bool is_sametype(Type *ty1, Type *ty2);
 bool is_integer_type(Type *ty);
 bool is_float_type(Type *ty);

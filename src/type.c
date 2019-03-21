@@ -18,6 +18,16 @@ Type *clone_type(Type *type) {
   return cloned;
 }
 
+Type *to_unqualified(Type *type) {
+  if (is_unqualified_type(type)) {
+    return type;
+  }
+  Type *cloned = NEW(Type);
+  *cloned = *type;
+  cloned->qualifier = EMPTY_TYPE_QUALIFIER;
+  return cloned;
+}
+
 Type *new_type_ptr(Type *base_type, TypeQualifier tq) {
   Type *ptrtype = new_type(TY_PTR, tq);
   ptrtype->ptr = base_type;
@@ -200,13 +210,12 @@ const Member *lookup_struct_member(Type *type, const char *name) {
   return vec_get(body->member_list, member->index);
 }
 
-bool is_sametype(Type *ty1, Type *ty2) {
-  if (ty1->ty != ty2->ty) {
-    return false;
-  }
+bool is_unqualified_type(const Type *type) {
+  return is_same_type_qualifier(&type->qualifier, &EMPTY_TYPE_QUALIFIER);
+}
 
-  const TypeQualifier *tq1 = &ty1->qualifier;
-  const TypeQualifier *tq2 = &ty2->qualifier;
+bool is_same_type_qualifier(const TypeQualifier *tq1,
+                            const TypeQualifier *tq2) {
   if (tq1->is_const != tq2->is_const) {
     return false;
   }
@@ -214,6 +223,17 @@ bool is_sametype(Type *ty1, Type *ty2) {
     return false;
   }
   if (tq1->is_volatile != tq2->is_volatile) {
+    return false;
+  }
+  return true;
+}
+
+bool is_sametype(Type *ty1, Type *ty2) {
+  if (ty1->ty != ty2->ty) {
+    return false;
+  }
+
+  if (!is_same_type_qualifier(&ty1->qualifier, &ty2->qualifier)) {
     return false;
   }
 
