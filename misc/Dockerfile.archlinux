@@ -6,19 +6,26 @@ RUN echo "%wheel ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/wheel
 RUN useradd -m -G wheel -s /bin/bash builder
 USER builder
 WORKDIR  /home/builder
-RUN curl -O https://aur.archlinux.org/cgit/aur.git/snapshot/tmsu.tar.gz
-RUN tar -xvf tmsu.tar.gz
-WORKDIR  /home/builder/tmsu
-RUN sudo -u builder makepkg -s --noconfirm
+COPY \
+        --chown=builder \
+        nodejs-tap-xunit/PKGBUILD /home/builder/nodejs-tap-xunit/
+RUN cd /home/builder/nodejs-tap-xunit && sudo -u builder makepkg -s --noconfirm
+ADD \
+        --chown=builder \
+        https://aur.archlinux.org/cgit/aur.git/snapshot/tmsu.tar.gz \
+        /home/builder/
+RUN tar xvf tmsu.tar.gz
+RUN cd /home/builder/tmsu && sudo -u builder makepkg -s --noconfirm
 
 FROM archlinux/base
-COPY --from=build-env /home/builder/tmsu/tmsu-*.tar.xz .
+COPY \
+        --from=build-env \
+        /home/builder/*/*.tar.xz \
+        ./
 RUN \
         set -x && \
         pacman -Syu --noconfirm && \
         pacman -S base-devel npm python3 git --noconfirm && \
-        pacman -U tmsu-*.tar.xz --noconfirm && \
-        rm tmsu-*.tar.xz && \
-        npm install -g tap-xunit && \
-        pacman -Scc --noconfirm && \
-        npm cache clean --force
+        pacman -U *.tar.xz --noconfirm && \
+        rm *.tar.xz && \
+        pacman -Scc --noconfirm
