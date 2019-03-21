@@ -62,10 +62,6 @@ jobs:
           key: stage1-{{ .Environment.CIRCLE_SHA1 }}
       - run: touch target/stage*/*
       - run: make stage1-test-full
-      - run:
-          command: |
-            mkdir -p target/test-results/stage1-c-testsuite
-            tap-xunit < target/stage1/c-testsuite/result.tap > target/test-results/stage1-c-testsuite/results.xml || true
       - store_test_results:
           path: target/test-results
   stage2-test:
@@ -77,10 +73,6 @@ jobs:
           key: stage2-{{ .Environment.CIRCLE_SHA1 }}
       - run: touch target/stage*/*
       - run: make stage2-test-full
-      - run:
-          command: |
-            mkdir -p target/test-results/stage2-c-testsuite
-            tap-xunit < target/stage2/c-testsuite/result.tap > target/test-results/stage2-c-testsuite/results.xml || true
       - store_test_results:
           path: target/test-results
   stage3-test:
@@ -92,10 +84,6 @@ jobs:
           key: stage3-{{ .Environment.CIRCLE_SHA1 }}
       - run: touch target/stage*/*
       - run: make stage3-test-full
-      - run:
-          command: |
-            mkdir -p target/test-results/stage3-c-testsuite
-            tap-xunit < target/stage3/c-testsuite/result.tap > target/test-results/stage3-c-testsuite/results.xml || true
       - store_test_results:
           path: target/test-results
 
