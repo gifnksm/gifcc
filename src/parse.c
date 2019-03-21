@@ -3082,6 +3082,15 @@ static void assign_struct_initializer(Scope *scope, Vector *list, bool is_root,
     if (!is_first && !is_root && elem->designation != NULL) {
       break;
     }
+    if (!is_root && is_first) {
+      if (elem->pinit->expr != NULL &&
+          is_sametype(elem->pinit->expr->val_type, type)) {
+        (*init)->expr = elem->pinit->expr;
+        (*init)->members = NULL;
+        vec_remove(list, 0);
+        return;
+      }
+    }
     is_first = false;
 
     const Member *member = consume_member_designator(type, elem);
@@ -3117,6 +3126,15 @@ static void assign_union_initializer(Scope *scope, Vector *list, bool is_root,
     InitElem *elem = vec_get(list, 0);
     if (!is_first && !is_root && elem->designation != NULL) {
       break;
+    }
+    if (!is_root && is_first) {
+      if (elem->pinit->expr != NULL &&
+          is_sametype(elem->pinit->expr->val_type, type)) {
+        (*init)->expr = elem->pinit->expr;
+        (*init)->members = NULL;
+        vec_remove(list, 0);
+        return;
+      }
     }
     is_first = false;
 

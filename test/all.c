@@ -2581,6 +2581,30 @@ static void test81(void) {
   // clang-format on
 }
 
+typedef struct Test82_P {
+  int x;
+  int y;
+} Test82_P;
+typedef union Test82_Q {
+  int x;
+  int y;
+} Test82_Q;
+struct Test82_S {
+  Test82_P a;
+  struct {
+    int x;
+    int y;
+  } b;
+  Test82_Q c;
+} test82_s = {(Test82_P){3, 4}, {5, 6}, (Test82_Q){7}};
+static void test82(void) {
+  CHECK_INT(3, test82_s.a.x);
+  CHECK_INT(4, test82_s.a.y);
+  CHECK_INT(5, test82_s.b.x);
+  CHECK_INT(6, test82_s.b.y);
+  CHECK_INT(7, test82_s.c.x);
+}
+
 int main(void) {
   Test test_list[] = {
       TEST(test01), TEST(test02), TEST(test03), TEST(test04), TEST(test05),
@@ -2599,7 +2623,7 @@ int main(void) {
       TEST(test66), TEST(test67), TEST(test68), TEST(test69), TEST(test70),
       TEST(test71), TEST(test72), TEST(test73), TEST(test74), TEST(test75),
       TEST(test76), TEST(test77), TEST(test78), TEST(test79), TEST(test80),
-      TEST(test81), {NULL, NULL},
+      TEST(test81), TEST(test82), {NULL, NULL},
   };
   RUN_TEST(test_list);
 
