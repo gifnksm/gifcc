@@ -3,9 +3,9 @@
 STAGE=$1
 CURDIR=$(readlink -f $(dirname $0))
 REPOROOT=$(readlink -f ${CURDIR}/..)
-PATH="$(readlink -f ${CURDIR}/../target/${STAGE}):${PATH}"
+PATH="$(readlink -f ${REPOROOT}/target/${STAGE}):${PATH}"
 
-export OUTDIR="$(readlink -f ${CURDIR}/../target/${STAGE}/c-testsuite)"
+export OUTDIR="$(readlink -f ${REPOROOT}/target/${STAGE}/c-testsuite)"
 mkdir -p "${OUTDIR}"
 
 cd ${REPOROOT}
@@ -31,4 +31,7 @@ printf "fail  %5d\n" ${FAIL}
 printf "skip  %5d\n" ${SKIP}
 echo "-----------"
 printf "total %5d\n" ${TOTAL}
+
+mkdir -p ${REPOROOT}/target/test-results/${STAGE}-c-testsuite
+tap-xunit < ${OUTPUT} > ${REPOROOT}/target/test-results/${STAGE}-c-testsuite/results.xml || true
 
