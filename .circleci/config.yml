@@ -21,6 +21,38 @@ jobs:
           paths:
             - target/stage1
             - src/include_path.h
+  stage2-build:
+    docker:
+      - image: gifnksm/gifcc-build:archlinux
+    steps:
+      - checkout
+      - restore_cache:
+          key: stage1-{{ .Environment.CIRCLE_SHA1 }}
+      - run: touch target/stage*/*
+      - run: make stage2
+      - save_cache:
+          key: stage2-{{ .Environment.CIRCLE_SHA1 }}
+          paths:
+            - target/stage1
+            - target/stage2
+            - src/include_path.h
+  stage3-build:
+    docker:
+      - image: gifnksm/gifcc-build:archlinux
+    steps:
+      - checkout
+      - restore_cache:
+          key: stage2-{{ .Environment.CIRCLE_SHA1 }}
+      - run: touch target/stage*/*
+      - run: make stage3
+      - save_cache:
+          key: stage3-{{ .Environment.CIRCLE_SHA1 }}
+          paths:
+            - target/stage1
+            - target/stage2
+            - target/stage3
+            - src/include_path.h
+
   stage1-test:
     docker:
       - image: gifnksm/gifcc-build:archlinux
@@ -28,12 +60,42 @@ jobs:
       - checkout
       - restore_cache:
           key: stage1-{{ .Environment.CIRCLE_SHA1 }}
-      - run: touch target/stage1/*
+      - run: touch target/stage*/*
       - run: make stage1-test-full
       - run:
           command: |
             mkdir -p target/test-results/stage1-c-testsuite
             tap-xunit < target/stage1/c-testsuite > target/test-results/stage1-c-testsuite/results.xml || true
+      - store_test_results:
+          path: target/test-results
+  stage2-test:
+    docker:
+      - image: gifnksm/gifcc-build:archlinux
+    steps:
+      - checkout
+      - restore_cache:
+          key: stage2-{{ .Environment.CIRCLE_SHA1 }}
+      - run: touch target/stage*/*
+      - run: make stage2-test-full
+      - run:
+          command: |
+            mkdir -p target/test-results/stage2-c-testsuite
+            tap-xunit < target/stage2/c-testsuite > target/test-results/stage2-c-testsuite/results.xml || true
+      - store_test_results:
+          path: target/test-results
+  stage3-test:
+    docker:
+      - image: gifnksm/gifcc-build:archlinux
+    steps:
+      - checkout
+      - restore_cache:
+          key: stage3-{{ .Environment.CIRCLE_SHA1 }}
+      - run: touch target/stage*/*
+      - run: make stage3-test-full
+      - run:
+          command: |
+            mkdir -p target/test-results/stage3-c-testsuite
+            tap-xunit < target/stage3/c-testsuite > target/test-results/stage3-c-testsuite/results.xml || true
       - store_test_results:
           path: target/test-results
 
@@ -42,9 +104,21 @@ workflows:
   commit:
     jobs:
       - stage1-build
+      - stage2-build:
+          requires:
+            - stage1-build
+      - stage3-build:
+          requires:
+            - stage2-build
       - stage1-test:
           requires:
             - stage1-build
+      - stage2-test:
+          requires:
+            - stage2-build
+      - stage3-test:
+          requires:
+            - stage3-build
 
   nightly:
     triggers:
