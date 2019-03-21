@@ -1,29 +1,20 @@
 version: 2
 jobs:
-  build:
+  build-docker-image:
     docker:
-      - image: archlinux/base
+      - image: docker
     steps:
       - checkout
-      - run:
-          command: |
-            pacman -Syu --noconfirm
-            pacman -S base-devel --noconfirm
-      - run:
-          command: |
-            echo "Defaults        lecture = never" > /etc/sudoers.d/privacy
-            echo "%wheel ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/wheel
-            useradd -m -G wheel -s /bin/bash builder
-      - run:
-          command: |
-            cd /home/builder
-            sudo -u builder curl -O https://aur.archlinux.org/cgit/aur.git/snapshot/tmsu.tar.gz
-            sudo -u builder tar -xvf tmsu.tar.gz
-            cd tmsu
-            sudo -u builder makepkg -si --noconfirm
-      - run: pacman -S npm --noconfirm
-      - run: npm install -g tap-xunit
-      - run: pacman -S python3 --noconfirm
+      - setup_remote_docker
+      - run: docker login -u $DOCKER_USER -p $DOCKER_PASS
+      - run: docker build -t gifnksm/gifcc-build:archlinux -f misc/Dockerfile.archlinux misc
+      - run: docker push gifnksm/gifcc-build:archlinux
+
+  build:
+    docker:
+      - image: gifnksm/gifcc-build:archlinux
+    steps:
+      - checkout
       - run: make
       - run: make test-full
       - run:
@@ -32,3 +23,20 @@ jobs:
             tap-xunit < target/stage1/c-testsuite > target/test-results/stage1-c-testsuite/results.xml || true
       - store_test_results:
           path: target/test-results
+
+workflows:
+  version: 2
+  commit:
+    jobs:
+      - build
+
+  nightly:
+    triggers:
+      - schedule:
+          cron: "0 0 * * *"
+          filters:
+            branches:
+              only:
+                - master
+    jobs:
+      - build-docker-image
