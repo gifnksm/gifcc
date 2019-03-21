@@ -10,13 +10,26 @@ jobs:
       - run: docker build -t gifnksm/gifcc-build:archlinux -f misc/Dockerfile.archlinux misc
       - run: docker push gifnksm/gifcc-build:archlinux
 
-  build:
+  stage1-build:
     docker:
       - image: gifnksm/gifcc-build:archlinux
     steps:
       - checkout
-      - run: make
-      - run: make test-full
+      - run: make stage1
+      - save_cache:
+          key: stage1-{{ .Environment.CIRCLE_SHA1 }}
+          paths:
+            - target/stage1
+            - src/include_path.h
+  stage1-test:
+    docker:
+      - image: gifnksm/gifcc-build:archlinux
+    steps:
+      - checkout
+      - restore_cache:
+          key: stage1-{{ .Environment.CIRCLE_SHA1 }}
+      - run: touch target/stage1/*
+      - run: make stage1-test-full
       - run:
           command: |
             mkdir -p target/test-results/stage1-c-testsuite
@@ -28,7 +41,10 @@ workflows:
   version: 2
   commit:
     jobs:
-      - build
+      - stage1-build
+      - stage1-test:
+          requires:
+            - stage1-build
 
   nightly:
     triggers:
