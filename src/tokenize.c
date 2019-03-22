@@ -19,6 +19,11 @@ struct Tokenizer {
 };
 
 typedef struct {
+  tokenizer_listener_fun_t *fun;
+  void *arg;
+} Listener;
+
+typedef struct {
   char *str;
   int kind;
 } LongToken;
@@ -219,11 +224,14 @@ void consume_all_tokens(Tokenizer *tokenizer) {
   } while (token->ty != TK_EOF);
 }
 
-void token_add_listener(Tokenizer *tokenizer,
-                        tokenizer_listener_fun_t *listener) {
+void token_add_listener(Tokenizer *tokenizer, tokenizer_listener_fun_t *fun,
+                        void *arg) {
   if (tokenizer->listeners == NULL) {
     tokenizer->listeners = new_vector();
   }
+  Listener *listener = NEW(Listener);
+  listener->fun = fun;
+  listener->arg = arg;
   vec_push(tokenizer->listeners, listener);
 }
 
@@ -274,9 +282,8 @@ Token *token_peek_ahead(Tokenizer *tokenizer, int n) {
           vec_push(tokenizer->tokens, next);
           if (tokenizer->listeners != NULL) {
             for (int i = 0; i < vec_len(tokenizer->listeners); i++) {
-              tokenizer_listener_fun_t *listener =
-                  vec_get(tokenizer->listeners, i);
-              listener(next);
+              Listener *listener = vec_get(tokenizer->listeners, i);
+              listener->fun(listener->arg, next);
             }
           }
           last = next;

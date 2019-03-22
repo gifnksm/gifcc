@@ -23,513 +23,521 @@ noreturn void error_raw_v(const char *dbg_file, int dbg_line, const char *fmt,
   exit(1);
 }
 
-static void token_listener(const Token *token) {
+static void token_listener(void *arg, const Token *token) {
+  FILE *fp = arg;
   const char *filename;
   int line, column;
   range_get_start(token->range, &filename, &line, &column);
-  printf("%s:%d:%d:\t%-8s", filename, line, column,
-         token_kind_to_str(token->ty));
+  fprintf(fp, "%s:%d:%d:\t%-8s", filename, line, column,
+          token_kind_to_str(token->ty));
   switch (token->ty) {
   case TK_NUM:
-    printf("%s", token->num);
+    fprintf(fp, "%s", token->num);
     break;
   case TK_CHARCONST:
-    printf("%s", format_number(token->char_val));
+    fprintf(fp, "%s", format_number(token->char_val));
     break;
   case TK_IDENT:
-    printf("%s", token->ident);
+    fprintf(fp, "%s", token->ident);
     break;
   case TK_STR:
-    printf("%s", format_string_literal(token->str));
+    fprintf(fp, "%s", format_string_literal(token->str));
     break;
   default:
     break;
   }
-  printf("\n");
+  fprintf(fp, "\n");
 }
 
-static void dump_range_start(const Range *range) {
+static void dump_range_start(FILE *fp, const Range *range) {
   const char *filename;
   int line, column;
   range_get_start(range, &filename, &line, &column);
-  printf("%s:%d:%d\t", filename, line, column);
+  fprintf(fp, "%s:%d:%d\t", filename, line, column);
 }
-static void dump_range_end(const Range *range) {
+static void dump_range_end(FILE *fp, const Range *range) {
   const char *filename;
   int line, column;
   range_get_end(range, &filename, &line, &column);
-  printf("%s:%d:%d\t", filename, line, column);
+  fprintf(fp, "%s:%d:%d\t", filename, line, column);
 }
 
-static void dump_indent(int level) { printf("%*s", 2 * level, ""); }
-static void dump_type(Type *ty) { printf("<%s>", format_type(ty, true)); }
+static void dump_indent(FILE *fp, int level) {
+  fprintf(fp, "%*s", 2 * level, "");
+}
+static void dump_type(FILE *fp, Type *ty) {
+  fprintf(fp, "<%s>", format_type(ty, true));
+}
 
-static __attribute__((format(printf, 3, 4))) void
-dump_expr_oneline(const Expr *expr, int level, const char *fmt, ...) {
+static __attribute__((format(printf, 4, 5))) void
+dump_expr_oneline(FILE *fp, const Expr *expr, int level, const char *fmt, ...) {
   va_list ap;
   va_start(ap, fmt);
-  dump_range_start(expr->range);
-  dump_indent(level);
-  dump_type(expr->val_type);
-  printf("(");
-  vprintf(fmt, ap);
-  printf(")\n");
+  dump_range_start(fp, expr->range);
+  dump_indent(fp, level);
+  dump_type(fp, expr->val_type);
+  fprintf(fp, "(");
+  vfprintf(fp, fmt, ap);
+  fprintf(fp, ")\n");
   va_end(ap);
 }
-static __attribute__((format(printf, 3, 4))) void
-dump_expr_start(const Expr *expr, int level, const char *fmt, ...) {
+static __attribute__((format(printf, 4, 5))) void
+dump_expr_start(FILE *fp, const Expr *expr, int level, const char *fmt, ...) {
   va_list ap;
   va_start(ap, fmt);
-  dump_range_start(expr->range);
-  dump_indent(level);
-  dump_type(expr->val_type);
-  printf("(");
-  vprintf(fmt, ap);
-  printf("\n");
+  dump_range_start(fp, expr->range);
+  dump_indent(fp, level);
+  dump_type(fp, expr->val_type);
+  fprintf(fp, "(");
+  vfprintf(fp, fmt, ap);
+  fprintf(fp, "\n");
   va_end(ap);
 }
-static void dump_expr_end(const Expr *expr, int level) {
-  dump_range_end(expr->range);
-  dump_indent(level);
-  printf(")\n");
+static void dump_expr_end(FILE *fp, const Expr *expr, int level) {
+  dump_range_end(fp, expr->range);
+  dump_indent(fp, level);
+  fprintf(fp, ")\n");
 }
-static void dump_expr(Expr *expr, int level);
-static void dump_init(Initializer *init, const Range *range, int level);
-static void dump_unop_expr(Expr *expr, char *label, int level) {
-  dump_expr_start(expr, level, "%s", label);
-  dump_expr(expr->unop.operand, level + 1);
-  dump_expr_end(expr, level);
+static void dump_expr(FILE *fp, Expr *expr, int level);
+static void dump_init(FILE *fp, Initializer *init, const Range *range,
+                      int level);
+static void dump_unop_expr(FILE *fp, Expr *expr, char *label, int level) {
+  dump_expr_start(fp, expr, level, "%s", label);
+  dump_expr(fp, expr->unop.operand, level + 1);
+  dump_expr_end(fp, expr, level);
 }
-static void dump_binop_expr(Expr *expr, char *label, int level) {
-  dump_expr_start(expr, level, "%s", label);
-  dump_expr(expr->binop.lhs, level + 1);
-  dump_expr(expr->binop.rhs, level + 1);
-  dump_expr_end(expr, level);
+static void dump_binop_expr(FILE *fp, Expr *expr, char *label, int level) {
+  dump_expr_start(fp, expr, level, "%s", label);
+  dump_expr(fp, expr->binop.lhs, level + 1);
+  dump_expr(fp, expr->binop.rhs, level + 1);
+  dump_expr_end(fp, expr, level);
 }
-static void dump_expr(Expr *expr, int level) {
+static void dump_expr(FILE *fp, Expr *expr, int level) {
   switch (expr->ty) {
   // primary expression
   case EX_NUM:
-    dump_expr_oneline(expr, level, "NUM %s", format_number(expr->num));
+    dump_expr_oneline(fp, expr, level, "NUM %s", format_number(expr->num));
     return;
   case EX_STACK_VAR:
-    dump_expr_oneline(expr, level, "STACK_VAR %s", expr->stack_var->name);
+    dump_expr_oneline(fp, expr, level, "STACK_VAR %s", expr->stack_var->name);
     return;
   case EX_GLOBAL_VAR:
-    dump_expr_oneline(expr, level, "GLOBAL_VAR %s", expr->global_var.name);
+    dump_expr_oneline(fp, expr, level, "GLOBAL_VAR %s", expr->global_var.name);
     return;
   case EX_STR:
-    dump_expr_oneline(expr, level, "STR %s:%s",
+    dump_expr_oneline(fp, expr, level, "STR %s:%s",
                       format_string_literal(expr->str->val), expr->str->name);
     return;
   case EX_COMPOUND:
-    dump_expr_start(expr, level, "COMPOUND");
-    dump_init(expr->compound, expr->range, level + 1);
-    dump_expr_end(expr, level);
+    dump_expr_start(fp, expr, level, "COMPOUND");
+    dump_init(fp, expr->compound, expr->range, level + 1);
+    dump_expr_end(fp, expr, level);
     return;
 
   // prefix unary operator
   case EX_PRE_INC:
-    dump_unop_expr(expr, "[++(PRE)]", level);
+    dump_unop_expr(fp, expr, "[++(PRE)]", level);
     return;
   case EX_PRE_DEC:
-    dump_unop_expr(expr, "[--(PRE)]", level);
+    dump_unop_expr(fp, expr, "[--(PRE)]", level);
     return;
   case EX_ADDRESS:
-    dump_unop_expr(expr, "[&]", level);
+    dump_unop_expr(fp, expr, "[&]", level);
     return;
   case EX_INDIRECT:
-    dump_unop_expr(expr, "[*]", level);
+    dump_unop_expr(fp, expr, "[*]", level);
     return;
   case EX_PLUS:
-    dump_unop_expr(expr, "[+]", level);
+    dump_unop_expr(fp, expr, "[+]", level);
     return;
   case EX_MINUS:
-    dump_unop_expr(expr, "[-]", level);
+    dump_unop_expr(fp, expr, "[-]", level);
     return;
   case EX_NOT:
-    dump_unop_expr(expr, "[~]", level);
+    dump_unop_expr(fp, expr, "[~]", level);
     return;
   case EX_LOG_NOT:
-    dump_unop_expr(expr, "[!]", level);
+    dump_unop_expr(fp, expr, "[!]", level);
     return;
   case EX_CAST:
-    dump_unop_expr(expr, "CAST", level);
+    dump_unop_expr(fp, expr, "CAST", level);
     return;
 
   // postfix unary operator
   case EX_CALL:
-    dump_expr_start(expr, level, "CALL");
-    dump_expr(expr->call.callee, level + 1);
+    dump_expr_start(fp, expr, level, "CALL");
+    dump_expr(fp, expr->call.callee, level + 1);
     if (expr->call.argument != NULL) {
       for (int i = 0; i < vec_len(expr->call.argument); i++) {
-        dump_expr(vec_get(expr->call.argument, i), level + 1);
+        dump_expr(fp, vec_get(expr->call.argument, i), level + 1);
       }
     }
-    dump_expr_end(expr, level);
+    dump_expr_end(fp, expr, level);
     return;
   case EX_POST_INC:
-    dump_unop_expr(expr, "[++(POST)]", level);
+    dump_unop_expr(fp, expr, "[++(POST)]", level);
     return;
   case EX_POST_DEC:
-    dump_unop_expr(expr, "[--(POST)]", level);
+    dump_unop_expr(fp, expr, "[--(POST)]", level);
     return;
   case EX_DOT:
-    dump_expr_start(expr, level, "DOT %s", expr->dot.member->name);
-    dump_expr(expr->dot.operand, level + 1);
-    dump_expr_end(expr, level);
+    dump_expr_start(fp, expr, level, "DOT %s", expr->dot.member->name);
+    dump_expr(fp, expr->dot.operand, level + 1);
+    dump_expr_end(fp, expr, level);
     return;
 
   // binary operator
   case EX_ADD:
-    dump_binop_expr(expr, "[+]", level);
+    dump_binop_expr(fp, expr, "[+]", level);
     return;
   case EX_SUB:
-    dump_binop_expr(expr, "[-]", level);
+    dump_binop_expr(fp, expr, "[-]", level);
     return;
   case EX_MUL:
-    dump_binop_expr(expr, "[*]", level);
+    dump_binop_expr(fp, expr, "[*]", level);
     return;
   case EX_DIV:
-    dump_binop_expr(expr, "[/]", level);
+    dump_binop_expr(fp, expr, "[/]", level);
     return;
   case EX_MOD:
-    dump_binop_expr(expr, "[%]", level);
+    dump_binop_expr(fp, expr, "[%]", level);
     return;
   case EX_EQEQ:
-    dump_binop_expr(expr, "[==]", level);
+    dump_binop_expr(fp, expr, "[==]", level);
     return;
   case EX_NOTEQ:
-    dump_binop_expr(expr, "[!=]", level);
+    dump_binop_expr(fp, expr, "[!=]", level);
     return;
   case EX_LTEQ:
-    dump_binop_expr(expr, "[<=]", level);
+    dump_binop_expr(fp, expr, "[<=]", level);
     return;
   case EX_LT:
-    dump_binop_expr(expr, "[<]", level);
+    dump_binop_expr(fp, expr, "[<]", level);
     return;
   case EX_GT:
-    dump_binop_expr(expr, "[>]", level);
+    dump_binop_expr(fp, expr, "[>]", level);
     return;
   case EX_GTEQ:
-    dump_binop_expr(expr, "[>=]", level);
+    dump_binop_expr(fp, expr, "[>=]", level);
     return;
   case EX_LSHIFT:
-    dump_binop_expr(expr, "[<<]", level);
+    dump_binop_expr(fp, expr, "[<<]", level);
     return;
   case EX_RSHIFT:
-    dump_binop_expr(expr, "[>>]", level);
+    dump_binop_expr(fp, expr, "[>>]", level);
     return;
   case EX_AND:
-    dump_binop_expr(expr, "[&]", level);
+    dump_binop_expr(fp, expr, "[&]", level);
     return;
   case EX_XOR:
-    dump_binop_expr(expr, "[^]", level);
+    dump_binop_expr(fp, expr, "[^]", level);
     return;
   case EX_OR:
-    dump_binop_expr(expr, "[|]", level);
+    dump_binop_expr(fp, expr, "[|]", level);
     return;
   case EX_LOG_AND:
-    dump_binop_expr(expr, "[&&]", level);
+    dump_binop_expr(fp, expr, "[&&]", level);
     return;
   case EX_LOG_OR:
-    dump_binop_expr(expr, "[||]", level);
+    dump_binop_expr(fp, expr, "[||]", level);
     return;
   case EX_ASSIGN:
-    dump_binop_expr(expr, "[=]", level);
+    dump_binop_expr(fp, expr, "[=]", level);
     return;
   case EX_MUL_ASSIGN:
-    dump_binop_expr(expr, "[*=]", level);
+    dump_binop_expr(fp, expr, "[*=]", level);
     return;
   case EX_DIV_ASSIGN:
-    dump_binop_expr(expr, "[/=]", level);
+    dump_binop_expr(fp, expr, "[/=]", level);
     return;
   case EX_MOD_ASSIGN:
-    dump_binop_expr(expr, "[%=]", level);
+    dump_binop_expr(fp, expr, "[%=]", level);
     return;
   case EX_ADD_ASSIGN:
-    dump_binop_expr(expr, "[+=]", level);
+    dump_binop_expr(fp, expr, "[+=]", level);
     return;
   case EX_SUB_ASSIGN:
-    dump_binop_expr(expr, "[-=]", level);
+    dump_binop_expr(fp, expr, "[-=]", level);
     return;
   case EX_LSHIFT_ASSIGN:
-    dump_binop_expr(expr, "[<<=]", level);
+    dump_binop_expr(fp, expr, "[<<=]", level);
     return;
   case EX_RSHIFT_ASSIGN:
-    dump_binop_expr(expr, "[>>=]", level);
+    dump_binop_expr(fp, expr, "[>>=]", level);
     return;
   case EX_AND_ASSIGN:
-    dump_binop_expr(expr, "[&=]", level);
+    dump_binop_expr(fp, expr, "[&=]", level);
     return;
   case EX_XOR_ASSIGN:
-    dump_binop_expr(expr, "[^=]", level);
+    dump_binop_expr(fp, expr, "[^=]", level);
     return;
   case EX_OR_ASSIGN:
-    dump_binop_expr(expr, "[|=]", level);
+    dump_binop_expr(fp, expr, "[|=]", level);
     return;
   case EX_COMMA:
-    dump_expr_start(expr, level, "[,]");
+    dump_expr_start(fp, expr, level, "[,]");
     for (int i = 0; i < vec_len(expr->comma.exprs); i++) {
       Expr *op = vec_get(expr->comma.exprs, i);
-      dump_expr(op, level + 1);
+      dump_expr(fp, op, level + 1);
     }
-    dump_expr_end(expr, level);
+    dump_expr_end(fp, expr, level);
     return;
 
   // ternary unary operator
   case EX_COND:
-    dump_expr_start(expr, level, "COND");
-    dump_expr(expr->cond.cond, level + 1);
-    dump_expr(expr->cond.then_expr, level + 1);
-    dump_expr(expr->cond.else_expr, level + 1);
-    dump_expr_end(expr, level);
+    dump_expr_start(fp, expr, level, "COND");
+    dump_expr(fp, expr->cond.cond, level + 1);
+    dump_expr(fp, expr->cond.then_expr, level + 1);
+    dump_expr(fp, expr->cond.else_expr, level + 1);
+    dump_expr_end(fp, expr, level);
     return;
 
   // compiler builtins
   case EX_BUILTIN_FUNC:
-    dump_expr_oneline(expr, level, "BUILTIN_FUNC %s", expr->builtin_func.name);
+    dump_expr_oneline(fp, expr, level, "BUILTIN_FUNC %s",
+                      expr->builtin_func.name);
     return;
 
   case EX_BUILTIN_VA_START:
-    dump_expr_start(expr, level, "BUILTIN_VA_START");
-    dump_expr(expr->builtin_va_start.ap, level + 1);
-    dump_expr(expr->builtin_va_start.last, level + 1);
-    dump_expr_end(expr, level);
+    dump_expr_start(fp, expr, level, "BUILTIN_VA_START");
+    dump_expr(fp, expr->builtin_va_start.ap, level + 1);
+    dump_expr(fp, expr->builtin_va_start.last, level + 1);
+    dump_expr_end(fp, expr, level);
     return;
   case EX_BUILTIN_VA_ARG:
-    dump_expr_start(expr, level, "BUILTIN_VA_ARG");
-    dump_expr(expr->builtin_va_arg.ap, level + 1);
-    dump_expr_end(expr, level);
+    dump_expr_start(fp, expr, level, "BUILTIN_VA_ARG");
+    dump_expr(fp, expr->builtin_va_arg.ap, level + 1);
+    dump_expr_end(fp, expr, level);
     return;
   case EX_BUILTIN_VA_END:
-    dump_expr_start(expr, level, "BUILTIN_VA_END");
-    dump_expr(expr->builtin_va_end.ap, level + 1);
-    dump_expr_end(expr, level);
+    dump_expr_start(fp, expr, level, "BUILTIN_VA_END");
+    dump_expr(fp, expr->builtin_va_end.ap, level + 1);
+    dump_expr_end(fp, expr, level);
     return;
   case EX_BUILTIN_VA_COPY:
-    dump_expr_start(expr, level, "BUILTIN_VA_COPY");
-    dump_expr(expr->builtin_va_copy.dest, level + 1);
-    dump_expr(expr->builtin_va_copy.src, level + 1);
-    dump_expr_end(expr, level);
+    dump_expr_start(fp, expr, level, "BUILTIN_VA_COPY");
+    dump_expr(fp, expr->builtin_va_copy.dest, level + 1);
+    dump_expr(fp, expr->builtin_va_copy.src, level + 1);
+    dump_expr_end(fp, expr, level);
     return;
   }
   error("未知のノードです: %d", expr->ty);
 }
 
-static __attribute__((format(printf, 3, 4))) void
-dump_stmt_oneline(const Stmt *stmt, int level, const char *fmt, ...) {
+static __attribute__((format(printf, 4, 5))) void
+dump_stmt_oneline(FILE *fp, const Stmt *stmt, int level, const char *fmt, ...) {
   va_list ap;
   va_start(ap, fmt);
-  dump_range_start(stmt->range);
-  dump_indent(level);
-  printf("{");
-  vprintf(fmt, ap);
-  printf("}\n");
+  dump_range_start(fp, stmt->range);
+  dump_indent(fp, level);
+  fprintf(fp, "{");
+  vfprintf(fp, fmt, ap);
+  fprintf(fp, "}\n");
   va_end(ap);
 }
-static __attribute__((format(printf, 3, 4))) void
-dump_stmt_start(const Stmt *stmt, int level, const char *fmt, ...) {
+static __attribute__((format(printf, 4, 5))) void
+dump_stmt_start(FILE *fp, const Stmt *stmt, int level, const char *fmt, ...) {
   va_list ap;
   va_start(ap, fmt);
-  dump_range_start(stmt->range);
-  dump_indent(level);
-  printf("{");
-  vprintf(fmt, ap);
-  printf("\n");
+  dump_range_start(fp, stmt->range);
+  dump_indent(fp, level);
+  fprintf(fp, "{");
+  vfprintf(fp, fmt, ap);
+  fprintf(fp, "\n");
   va_end(ap);
 }
-static void dump_stmt_end(const Stmt *stmt, int level) {
-  dump_range_end(stmt->range);
-  dump_indent(level);
-  printf("}\n");
+static void dump_stmt_end(FILE *fp, const Stmt *stmt, int level) {
+  dump_range_end(fp, stmt->range);
+  dump_indent(fp, level);
+  fprintf(fp, "}\n");
 }
 
-static void dump_stmt(Stmt *stmt, int level) {
+static void dump_stmt(FILE *fp, Stmt *stmt, int level) {
   switch (stmt->ty) {
   case ST_EXPR:
-    dump_stmt_start(stmt, level, "EXPR");
-    dump_expr(stmt->expr, level + 1);
-    dump_stmt_end(stmt, level);
+    dump_stmt_start(fp, stmt, level, "EXPR");
+    dump_expr(fp, stmt->expr, level + 1);
+    dump_stmt_end(fp, stmt, level);
     return;
   case ST_COMPOUND:
-    dump_stmt_start(stmt, level, "COMPOUND");
+    dump_stmt_start(fp, stmt, level, "COMPOUND");
     for (int i = 0; i < vec_len(stmt->stmts); i++) {
-      dump_stmt(vec_get(stmt->stmts, i), level + 1);
+      dump_stmt(fp, vec_get(stmt->stmts, i), level + 1);
     }
-    dump_stmt_end(stmt, level);
+    dump_stmt_end(fp, stmt, level);
     return;
   case ST_IF:
-    dump_stmt_start(stmt, level, "IF");
-    dump_expr(stmt->cond, level + 1);
-    dump_stmt(stmt->then_stmt, level + 1);
-    dump_stmt(stmt->else_stmt, level + 1);
-    dump_stmt_end(stmt, level);
+    dump_stmt_start(fp, stmt, level, "IF");
+    dump_expr(fp, stmt->cond, level + 1);
+    dump_stmt(fp, stmt->then_stmt, level + 1);
+    dump_stmt(fp, stmt->else_stmt, level + 1);
+    dump_stmt_end(fp, stmt, level);
     return;
   case ST_SWITCH:
-    dump_stmt_start(stmt, level, "SWITCH");
-    dump_expr(stmt->cond, level + 1);
-    dump_stmt(stmt->body, level + 1);
-    dump_stmt_end(stmt, level);
+    dump_stmt_start(fp, stmt, level, "SWITCH");
+    dump_expr(fp, stmt->cond, level + 1);
+    dump_stmt(fp, stmt->body, level + 1);
+    dump_stmt_end(fp, stmt, level);
     return;
   case ST_CASE:
-    dump_stmt_start(stmt, level, "CASE");
-    dump_expr(stmt->expr, level + 1);
-    dump_stmt(stmt->body, level + 1);
-    dump_stmt_end(stmt, level);
+    dump_stmt_start(fp, stmt, level, "CASE");
+    dump_expr(fp, stmt->expr, level + 1);
+    dump_stmt(fp, stmt->body, level + 1);
+    dump_stmt_end(fp, stmt, level);
     return;
   case ST_DEFAULT:
-    dump_stmt_start(stmt, level, "DEFAULT");
-    dump_stmt(stmt->body, level + 1);
-    dump_stmt_end(stmt, level);
+    dump_stmt_start(fp, stmt, level, "DEFAULT");
+    dump_stmt(fp, stmt->body, level + 1);
+    dump_stmt_end(fp, stmt, level);
     return;
   case ST_LABEL:
-    dump_stmt_start(stmt, level, "LABEL %s", stmt->name);
-    dump_stmt(stmt->body, level + 1);
-    dump_stmt_end(stmt, level);
+    dump_stmt_start(fp, stmt, level, "LABEL %s", stmt->name);
+    dump_stmt(fp, stmt->body, level + 1);
+    dump_stmt_end(fp, stmt, level);
     return;
   case ST_WHILE:
-    dump_stmt_start(stmt, level, "WHILE");
-    dump_expr(stmt->cond, level + 1);
-    dump_stmt(stmt->body, level + 1);
-    dump_stmt_end(stmt, level);
+    dump_stmt_start(fp, stmt, level, "WHILE");
+    dump_expr(fp, stmt->cond, level + 1);
+    dump_stmt(fp, stmt->body, level + 1);
+    dump_stmt_end(fp, stmt, level);
     return;
   case ST_DO_WHILE:
-    dump_stmt_start(stmt, level, "DO_WHILE");
-    dump_expr(stmt->cond, level + 1);
-    dump_stmt(stmt->body, level + 1);
-    dump_stmt_end(stmt, level);
+    dump_stmt_start(fp, stmt, level, "DO_WHILE");
+    dump_expr(fp, stmt->cond, level + 1);
+    dump_stmt(fp, stmt->body, level + 1);
+    dump_stmt_end(fp, stmt, level);
     return;
   case ST_FOR:
-    dump_stmt_start(stmt, level, "FOR");
+    dump_stmt_start(fp, stmt, level, "FOR");
     if (stmt->init != NULL) {
-      dump_expr(stmt->init, level + 1);
+      dump_expr(fp, stmt->init, level + 1);
     } else {
-      dump_range_start(stmt->range);
-      dump_indent(level + 1);
-      printf("<void>(NULL)\n");
+      dump_range_start(fp, stmt->range);
+      dump_indent(fp, level + 1);
+      fprintf(fp, "<void>(NULL)\n");
     }
     if (stmt->cond != NULL) {
-      dump_expr(stmt->cond, level + 1);
+      dump_expr(fp, stmt->cond, level + 1);
     } else {
-      dump_range_start(stmt->range);
-      dump_indent(level + 1);
-      printf("<void>(NULL)\n");
+      dump_range_start(fp, stmt->range);
+      dump_indent(fp, level + 1);
+      fprintf(fp, "<void>(NULL)\n");
     }
     if (stmt->inc != NULL) {
-      dump_expr(stmt->inc, level + 1);
+      dump_expr(fp, stmt->inc, level + 1);
     } else {
-      dump_range_start(stmt->range);
-      dump_indent(level + 1);
-      printf("<void>(NULL)\n");
+      dump_range_start(fp, stmt->range);
+      dump_indent(fp, level + 1);
+      fprintf(fp, "<void>(NULL)\n");
     }
-    dump_stmt(stmt->body, level + 1);
-    dump_stmt_end(stmt, level);
+    dump_stmt(fp, stmt->body, level + 1);
+    dump_stmt_end(fp, stmt, level);
     return;
   case ST_GOTO:
-    dump_stmt_oneline(stmt, level, "GOTO %s", stmt->name);
+    dump_stmt_oneline(fp, stmt, level, "GOTO %s", stmt->name);
     return;
   case ST_BREAK:
-    dump_stmt_oneline(stmt, level, "BREAK");
+    dump_stmt_oneline(fp, stmt, level, "BREAK");
     return;
   case ST_CONTINUE:
-    dump_stmt_oneline(stmt, level, "CONTINUE");
+    dump_stmt_oneline(fp, stmt, level, "CONTINUE");
     return;
   case ST_RETURN:
     if (stmt->expr != NULL) {
-      dump_stmt_start(stmt, level, "RETURN");
-      dump_expr(stmt->expr, level + 1);
-      dump_stmt_end(stmt, level);
+      dump_stmt_start(fp, stmt, level, "RETURN");
+      dump_expr(fp, stmt->expr, level + 1);
+      dump_stmt_end(fp, stmt, level);
     } else {
-      dump_stmt_oneline(stmt, level, "RETURN");
+      dump_stmt_oneline(fp, stmt, level, "RETURN");
     }
     return;
   case ST_NULL:
-    dump_stmt_oneline(stmt, level, "NULL");
+    dump_stmt_oneline(fp, stmt, level, "NULL");
     return;
   }
   error("未知のノードです: %d\n", stmt->ty);
 }
 
-static void dump_init(Initializer *init, const Range *range, int level) {
+static void dump_init(FILE *fp, Initializer *init, const Range *range,
+                      int level) {
   if (init == NULL) {
-    dump_range_start(range);
-    dump_indent(level);
-    printf("NULL\n");
+    dump_range_start(fp, range);
+    dump_indent(fp, level);
+    fprintf(fp, "NULL\n");
     return;
   }
 
   if (init->expr != NULL) {
-    dump_expr(init->expr, level);
+    dump_expr(fp, init->expr, level);
     return;
   }
   if (init->members != NULL) {
-    dump_range_start(range);
-    dump_indent(level);
-    dump_type(init->type);
-    printf("{\n");
+    dump_range_start(fp, range);
+    dump_indent(fp, level);
+    dump_type(fp, init->type);
+    fprintf(fp, "{\n");
     for (int i = 0; i < vec_len(init->members); i++) {
       MemberInitializer *meminit = vec_get(init->members, i);
-      dump_range_start(range);
-      dump_indent(level + 1);
-      printf(".%s = \n", meminit->member->name);
-      dump_init(meminit->init, range, level + 1);
+      dump_range_start(fp, range);
+      dump_indent(fp, level + 1);
+      fprintf(fp, ".%s = \n", meminit->member->name);
+      dump_init(fp, meminit->init, range, level + 1);
     }
-    dump_range_end(range);
-    dump_indent(level);
-    printf("}\n");
+    dump_range_end(fp, range);
+    dump_indent(fp, level);
+    fprintf(fp, "}\n");
     return;
   }
   if (init->elements != NULL) {
-    dump_range_start(range);
-    dump_indent(level);
-    dump_type(init->type);
-    printf("{\n");
+    dump_range_start(fp, range);
+    dump_indent(fp, level);
+    dump_type(fp, init->type);
+    fprintf(fp, "{\n");
     for (int i = 0; i < vec_len(init->elements); i++) {
       Initializer *val = vec_get(init->elements, i);
-      dump_range_start(range);
-      dump_indent(level + 1);
-      printf("[%d] = \n", i);
-      dump_init(val, range, level + 1);
+      dump_range_start(fp, range);
+      dump_indent(fp, level + 1);
+      fprintf(fp, "[%d] = \n", i);
+      dump_init(fp, val, range, level + 1);
     }
-    dump_range_end(range);
-    dump_indent(level);
-    printf("}\n");
+    dump_range_end(fp, range);
+    dump_indent(fp, level);
+    fprintf(fp, "}\n");
     return;
   }
   assert(false);
 }
 
-static void output_ast(TranslationUnit *tunit) {
+static void output_ast(FILE *fp, TranslationUnit *tunit) {
   int level = 0;
   for (int i = 0; i < vec_len(tunit->func_list); i++) {
     Function *func = vec_get(tunit->func_list, i);
 
-    dump_range_start(func->range);
-    dump_indent(level);
-    printf("FUNCTION ");
-    dump_type(func->type);
-    printf(" %s = {\n", func->name);
-    dump_stmt(func->body, level + 1);
-    dump_range_end(func->range);
-    dump_indent(level);
-    printf("}\n");
+    dump_range_start(fp, func->range);
+    dump_indent(fp, level);
+    fprintf(fp, "FUNCTION ");
+    dump_type(fp, func->type);
+    fprintf(fp, " %s = {\n", func->name);
+    dump_stmt(fp, func->body, level + 1);
+    dump_range_end(fp, func->range);
+    dump_indent(fp, level);
+    fprintf(fp, "}\n");
   }
   for (int i = 0; i < vec_len(tunit->gvar_list); i++) {
     GlobalVar *gvar = vec_get(tunit->gvar_list, i);
 
-    dump_range_start(gvar->range);
-    dump_indent(level);
-    printf("GLOBAL ");
-    dump_type(gvar->type);
+    dump_range_start(fp, gvar->range);
+    dump_indent(fp, level);
+    fprintf(fp, "GLOBAL ");
+    dump_type(fp, gvar->type);
     if (gvar->init != NULL) {
-      printf(" %s = \n", gvar->name);
-      dump_init(gvar->init, gvar->range, level + 1);
-      dump_range_end(gvar->range);
-      dump_indent(level);
-      printf("\n");
+      fprintf(fp, " %s = \n", gvar->name);
+      dump_init(fp, gvar->init, gvar->range, level + 1);
+      dump_range_end(fp, gvar->range);
+      dump_indent(fp, level);
+      fprintf(fp, "\n");
     } else {
-      printf(" %s\n", gvar->name);
+      fprintf(fp, " %s\n", gvar->name);
     }
   }
 }
@@ -611,7 +619,7 @@ int main(int argc, char **argv) {
   Tokenizer *tokenizer = new_tokenizer(reader);
   if (emit_target & EMIT_TOKEN) {
     emit_target ^= EMIT_TOKEN;
-    token_add_listener(tokenizer, token_listener);
+    token_add_listener(tokenizer, token_listener, stdout);
     if (emit_target == 0) {
       // consume all tokens to trigger event listener
       consume_all_tokens(tokenizer);
@@ -622,7 +630,7 @@ int main(int argc, char **argv) {
   TranslationUnit *tunit = parse(tokenizer);
   if (emit_target & EMIT_AST) {
     emit_target ^= EMIT_AST;
-    output_ast(tunit);
+    output_ast(stdout, tunit);
     if (emit_target == 0) {
       return 0;
     }
@@ -631,14 +639,14 @@ int main(int argc, char **argv) {
   sema(tunit);
   if (emit_target & EMIT_SEMA) {
     emit_target ^= EMIT_SEMA;
-    output_ast(tunit);
+    output_ast(stdout, tunit);
     if (emit_target == 0) {
       return 0;
     }
   }
 
   assert(emit_target & EMIT_ASM);
-  gen(tunit);
+  gen(stdout, tunit);
 
   return 0;
 }

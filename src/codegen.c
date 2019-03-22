@@ -2,6 +2,7 @@
 #include <assert.h>
 #include <inttypes.h>
 #include <limits.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -125,6 +126,7 @@ const SseOp SseOpSD = {
 const int NUM_INT_REG = 6;
 const int NUM_SSE_REG = 8;
 
+static FILE *output_fp = NULL;
 static char *epilogue_label = NULL;
 static Function *func_ctxt = NULL;
 static Vector *break_labels = NULL;
@@ -136,6 +138,7 @@ static int reg_gp_offset = INVALID_STACK_POS;
 static int reg_fp_offset = INVALID_STACK_POS;
 static int overflow_arg_area_offset = INVALID_STACK_POS;
 
+static __attribute__((format(printf, 1, 2))) void emit(const char *fmt, ...);
 static void emit_assign(Type *type, const Range *range, Expr *dest, Expr *src);
 static void emit_expr(Expr *expr);
 static arg_class_t classify_arg_type(const Type *type, const Range *range,
@@ -302,48 +305,56 @@ static int get_incdec_size(Expr *expr) {
   return 1;
 }
 
+static __attribute__((format(printf, 1, 2))) void emit(const char *fmt, ...) {
+  va_list ap;
+  va_start(ap, fmt);
+  vfprintf(output_fp, fmt, ap);
+  fprintf(output_fp, "\n");
+  va_end(ap);
+}
+
 static void emit_stack_sub(int size) {
   stack_pos += size;
   assert(stack_pos >= 0);
-  printf("  sub rsp, %d \t# rsp = rbp - %d\n", size, stack_pos);
+  emit("  sub rsp, %d \t# rsp = rbp - %d", size, stack_pos);
 }
 static void emit_stack_add(int size) {
   stack_pos -= size;
   assert(stack_pos >= 0);
-  printf("  add rsp, %d \t# rsp = rbp - %d\n", size, stack_pos);
+  emit("  add rsp, %d \t# rsp = rbp - %d", size, stack_pos);
 }
 
 static void emit_pop(const char *operand) {
   stack_pos -= 8;
   assert(stack_pos >= 0);
-  printf("  pop %s \t# rsp = rbp - %d\n", operand, stack_pos);
+  emit("  pop %s \t# rsp = rbp - %d", operand, stack_pos);
 }
 static void emit_push(const char *operand) {
   stack_pos += 8;
   assert(stack_pos >= 0);
-  printf("  push %s \t# rsp = rbp - %d\n", operand, stack_pos);
+  emit("  push %s \t# rsp = rbp - %d", operand, stack_pos);
 }
 
 static void emit_pop_xmm(int n) {
-  printf("  movsd xmm%d, [rsp]\n", n);
+  emit("  movsd xmm%d, [rsp]", n);
   emit_stack_add(8);
 }
 
 static void emit_push_xmm(int n) {
   emit_stack_sub(8);
-  printf("  movsd [rsp], xmm%d\n", n);
+  emit("  movsd [rsp], xmm%d", n);
 }
 
 static void emit_lval(Expr *expr) {
   if (expr->ty == EX_STACK_VAR) {
     StackVar *var = expr->stack_var;
     assert(var != NULL);
-    printf("  lea rax, [rbp - %d]\n", var->offset);
+    emit("  lea rax, [rbp - %d]", var->offset);
     emit_push("rax");
     return;
   }
   if (expr->ty == EX_GLOBAL_VAR) {
-    printf("  lea rax, %s[rip]\n", expr->global_var.name);
+    emit("  lea rax, %s[rip]", expr->global_var.name);
     emit_push("rax");
     return;
   }
@@ -354,7 +365,7 @@ static void emit_lval(Expr *expr) {
   if (expr->ty == EX_DOT) {
     emit_lval(expr->dot.operand);
     emit_pop("rax");
-    printf("  lea rax, [rax + %d]\n", expr->dot.member->offset);
+    emit("  lea rax, [rax + %d]", expr->dot.member->offset);
     emit_push("rax");
     return;
   }
@@ -385,8 +396,8 @@ static void emit_assign(Type *type, const Range *range, Expr *dest, Expr *src) {
   int copy_size = 0;
   while (size - copy_size > 0) {
     const Reg *r = get_int_reg_for_copy(size - copy_size);
-    printf("  mov %s, [rsp + %d]\n", r->rdi, copy_size);
-    printf("  mov [rax + %d], %s\n", copy_size, r->rdi);
+    emit("  mov %s, [rsp + %d]", r->rdi, copy_size);
+    emit("  mov [rax + %d], %s", copy_size, r->rdi);
     copy_size += r->size;
   }
 }
@@ -583,15 +594,15 @@ static void emit_expr_num(Expr *expr) {
     emit_push(num2str(expr->num, expr->range));
   } else if (size <= 8) {
     const Reg *r = get_int_reg_for_size(size, expr->range);
-    printf("  mov %s, %s\n", r->rax, num2str(expr->num, expr->range));
+    emit("  mov %s, %s", r->rax, num2str(expr->num, expr->range));
     emit_push("rax");
   } else {
     assert(is_x87_reg_type(expr->val_type));
     assert(size == 16);
-    printf("  mov rax, 0x%016lx\n", expr->num.bytes[0]);
-    printf("  mov [rsp - 16],  rax\n");
-    printf("  mov rax, 0x%016lx\n", expr->num.bytes[1]);
-    printf("  mov [rsp - 8],  rax\n");
+    emit("  mov rax, 0x%016lx", expr->num.bytes[0]);
+    emit("  mov [rsp - 16],  rax");
+    emit("  mov rax, 0x%016lx", expr->num.bytes[1]);
+    emit("  mov [rsp - 8],  rax");
     emit_stack_sub(16);
   }
 }
@@ -607,8 +618,8 @@ static void emit_expr_stack_var(Expr *expr) {
   int copy_size = 0;
   while (size - copy_size > 0) {
     const Reg *r = get_int_reg_for_copy(size - copy_size);
-    printf("  mov %s, [rbp - %d]\n", r->rax, src_offset - copy_size);
-    printf("  mov [rsp + %d], %s\n", copy_size, r->rax);
+    emit("  mov %s, [rbp - %d]", r->rax, src_offset - copy_size);
+    emit("  mov [rsp + %d], %s", copy_size, r->rax);
     copy_size += r->size;
   }
 }
@@ -624,8 +635,8 @@ static void emit_expr_global_var(Expr *expr) {
 
   while (size - copy_size > 0) {
     const Reg *r = get_int_reg_for_copy(size - copy_size);
-    printf("  mov %s, %s[rip + %d]\n", r->rax, name, copy_size);
-    printf("  mov [rsp + %d], %s\n", copy_size, r->rax);
+    emit("  mov %s, %s[rip + %d]", r->rax, name, copy_size);
+    emit("  mov [rsp + %d], %s", copy_size, r->rax);
     copy_size += r->size;
   }
 }
@@ -633,7 +644,7 @@ static void emit_expr_global_var(Expr *expr) {
 static void emit_expr_str(Expr *expr) {
   assert(expr->ty == EX_STR);
 
-  printf("  lea rax, %s[rip]\n", expr->str->name);
+  emit("  lea rax, %s[rip]", expr->str->name);
   emit_push("rax");
 }
 
@@ -766,15 +777,15 @@ static void emit_expr_call(Expr *expr) {
   }
   if (ret_class == ARG_CLASS_MEMORY) {
     // rdiには戻り値の格納先を設定
-    printf("  lea rdi, [rsp + %d]\n", arg_size);
+    emit("  lea rdi, [rsp + %d]", arg_size);
   }
-  printf("  mov al, %d\n", num_vararg_sse_reg);
+  emit("  mov al, %d", num_vararg_sse_reg);
 
   assert(stack_pos % 16 == 0);
   if (call_direct) {
-    printf("  call %s\n", expr->call.callee->global_var.name);
+    emit("  call %s", expr->call.callee->global_var.name);
   } else {
-    printf("  call r10\n");
+    emit("  call r10");
   }
   if (arg_size > 0) {
     emit_stack_add(arg_size);
@@ -796,7 +807,7 @@ static void emit_expr_call(Expr *expr) {
       break;
     case ARG_CLASS_X87:
       emit_stack_sub(16);
-      printf("  fstp TBYTE PTR[rsp]\n");
+      emit("  fstp TBYTE PTR[rsp]");
       break;
     }
   }
@@ -817,15 +828,15 @@ static void emit_expr_dot(Expr *expr) {
   int copy_size = 0;
   while (mem_size - copy_size > 0) {
     const Reg *r = get_int_reg_for_copy(mem_size - copy_size);
-    printf("  mov %s, [rsp + %d]\n", r->rax, offset + copy_size);
-    printf("  mov [rsp - %d], %s\n", align(mem_size, 8) - copy_size, r->rax);
+    emit("  mov %s, [rsp + %d]", r->rax, offset + copy_size);
+    emit("  mov [rsp - %d], %s", align(mem_size, 8) - copy_size, r->rax);
     copy_size += r->size;
   }
   copy_size = 0;
   while (mem_size - copy_size > 0) {
     const Reg *r = get_int_reg_for_copy(mem_size - copy_size);
-    printf("  mov %s, [rsp - %d]\n", r->rax, align(mem_size, 8) - copy_size);
-    printf("  mov [rsp + %d], %s\n", size_diff + copy_size, r->rax);
+    emit("  mov %s, [rsp - %d]", r->rax, align(mem_size, 8) - copy_size);
+    emit("  mov [rsp + %d], %s", size_diff + copy_size, r->rax);
     copy_size += r->size;
   }
   emit_stack_add(size_diff);
@@ -854,22 +865,22 @@ static void emit_expr_log_and(Expr *expr) {
   char *end_label = make_label("logand.end");
   emit_expr(expr->binop.lhs);
   emit_pop("rax");
-  printf("  cmp %s, 0\n", r->rax);
-  printf("  je %s\n", false_label);
+  emit("  cmp %s, 0", r->rax);
+  emit("  je %s", false_label);
 
   emit_expr(expr->binop.rhs);
   emit_pop("rax");
-  printf("  cmp %s, 0\n", r->rax);
-  printf("  je %s\n", false_label);
+  emit("  cmp %s, 0", r->rax);
+  emit("  je %s", false_label);
 
   emit_push("1");
-  printf("  jmp %s\n", end_label);
+  emit("  jmp %s", end_label);
   stack_pos -= 8;
 
-  printf("%s:\n", false_label);
+  emit("%s:", false_label);
   emit_push("0");
 
-  printf("%s:\n", end_label);
+  emit("%s:", end_label);
 }
 
 static void emit_expr_log_or(Expr *expr) {
@@ -880,22 +891,22 @@ static void emit_expr_log_or(Expr *expr) {
   char *end_label = make_label("logor.end");
   emit_expr(expr->binop.lhs);
   emit_pop("rax");
-  printf("  cmp %s, 0\n", r->rax);
-  printf("  jne %s\n", true_label);
+  emit("  cmp %s, 0", r->rax);
+  emit("  jne %s", true_label);
 
   emit_expr(expr->binop.rhs);
   emit_pop("rax");
-  printf("  cmp %s, 0\n", r->rax);
-  printf("  jne %s\n", true_label);
+  emit("  cmp %s, 0", r->rax);
+  emit("  jne %s", true_label);
 
   emit_push("0");
-  printf("  jmp %s\n", end_label);
+  emit("  jmp %s", end_label);
   stack_pos -= 8;
 
-  printf("%s:\n", true_label);
+  emit("%s:", true_label);
   emit_push("1");
 
-  printf("%s:\n", end_label);
+  emit("%s:", end_label);
 }
 
 static void emit_expr_cond(Expr *expr) {
@@ -906,20 +917,20 @@ static void emit_expr_cond(Expr *expr) {
   char *end_label = make_label("cond.end");
   emit_expr(expr->cond.cond);
   emit_pop("rax");
-  printf("  cmp %s, 0\n", r->rax);
-  printf("  je %s\n", else_label);
+  emit("  cmp %s, 0", r->rax);
+  emit("  je %s", else_label);
 
   int cond_stack_pos = stack_pos;
   emit_expr(expr->cond.then_expr);
-  printf("  jmp %s\n", end_label);
+  emit("  jmp %s", end_label);
   int end_stack_pos = stack_pos;
 
   stack_pos = cond_stack_pos;
-  printf("%s:\n", else_label);
+  emit("%s:", else_label);
   emit_expr(expr->cond.else_expr);
   assert(stack_pos == end_stack_pos);
 
-  printf("%s:\n", end_label);
+  emit("%s:", end_label);
 }
 
 static void emit_expr_indirect(Expr *expr) {
@@ -935,8 +946,8 @@ static void emit_expr_indirect(Expr *expr) {
   int copy_size = 0;
   while (size - copy_size > 0) {
     const Reg *r = get_int_reg_for_copy(size - copy_size);
-    printf("  mov %s, [rax + %d]\n", r->rdi, copy_size);
-    printf("  mov [rsp + %d], %s\n", copy_size, r->rdi);
+    emit("  mov %s, [rax + %d]", r->rdi, copy_size);
+    emit("  mov [rsp + %d], %s", copy_size, r->rdi);
     copy_size += r->size;
   }
 }
@@ -948,7 +959,7 @@ static void emit_expr_minus(Expr *expr) {
 
   if (is_int_reg_type(expr->val_type)) {
     const Reg *r = get_int_reg(expr->val_type, expr->range);
-    printf("  neg %s [rsp]\n", r->ptr);
+    emit("  neg %s [rsp]", r->ptr);
     return;
   }
 
@@ -957,23 +968,23 @@ static void emit_expr_minus(Expr *expr) {
 
     const SseOp *op = get_sse_op(expr->val_type, expr->range);
     if (expr->val_type->ty == TY_DOUBLE) {
-      printf("  mov DWORD PTR [rsp - 4], 0x80000000\n");
-      printf("  mov DWORD PTR [rsp - 8], 0x00000000\n");
+      emit("  mov DWORD PTR [rsp - 4], 0x80000000");
+      emit("  mov DWORD PTR [rsp - 8], 0x00000000");
     } else {
       assert(expr->val_type->ty == TY_FLOAT);
-      printf("  mov DWORD PTR [rsp - 4], 0x00000000\n");
-      printf("  mov DWORD PTR [rsp - 8], 0x80000000\n");
+      emit("  mov DWORD PTR [rsp - 4], 0x00000000");
+      emit("  mov DWORD PTR [rsp - 8], 0x80000000");
     }
-    printf("  movsd xmm1, QWORD PTR [rsp - 8]\n");
-    printf("  %s xmm0, xmm1\n", op->xor);
+    emit("  movsd xmm1, QWORD PTR [rsp - 8]");
+    emit("  %s xmm0, xmm1", op->xor);
     emit_push_xmm(0);
     return;
   }
 
   if (is_x87_reg_type(expr->val_type)) {
-    printf("  fld TBYTE PTR [rsp]\n");
-    printf("  fchs\n");
-    printf("  fstp TBYTE PTR [rsp]\n");
+    emit("  fld TBYTE PTR [rsp]");
+    emit("  fchs");
+    emit("  fstp TBYTE PTR [rsp]");
     return;
   }
 
@@ -986,7 +997,7 @@ static void emit_expr_not(Expr *expr) {
 
   const Reg *r = get_int_reg(expr->val_type, expr->range);
   emit_expr(expr->unop.operand);
-  printf("  not %s [rsp]\n", r->ptr);
+  emit("  not %s [rsp]", r->ptr);
 }
 
 static void emit_expr_cast(Expr *expr) {
@@ -1008,15 +1019,15 @@ static void emit_expr_cast(Expr *expr) {
     int to_size = to->size;
     if (to_size > from_size) {
       if (is_signed_int_type(operand->val_type, operand->range)) {
-        printf("  movsx %s, %s [rsp]\n", to->rax, from->ptr);
+        emit("  movsx %s, %s [rsp]", to->rax, from->ptr);
       } else {
         if (from_size < 4) {
-          printf("  movzx %s, %s [rsp]\n", to->rax, from->ptr);
+          emit("  movzx %s, %s [rsp]", to->rax, from->ptr);
         } else {
-          printf("  mov %s, %s [rsp]\n", from->rax, from->ptr);
+          emit("  mov %s, %s [rsp]", from->rax, from->ptr);
         }
       }
-      printf("  mov [rsp], rax\n");
+      emit("  mov [rsp], rax");
     }
     return;
   }
@@ -1029,7 +1040,7 @@ static void emit_expr_cast(Expr *expr) {
       conv = &Reg4;
     }
     emit_pop_xmm(0);
-    printf("  %s %s, xmm0\n", op->cvtt_to_si, conv->rax);
+    emit("  %s %s, xmm0", op->cvtt_to_si, conv->rax);
     emit_push("rax");
     return;
   }
@@ -1042,12 +1053,12 @@ static void emit_expr_cast(Expr *expr) {
     if (from->size < 4) {
       conv = &Reg4;
       if (is_signed_int_type(operand->val_type, operand->range)) {
-        printf("  movsx %s, %s\n", conv->rax, from->rax);
+        emit("  movsx %s, %s", conv->rax, from->rax);
       } else {
-        printf("  movzx %s, %s\n", conv->rax, from->rax);
+        emit("  movzx %s, %s", conv->rax, from->rax);
       }
     }
-    printf("  %s xmm0, %s\n", op->cvtt_from_si, conv->rax);
+    emit("  %s xmm0, %s", op->cvtt_from_si, conv->rax);
     emit_push_xmm(0);
     return;
   }
@@ -1056,9 +1067,9 @@ static void emit_expr_cast(Expr *expr) {
     const SseOp *op = get_sse_op(operand->val_type, expr->range);
     emit_pop_xmm(0);
     if (expr->val_type->ty == TY_FLOAT) {
-      printf("  %s xmm0, xmm0\n", op->cvt_to_ss);
+      emit("  %s xmm0, xmm0", op->cvt_to_ss);
     } else if (expr->val_type->ty == TY_DOUBLE) {
-      printf("  %s xmm0, xmm0\n", op->cvt_to_sd);
+      emit("  %s xmm0, xmm0", op->cvt_to_sd);
     } else {
       goto CastError;
     }
@@ -1072,37 +1083,37 @@ static void emit_expr_cast(Expr *expr) {
     if (from->size < 2) {
       conv = &Reg2;
       if (is_signed_int_type(operand->val_type, operand->range)) {
-        printf("  movsx %s, %s[rsp]\n", conv->rax, from->ptr);
+        emit("  movsx %s, %s[rsp]", conv->rax, from->ptr);
       } else {
-        printf("  movzx %s, %s[rsp]\n", conv->rax, from->ptr);
+        emit("  movzx %s, %s[rsp]", conv->rax, from->ptr);
       }
-      printf("  mov [rsp], %s\n", conv->rax);
+      emit("  mov [rsp], %s", conv->rax);
     }
-    printf("  fild %s [rsp]\n", conv->ptr);
-    printf("  fstp TBYTE PTR [rsp - 8]\n");
+    emit("  fild %s [rsp]", conv->ptr);
+    emit("  fstp TBYTE PTR [rsp - 8]");
     emit_stack_sub(8);
     return;
   }
 
   if (is_x87_reg_type(operand->val_type) && is_int_reg_type(expr->val_type)) {
-    printf("  fld TBYTE PTR [rsp]\n");
-    printf("  fisttp QWORD PTR [rsp + 8]\n");
+    emit("  fld TBYTE PTR [rsp]");
+    emit("  fisttp QWORD PTR [rsp + 8]");
     emit_stack_add(8);
     return;
   }
 
   if (is_sse_reg_type(operand->val_type) && is_x87_reg_type(expr->val_type)) {
     const SseOp *from_op = get_sse_op(operand->val_type, operand->range);
-    printf("  fld %s [rsp]\n", from_op->ptr);
-    printf("  fstp TBYTE PTR [rsp - 8]\n");
+    emit("  fld %s [rsp]", from_op->ptr);
+    emit("  fstp TBYTE PTR [rsp - 8]");
     emit_stack_sub(8);
     return;
   }
 
   if (is_x87_reg_type(operand->val_type) && is_sse_reg_type(expr->val_type)) {
     const SseOp *to_op = get_sse_op(expr->val_type, expr->range);
-    printf("  fld TBYTE PTR [rsp]\n");
-    printf("  fstp %s [rsp + 8]\n", to_op->ptr);
+    emit("  fld TBYTE PTR [rsp]");
+    emit("  fstp %s [rsp + 8]", to_op->ptr);
     emit_stack_add(8);
     return;
   }
@@ -1118,11 +1129,11 @@ static void emit_expr_pre_inc(Expr *expr) {
 
   const Reg *r = get_int_reg(expr->val_type, expr->range);
   emit_lval(expr->unop.operand);
-  printf("  mov rax, [rsp]\n");
-  printf("  mov %s, [rax]\n", r->rdi);
-  printf("  add %s, %d\n", r->rdi, get_incdec_size(expr));
-  printf("  mov [rax], %s\n", r->rdi);
-  printf("  mov [rsp], rdi\n");
+  emit("  mov rax, [rsp]");
+  emit("  mov %s, [rax]", r->rdi);
+  emit("  add %s, %d", r->rdi, get_incdec_size(expr));
+  emit("  mov [rax], %s", r->rdi);
+  emit("  mov [rsp], rdi");
 }
 
 static void emit_expr_pre_dec(Expr *expr) {
@@ -1130,11 +1141,11 @@ static void emit_expr_pre_dec(Expr *expr) {
 
   const Reg *r = get_int_reg(expr->val_type, expr->range);
   emit_lval(expr->unop.operand);
-  printf("  mov rax, [rsp]\n");
-  printf("  mov %s, [rax]\n", r->rdi);
-  printf("  sub %s, %d\n", r->rdi, get_incdec_size(expr));
-  printf("  mov [rax], %s\n", r->rdi);
-  printf("  mov [rsp], rdi\n");
+  emit("  mov rax, [rsp]");
+  emit("  mov %s, [rax]", r->rdi);
+  emit("  sub %s, %d", r->rdi, get_incdec_size(expr));
+  emit("  mov [rax], %s", r->rdi);
+  emit("  mov [rsp], rdi");
 }
 
 static void emit_expr_post_inc(Expr *expr) {
@@ -1142,11 +1153,11 @@ static void emit_expr_post_inc(Expr *expr) {
 
   const Reg *r = get_int_reg(expr->val_type, expr->range);
   emit_lval(expr->unop.operand);
-  printf("  mov rax, [rsp]\n");
-  printf("  mov %s, [rax]\n", r->rdi);
-  printf("  mov [rsp], rdi\n");
-  printf("  add %s, %d\n", r->rdi, get_incdec_size(expr));
-  printf("  mov [rax], %s\n", r->rdi);
+  emit("  mov rax, [rsp]");
+  emit("  mov %s, [rax]", r->rdi);
+  emit("  mov [rsp], rdi");
+  emit("  add %s, %d", r->rdi, get_incdec_size(expr));
+  emit("  mov [rax], %s", r->rdi);
 }
 
 static void emit_expr_post_dec(Expr *expr) {
@@ -1154,11 +1165,11 @@ static void emit_expr_post_dec(Expr *expr) {
 
   const Reg *r = get_int_reg(expr->val_type, expr->range);
   emit_lval(expr->unop.operand);
-  printf("  mov rax, [rsp]\n");
-  printf("  mov %s, [rax]\n", r->rdi);
-  printf("  mov [rsp], rdi\n");
-  printf("  sub %s, %d\n", r->rdi, get_incdec_size(expr));
-  printf("  mov [rax], %s\n", r->rdi);
+  emit("  mov rax, [rsp]");
+  emit("  mov %s, [rax]", r->rdi);
+  emit("  mov [rsp], rdi");
+  emit("  sub %s, %d", r->rdi, get_incdec_size(expr));
+  emit("  mov [rax], %s", r->rdi);
 }
 
 static void emit_expr_builtin_va_start(Expr *expr) {
@@ -1173,12 +1184,12 @@ static void emit_expr_builtin_va_start(Expr *expr) {
   const char *fp_offset = "[rax + 4]";
   const char *overflow_arg_area = "[rax + 8]";
   const char *reg_save_area = "[rax + 16]";
-  printf("  mov DWORD PTR %s, %d\n", gp_offset, reg_gp_offset);
-  printf("  mov DWORD PTR %s, %d\n", fp_offset, reg_fp_offset);
-  printf("  lea rdi, [rbp + %d]\n", overflow_arg_area_offset);
-  printf("  mov %s, rdi\n", overflow_arg_area);
-  printf("  lea rdi, [rbp - %d]\n", reg_save_area_pos);
-  printf("  mov %s, rdi\n", reg_save_area);
+  emit("  mov DWORD PTR %s, %d", gp_offset, reg_gp_offset);
+  emit("  mov DWORD PTR %s, %d", fp_offset, reg_fp_offset);
+  emit("  lea rdi, [rbp + %d]", overflow_arg_area_offset);
+  emit("  mov %s, rdi", overflow_arg_area);
+  emit("  lea rdi, [rbp - %d]", reg_save_area_pos);
+  emit("  mov %s, rdi", reg_save_area);
 }
 
 static void emit_expr_builtin_va_arg(Expr *expr) {
@@ -1208,41 +1219,41 @@ static void emit_expr_builtin_va_arg(Expr *expr) {
     break;
   case ARG_CLASS_INTEGER:
     stack_label = make_label("va_arg.stack");
-    printf("  mov %s, %s\n", Reg4.rax, gp_offset);
-    printf("  cmp %s, %d\n", Reg4.rax, 8 * NUM_INT_REG - align(size, 8));
-    printf("  ja %s\n", stack_label);
-    printf("  lea %s, [rax + %d]\n", Reg4.rdx, align(size, 8));
-    printf("  add rax, %s\n", reg_save_area);
-    printf("  mov %s, %s\n", gp_offset, Reg4.rdx);
-    printf("  jmp %s\n", fetch_label);
+    emit("  mov %s, %s", Reg4.rax, gp_offset);
+    emit("  cmp %s, %d", Reg4.rax, 8 * NUM_INT_REG - align(size, 8));
+    emit("  ja %s", stack_label);
+    emit("  lea %s, [rax + %d]", Reg4.rdx, align(size, 8));
+    emit("  add rax, %s", reg_save_area);
+    emit("  mov %s, %s", gp_offset, Reg4.rdx);
+    emit("  jmp %s", fetch_label);
     break;
   case ARG_CLASS_SSE:
     stack_label = make_label("va_arg.stack");
-    printf("  mov %s, %s\n", Reg4.rax, fp_offset);
-    printf("  cmp %s, %d\n", Reg4.rax,
-           8 * NUM_INT_REG + 16 * NUM_SSE_REG - align(size, 16));
-    printf("  ja %s\n", stack_label);
-    printf("  lea %s, [rax + %d]\n", Reg4.rdx, align(size, 16));
-    printf("  add rax, %s\n", reg_save_area);
-    printf("  mov %s, %s\n", fp_offset, Reg4.rdx);
-    printf("  jmp %s\n", fetch_label);
+    emit("  mov %s, %s", Reg4.rax, fp_offset);
+    emit("  cmp %s, %d", Reg4.rax,
+         8 * NUM_INT_REG + 16 * NUM_SSE_REG - align(size, 16));
+    emit("  ja %s", stack_label);
+    emit("  lea %s, [rax + %d]", Reg4.rdx, align(size, 16));
+    emit("  add rax, %s", reg_save_area);
+    emit("  mov %s, %s", fp_offset, Reg4.rdx);
+    emit("  jmp %s", fetch_label);
     break;
     break;
   }
   if (stack_label != NULL) {
-    printf("%s:\n", stack_label);
+    emit("%s:", stack_label);
   }
-  printf("  mov rax, %s\n", overflow_arg_area);
-  printf("  lea rdx, [rax + %d]\n", align(size, 8));
-  printf("  mov %s, rdx\n", overflow_arg_area);
+  emit("  mov rax, %s", overflow_arg_area);
+  emit("  lea rdx, [rax + %d]", align(size, 8));
+  emit("  mov %s, rdx", overflow_arg_area);
 
-  printf("%s:\n", fetch_label);
+  emit("%s:", fetch_label);
   emit_stack_sub(align(size, 8));
   int copy_size = 0;
   while (size - copy_size > 0) {
     const Reg *r = get_int_reg_for_copy(size - copy_size);
-    printf("  mov %s, [rax + %d]\n", r->rdx, copy_size);
-    printf("  mov [rsp + %d], %s\n", copy_size, r->rdx);
+    emit("  mov %s, [rax + %d]", r->rdx, copy_size);
+    emit("  mov [rsp + %d], %s", copy_size, r->rdx);
     copy_size += r->size;
   }
 }
@@ -1292,122 +1303,122 @@ static void emit_expr_binop_int(Expr *expr) {
   switch (expr->ty) {
   case EX_ADD:
     emit_pop("rdi");
-    printf("  add [rsp], %s\n", r->rdi);
+    emit("  add [rsp], %s", r->rdi);
     break;
   case EX_SUB:
     emit_pop("rdi");
-    printf("  sub [rsp], %s\n", r->rdi);
+    emit("  sub [rsp], %s", r->rdi);
     break;
   case EX_MUL:
     emit_pop("rdi");
     emit_pop("rax");
-    printf("  imul %s, %s\n", r->rax, r->rdi);
+    emit("  imul %s, %s", r->rax, r->rdi);
     emit_push("rax");
     break;
   case EX_DIV:
     emit_pop("rdi");
     emit_pop("rax");
-    printf("  mov %s, 0\n", r->rdx);
+    emit("  mov %s, 0", r->rdx);
     if (is_signed_int_type(expr->binop.lhs->val_type, expr->binop.lhs->range)) {
-      printf("  idiv %s\n", r->rdi);
+      emit("  idiv %s", r->rdi);
     } else {
-      printf("  div %s\n", r->rdi);
+      emit("  div %s", r->rdi);
     }
     emit_push("rax");
     break;
   case EX_MOD:
     emit_pop("rdi");
     emit_pop("rax");
-    printf("  mov %s, 0\n", r->rdx);
+    emit("  mov %s, 0", r->rdx);
     if (is_signed_int_type(expr->binop.lhs->val_type, expr->binop.lhs->range)) {
-      printf("  idiv %s\n", r->rdi);
+      emit("  idiv %s", r->rdi);
     } else {
-      printf("  div %s\n", r->rdi);
+      emit("  div %s", r->rdi);
     }
-    printf("  mov %s, %s\n", r->rax, r->rdx);
+    emit("  mov %s, %s", r->rax, r->rdx);
     emit_push("rax");
     break;
   case EX_EQEQ:
     emit_pop("rdi");
-    printf("  cmp [rsp], %s\n", r->rdi);
-    printf("  sete al\n");
-    printf("  movzx %s, al\n", r->rax);
-    printf("  mov [rsp], %s\n", r->rax);
+    emit("  cmp [rsp], %s", r->rdi);
+    emit("  sete al");
+    emit("  movzx %s, al", r->rax);
+    emit("  mov [rsp], %s", r->rax);
     break;
   case EX_NOTEQ:
     emit_pop("rdi");
-    printf("  cmp [rsp], %s\n", r->rdi);
-    printf("  setne al\n");
-    printf("  movzx %s, al\n", r->rax);
-    printf("  mov [rsp], %s\n", r->rax);
+    emit("  cmp [rsp], %s", r->rdi);
+    emit("  setne al");
+    emit("  movzx %s, al", r->rax);
+    emit("  mov [rsp], %s", r->rax);
     break;
   case EX_LT:
     emit_pop("rdi");
-    printf("  cmp [rsp], %s\n", r->rdi);
+    emit("  cmp [rsp], %s", r->rdi);
     if (is_signed_int_type(expr->binop.lhs->val_type, expr->binop.lhs->range)) {
-      printf("  setl al\n");
+      emit("  setl al");
     } else {
-      printf("  setb al\n");
+      emit("  setb al");
     }
-    printf("  movzx %s, al\n", r->rax);
-    printf("  mov [rsp], %s\n", r->rax);
+    emit("  movzx %s, al", r->rax);
+    emit("  mov [rsp], %s", r->rax);
     break;
   case EX_GT:
     emit_pop("rdi");
-    printf("  cmp [rsp], %s\n", r->rdi);
+    emit("  cmp [rsp], %s", r->rdi);
     if (is_signed_int_type(expr->binop.lhs->val_type, expr->binop.lhs->range)) {
-      printf("  setg al\n");
+      emit("  setg al");
     } else {
-      printf("  seta al\n");
+      emit("  seta al");
     }
-    printf("  movzx %s, al\n", r->rax);
-    printf("  mov [rsp], %s\n", r->rax);
+    emit("  movzx %s, al", r->rax);
+    emit("  mov [rsp], %s", r->rax);
     break;
   case EX_LTEQ:
     emit_pop("rdi");
-    printf("  cmp [rsp], %s\n", r->rdi);
+    emit("  cmp [rsp], %s", r->rdi);
     if (is_signed_int_type(expr->binop.lhs->val_type, expr->binop.lhs->range)) {
-      printf("  setle al\n");
+      emit("  setle al");
     } else {
-      printf("  setbe al\n");
+      emit("  setbe al");
     }
-    printf("  movzx %s, al\n", r->rax);
-    printf("  mov [rsp], %s\n", r->rax);
+    emit("  movzx %s, al", r->rax);
+    emit("  mov [rsp], %s", r->rax);
     break;
   case EX_GTEQ:
     emit_pop("rdi");
-    printf("  cmp [rsp], %s\n", r->rdi);
+    emit("  cmp [rsp], %s", r->rdi);
     if (is_signed_int_type(expr->binop.lhs->val_type, expr->binop.lhs->range)) {
-      printf("  setge al\n");
+      emit("  setge al");
     } else {
-      printf("  setae al\n");
+      emit("  setae al");
     }
-    printf("  movzx %s, al\n", r->rax);
-    printf("  mov [rsp], %s\n", r->rax);
+    emit("  movzx %s, al", r->rax);
+    emit("  mov [rsp], %s", r->rax);
     break;
   case EX_LSHIFT:
     emit_pop("rcx");
-    printf("  shl %s [rsp], cl\n", r->ptr);
+    emit("  shl %s [rsp], cl", r->ptr);
     break;
   case EX_RSHIFT:
     emit_pop("rcx");
     if (is_signed_int_type(expr->binop.lhs->val_type, expr->binop.lhs->range)) {
-      printf("  sar %s [rsp], cl\n", r->ptr);
+      emit("  sar %s [rsp], cl", r->ptr);
     } else {
-      printf("  shr %s [rsp], cl\n", r->ptr);
+      emit("  shr %s [rsp], cl", r->ptr);
     }
     break;
   case EX_AND:
     emit_pop("rdi");
-    printf("  and [rsp], %s\n", r->rdi);
+    emit("  and [rsp], %s", r->rdi);
     break;
   case EX_XOR:
     emit_pop("rdi");
-    printf("  xor [rsp], %s\n", r->rdi);
+    emit("  xor [rsp], %s", r->rdi);
     break;
   case EX_OR:
     emit_pop("rdi");
-    printf("  or [rsp], %s\n", r->rdi);
+    emit("  or [rsp], %s", r->rdi);
     break;
   default:
     range_error(expr->range, "不正な演算子です: %d", expr->ty);
@@ -1430,70 +1441,70 @@ static void emit_expr_binop_sse(Expr *expr) {
 
   switch (expr->ty) {
   case EX_ADD:
-    printf("  %s xmm0, xmm1\n", op->add);
+    emit("  %s xmm0, xmm1", op->add);
     emit_push_xmm(0);
     break;
   case EX_SUB:
-    printf("  %s xmm0, xmm1\n", op->sub);
+    emit("  %s xmm0, xmm1", op->sub);
     emit_push_xmm(0);
     break;
   case EX_MUL:
-    printf("  %s xmm0, xmm1\n", op->mul);
+    emit("  %s xmm0, xmm1", op->mul);
     emit_push_xmm(0);
     break;
   case EX_DIV:
-    printf("  %s xmm0, xmm1\n", op->div);
+    emit("  %s xmm0, xmm1", op->div);
     emit_push_xmm(0);
     break;
   case EX_EQEQ: {
     const Reg *r = get_int_reg(expr->val_type, expr->range);
-    printf("  %s xmm0, xmm1\n", op->comi);
-    printf("  sete al\n");
-    printf("  setnp dil\n");
-    printf("  and al, dil\n");
-    printf("  movzx %s, al\n", r->rax);
+    emit("  %s xmm0, xmm1", op->comi);
+    emit("  sete al");
+    emit("  setnp dil");
+    emit("  and al, dil");
+    emit("  movzx %s, al", r->rax);
     emit_push("rax");
     break;
   }
   case EX_NOTEQ: {
     const Reg *r = get_int_reg(expr->val_type, expr->range);
-    printf("  %s xmm0, xmm1\n", op->comi);
-    printf("  setne al\n");
-    printf("  setp dil\n");
-    printf("  or al, dil\n");
-    printf("  movzx %s, al\n", r->rax);
+    emit("  %s xmm0, xmm1", op->comi);
+    emit("  setne al");
+    emit("  setp dil");
+    emit("  or al, dil");
+    emit("  movzx %s, al", r->rax);
     emit_push("rax");
     break;
   }
   case EX_LT: {
     const Reg *r = get_int_reg(expr->val_type, expr->range);
-    printf("  %s xmm1, xmm0\n", op->comi);
-    printf("  seta al\n");
-    printf("  movzx %s, al\n", r->rax);
+    emit("  %s xmm1, xmm0", op->comi);
+    emit("  seta al");
+    emit("  movzx %s, al", r->rax);
     emit_push("rax");
     break;
   }
   case EX_GT: {
     const Reg *r = get_int_reg(expr->val_type, expr->range);
-    printf("  %s xmm0, xmm1\n", op->comi);
-    printf("  seta al\n");
-    printf("  movzx %s, al\n", r->rax);
+    emit("  %s xmm0, xmm1", op->comi);
+    emit("  seta al");
+    emit("  movzx %s, al", r->rax);
     emit_push("rax");
     break;
   }
   case EX_LTEQ: {
     const Reg *r = get_int_reg(expr->val_type, expr->range);
-    printf("  %s xmm1, xmm0\n", op->comi);
-    printf("  setnb al\n");
-    printf("  movzx %s, al\n", r->rax);
+    emit("  %s xmm1, xmm0", op->comi);
+    emit("  setnb al");
+    emit("  movzx %s, al", r->rax);
     emit_push("rax");
     break;
   }
   case EX_GTEQ: {
     const Reg *r = get_int_reg(expr->val_type, expr->range);
-    printf("  %s xmm0, xmm1\n", op->comi);
-    printf("  setnb al\n");
-    printf("  movzx %s, al\n", r->rax);
+    emit("  %s xmm0, xmm1", op->comi);
+    emit("  setnb al");
+    emit("  movzx %s, al", r->rax);
     emit_push("rax");
     break;
   }
@@ -1513,105 +1524,105 @@ static void emit_expr_binop_x87(Expr *expr) {
 
   switch (expr->ty) {
   case EX_ADD:
-    printf("  fld TBYTE PTR [rsp + 16]\n");
-    printf("  fld TBYTE PTR [rsp]\n");
-    printf("  faddp st(1), st\n");
-    printf("  fstp TBYTE PTR [rsp + 16]\n");
+    emit("  fld TBYTE PTR [rsp + 16]");
+    emit("  fld TBYTE PTR [rsp]");
+    emit("  faddp st(1), st");
+    emit("  fstp TBYTE PTR [rsp + 16]");
     emit_stack_add(16);
     break;
   case EX_SUB:
-    printf("  fld TBYTE PTR [rsp + 16]\n");
-    printf("  fld TBYTE PTR [rsp]\n");
-    printf("  fsubp st(1), st\n");
-    printf("  fstp TBYTE PTR [rsp + 16]\n");
+    emit("  fld TBYTE PTR [rsp + 16]");
+    emit("  fld TBYTE PTR [rsp]");
+    emit("  fsubp st(1), st");
+    emit("  fstp TBYTE PTR [rsp + 16]");
     emit_stack_add(16);
     break;
   case EX_MUL:
-    printf("  fld TBYTE PTR [rsp + 16]\n");
-    printf("  fld TBYTE PTR [rsp]\n");
-    printf("  fmulp st(1), st\n");
-    printf("  fstp TBYTE PTR [rsp + 16]\n");
+    emit("  fld TBYTE PTR [rsp + 16]");
+    emit("  fld TBYTE PTR [rsp]");
+    emit("  fmulp st(1), st");
+    emit("  fstp TBYTE PTR [rsp + 16]");
     emit_stack_add(16);
     break;
   case EX_DIV:
-    printf("  fld TBYTE PTR [rsp + 16]\n");
-    printf("  fld TBYTE PTR [rsp]\n");
-    printf("  fdivp st(1), st\n");
-    printf("  fstp TBYTE PTR [rsp + 16]\n");
+    emit("  fld TBYTE PTR [rsp + 16]");
+    emit("  fld TBYTE PTR [rsp]");
+    emit("  fdivp st(1), st");
+    emit("  fstp TBYTE PTR [rsp + 16]");
     emit_stack_add(16);
     break;
   case EX_EQEQ: {
     const Reg *r = get_int_reg(expr->val_type, expr->range);
-    printf("  fld TBYTE PTR [rsp + 16]\n");
-    printf("  fld TBYTE PTR [rsp]\n");
-    printf("  fcomip st, st(1)\n");
-    printf("  fstp st(0)\n");
-    printf("  sete al\n");
-    printf("  setnp dil\n");
-    printf("  and al, dil\n");
-    printf("  movzx %s, al\n", r->rax);
+    emit("  fld TBYTE PTR [rsp + 16]");
+    emit("  fld TBYTE PTR [rsp]");
+    emit("  fcomip st, st(1)");
+    emit("  fstp st(0)");
+    emit("  sete al");
+    emit("  setnp dil");
+    emit("  and al, dil");
+    emit("  movzx %s, al", r->rax);
     emit_stack_add(32);
     emit_push("rax");
     break;
   }
   case EX_NOTEQ: {
     const Reg *r = get_int_reg(expr->val_type, expr->range);
-    printf("  fld TBYTE PTR [rsp + 16]\n");
-    printf("  fld TBYTE PTR [rsp]\n");
-    printf("  fcomip st, st(1)\n");
-    printf("  fstp st(0)\n");
-    printf("  setne al\n");
-    printf("  setp dil\n");
-    printf("  or al, dil\n");
-    printf("  movzx %s, al\n", r->rax);
+    emit("  fld TBYTE PTR [rsp + 16]");
+    emit("  fld TBYTE PTR [rsp]");
+    emit("  fcomip st, st(1)");
+    emit("  fstp st(0)");
+    emit("  setne al");
+    emit("  setp dil");
+    emit("  or al, dil");
+    emit("  movzx %s, al", r->rax);
     emit_stack_add(32);
     emit_push("rax");
     break;
   }
   case EX_LT: {
     const Reg *r = get_int_reg(expr->val_type, expr->range);
-    printf("  fld TBYTE PTR [rsp + 16]\n");
-    printf("  fld TBYTE PTR [rsp]\n");
-    printf("  fcomip st, st(1)\n");
-    printf("  fstp st(0)\n");
-    printf("  seta al\n");
-    printf("  movzx %s, al\n", r->rax);
+    emit("  fld TBYTE PTR [rsp + 16]");
+    emit("  fld TBYTE PTR [rsp]");
+    emit("  fcomip st, st(1)");
+    emit("  fstp st(0)");
+    emit("  seta al");
+    emit("  movzx %s, al", r->rax);
     emit_stack_add(32);
     emit_push("rax");
     break;
   }
   case EX_GT: {
     const Reg *r = get_int_reg(expr->val_type, expr->range);
-    printf("  fld TBYTE PTR [rsp]\n");
-    printf("  fld TBYTE PTR [rsp + 16]\n");
-    printf("  fcomip st, st(1)\n");
-    printf("  fstp st(0)\n");
-    printf("  seta al\n");
-    printf("  movzx %s, al\n", r->rax);
+    emit("  fld TBYTE PTR [rsp]");
+    emit("  fld TBYTE PTR [rsp + 16]");
+    emit("  fcomip st, st(1)");
+    emit("  fstp st(0)");
+    emit("  seta al");
+    emit("  movzx %s, al", r->rax);
     emit_stack_add(32);
     emit_push("rax");
     break;
   }
   case EX_LTEQ: {
     const Reg *r = get_int_reg(expr->val_type, expr->range);
-    printf("  fld TBYTE PTR [rsp + 16]\n");
-    printf("  fld TBYTE PTR [rsp]\n");
-    printf("  fcomip st, st(1)\n");
-    printf("  fstp st(0)\n");
-    printf("  setnb al\n");
-    printf("  movzx %s, al\n", r->rax);
+    emit("  fld TBYTE PTR [rsp + 16]");
+    emit("  fld TBYTE PTR [rsp]");
+    emit("  fcomip st, st(1)");
+    emit("  fstp st(0)");
+    emit("  setnb al");
+    emit("  movzx %s, al", r->rax);
     emit_stack_add(32);
     emit_push("rax");
     break;
   }
   case EX_GTEQ: {
     const Reg *r = get_int_reg(expr->val_type, expr->range);
-    printf("  fld TBYTE PTR [rsp]\n");
-    printf("  fld TBYTE PTR [rsp + 16]\n");
-    printf("  fcomip st, st(1)\n");
-    printf("  fstp st(0)\n");
-    printf("  setnb al\n");
-    printf("  movzx %s, al\n", r->rax);
+    emit("  fld TBYTE PTR [rsp]");
+    emit("  fld TBYTE PTR [rsp + 16]");
+    emit("  fcomip st, st(1)");
+    emit("  fstp st(0)");
+    emit("  setnb al");
+    emit("  movzx %s, al", r->rax);
     emit_stack_add(32);
     emit_push("rax");
     break;
@@ -1628,7 +1639,7 @@ static void emit_stmt(Stmt *stmt) {
   int line;
   int column;
   range_get_start(stmt->range, &filename, &line, &column);
-  printf("  # %s:%d:%d\n", filename, line, column);
+  emit("  # %s:%d:%d", filename, line, column);
 
   switch (stmt->ty) {
   case ST_NULL: {
@@ -1667,20 +1678,20 @@ static void emit_stmt(Stmt *stmt) {
     range_assert(stmt->range, stack_pos == base_stack_pos,
                  "stack position mismatch");
 
-    printf("  cmp %s, 0\n", r->rax);
-    printf("  je %s\n", else_label);
+    emit("  cmp %s, 0", r->rax);
+    emit("  je %s", else_label);
 
     emit_stmt(stmt->then_stmt);
     range_assert(stmt->range, stack_pos == base_stack_pos,
                  "stack position mismatch");
-    printf("  jmp %s\n", end_label);
+    emit("  jmp %s", end_label);
 
-    printf("%s:\n", else_label);
+    emit("%s:", else_label);
     emit_stmt(stmt->else_stmt);
     range_assert(stmt->range, stack_pos == base_stack_pos,
                  "stack position mismatch");
 
-    printf("%s:\n", end_label);
+    emit("%s:", end_label);
     return;
   }
   case ST_SWITCH: {
@@ -1695,17 +1706,17 @@ static void emit_stmt(Stmt *stmt) {
       emit_pop("rdi");
       range_assert(stmt->range, stack_pos == base_stack_pos,
                    "stack position mismatch");
-      printf("  cmp %s, %s\n", r->rax, r->rdi);
-      printf("  je %s\n", case_expr->label);
+      emit("  cmp %s, %s", r->rax, r->rdi);
+      emit("  je %s", case_expr->label);
       emit_push("rdi");
     }
     emit_pop("rdi");
     range_assert(stmt->range, stack_pos == base_stack_pos,
                  "stack position mismatch");
     if (stmt->default_case) {
-      printf("  jmp %s\n", stmt->default_case->label);
+      emit("  jmp %s", stmt->default_case->label);
     } else {
-      printf("  jmp %s\n", end_label);
+      emit("  jmp %s", end_label);
     }
     vec_push(break_labels, end_label);
     emit_stmt(stmt->body);
@@ -1718,7 +1729,7 @@ static void emit_stmt(Stmt *stmt) {
   case ST_CASE:
   case ST_DEFAULT:
   case ST_LABEL: {
-    printf("%s:\n", stmt->label);
+    emit("%s:", stmt->label);
     emit_stmt(stmt->body);
     return;
   }
@@ -1727,14 +1738,14 @@ static void emit_stmt(Stmt *stmt) {
     char *cond_label = make_label("while.cond");
     char *end_label = make_label("while.end");
 
-    printf("%s:\n", cond_label);
+    emit("%s:", cond_label);
     const Reg *r = get_int_reg(stmt->cond->val_type, stmt->cond->range);
     emit_expr(stmt->cond);
     emit_pop("rax");
     range_assert(stmt->range, stack_pos == base_stack_pos,
                  "stack position mismatch");
-    printf("  cmp %s, 0\n", r->rax);
-    printf("  je %s\n", end_label);
+    emit("  cmp %s, 0", r->rax);
+    emit("  je %s", end_label);
 
     vec_push(break_labels, end_label);
     vec_push(continue_labels, cond_label);
@@ -1744,8 +1755,8 @@ static void emit_stmt(Stmt *stmt) {
     vec_pop(break_labels);
     vec_pop(continue_labels);
 
-    printf("  jmp %s\n", cond_label);
-    printf("%s:\n", end_label);
+    emit("  jmp %s", cond_label);
+    emit("%s:", end_label);
     return;
   }
   case ST_DO_WHILE: {
@@ -1753,7 +1764,7 @@ static void emit_stmt(Stmt *stmt) {
     char *loop_label = make_label("do_while.loop");
     char *cond_label = make_label("do_while.cond");
     char *end_label = make_label("do_while.end");
-    printf("%s:\n", loop_label);
+    emit("%s:", loop_label);
 
     vec_push(break_labels, end_label);
     vec_push(continue_labels, cond_label);
@@ -1763,17 +1774,17 @@ static void emit_stmt(Stmt *stmt) {
     vec_pop(break_labels);
     vec_pop(continue_labels);
 
-    printf("%s:\n", cond_label);
+    emit("%s:", cond_label);
     const Reg *r = get_int_reg(stmt->cond->val_type, stmt->cond->range);
     emit_expr(stmt->cond);
     emit_pop("rax");
     range_assert(stmt->range, stack_pos == base_stack_pos,
                  "stack position mismatch");
 
-    printf("  cmp %s, 0\n", r->rax);
-    printf("  jne %s\n", loop_label);
+    emit("  cmp %s, 0", r->rax);
+    emit("  jne %s", loop_label);
 
-    printf("%s:\n", end_label);
+    emit("%s:", end_label);
     return;
   }
   case ST_FOR: {
@@ -1787,13 +1798,13 @@ static void emit_stmt(Stmt *stmt) {
       range_assert(stmt->range, stack_pos == base_stack_pos,
                    "stack position mismatch");
     }
-    printf("%s:\n", cond_label);
+    emit("%s:", cond_label);
     if (stmt->cond != NULL) {
       const Reg *r = get_int_reg(stmt->cond->val_type, stmt->cond->range);
       emit_expr(stmt->cond);
       emit_pop("rax");
-      printf("  cmp %s, 0\n", r->rax);
-      printf("  je %s\n", end_label);
+      emit("  cmp %s, 0", r->rax);
+      emit("  je %s", end_label);
       range_assert(stmt->range, stack_pos == base_stack_pos,
                    "stack position mismatch");
     }
@@ -1806,15 +1817,15 @@ static void emit_stmt(Stmt *stmt) {
     range_assert(stmt->range, stack_pos == base_stack_pos,
                  "stack position mismatch");
 
-    printf("%s:\n", inc_label);
+    emit("%s:", inc_label);
     if (stmt->inc != NULL) {
       emit_expr(stmt->inc);
       emit_pop("rax");
       range_assert(stmt->range, stack_pos == base_stack_pos,
                    "stack position mismatch");
     }
-    printf("  jmp %s\n", cond_label);
-    printf("%s:\n", end_label);
+    emit("  jmp %s", cond_label);
+    emit("%s:", end_label);
     return;
   }
   case ST_GOTO: {
@@ -1822,7 +1833,7 @@ static void emit_stmt(Stmt *stmt) {
     if (label == NULL) {
       range_error(stmt->range, "未知のラベルへのgotoです: %s", stmt->name);
     }
-    printf("  jmp %s\n", label);
+    emit("  jmp %s", label);
     return;
   }
   case ST_BREAK: {
@@ -1830,14 +1841,14 @@ static void emit_stmt(Stmt *stmt) {
       range_error(stmt->range,
                   "ループでもswitch文中でもない箇所にbreakがあります");
     }
-    printf("  jmp %s\n", (char *)vec_last(break_labels));
+    emit("  jmp %s", (char *)vec_last(break_labels));
     return;
   }
   case ST_CONTINUE: {
     if (vec_len(continue_labels) <= 0) {
       range_error(stmt->range, "ループ中でない箇所にcontinueがあります");
     }
-    printf("  jmp %s\n", (char *)vec_last(continue_labels));
+    emit("  jmp %s", (char *)vec_last(continue_labels));
     return;
   }
   case ST_RETURN: {
@@ -1854,12 +1865,12 @@ static void emit_stmt(Stmt *stmt) {
       switch (class) {
       case ARG_CLASS_MEMORY:
         // 戻り値を格納するアドレス
-        printf("  mov rax, [rbp - %d]\n", retval_pos);
+        emit("  mov rax, [rbp - %d]", retval_pos);
         int copy_size = 0;
         while (size - copy_size > 0) {
           const Reg *r = get_int_reg_for_copy(size - copy_size);
-          printf("  mov %s, [rsp + %d]\n", r->rdi, copy_size);
-          printf("  mov [rax + %d], %s\n", copy_size, r->rdi);
+          emit("  mov %s, [rsp + %d]", r->rdi, copy_size);
+          emit("  mov [rax + %d], %s", copy_size, r->rdi);
           copy_size += r->size;
         }
         emit_stack_add(align(size, 8));
@@ -1875,14 +1886,14 @@ static void emit_stmt(Stmt *stmt) {
         emit_pop_xmm(0);
         break;
       case ARG_CLASS_X87:
-        printf("  fld TBYTE PTR [rsp]\n");
+        emit("  fld TBYTE PTR [rsp]");
         emit_stack_add(16);
         break;
       }
     }
     range_assert(stmt->range, stack_pos == base_stack_pos,
                  "stack position mismatch");
-    printf("  jmp %s\n", epilogue_label);
+    emit("  jmp %s", epilogue_label);
     return;
   }
   }
@@ -1912,14 +1923,14 @@ static void emit_func(Function *func) {
   reg_fp_offset = INVALID_STACK_POS;
 
   if (!func->storage_class.is_static) {
-    printf(".global %s\n", func->name);
+    emit(".global %s", func->name);
   }
-  printf("%s:\n", func->name);
+  emit("%s:", func->name);
 
   // プロローグ
   // スタックサイズ分の領域を確保する
-  printf("  push rbp\n");
-  printf("  mov rbp, rsp\n");
+  emit("  push rbp");
+  emit("  mov rbp, rsp");
 
   // ローカル変数の領域確保
   int stack_size = 0;
@@ -1937,10 +1948,10 @@ static void emit_func(Function *func) {
     int line;
     int column;
     range_get_start(svar->range, &filename, &line, &column);
-    printf("  # %s:%d:%d\n", filename, line, column);
-    printf("  # [rbp - %d]: svar %s (size=%d) (%s:%d:%d)\n", svar->offset,
-           svar->name, get_val_size(svar->type, svar->range), filename, line,
-           column);
+    emit("  # %s:%d:%d", filename, line, column);
+    emit("  # [rbp - %d]: svar %s (size=%d) (%s:%d:%d)", svar->offset,
+         svar->name, get_val_size(svar->type, svar->range), filename, line,
+         column);
   }
 
   stack_pos = 0;
@@ -1951,20 +1962,20 @@ static void emit_func(Function *func) {
   emit_stack_sub(align(stack_size, 16) + align(reg_save_area_size, 16));
   if (func->type->func.has_varargs) {
     reg_save_area_pos = stack_pos;
-    printf("  # [rbp - %d]: reg_save_area\n", stack_pos);
+    emit("  # [rbp - %d]: reg_save_area", stack_pos);
 
     for (int i = 0; i < NUM_INT_REG; i++) {
-      printf("  mov [rbp - %d], %s\n", stack_pos - 8 * i,
-             get_int_arg_reg(&Reg8, i));
+      emit("  mov [rbp - %d], %s", stack_pos - 8 * i,
+           get_int_arg_reg(&Reg8, i));
     }
     const char *end_label = make_label("skip_float_reg");
-    printf("  test al, al\n");
-    printf("  je %s\n", end_label);
+    emit("  test al, al");
+    emit("  je %s", end_label);
     for (int i = 0; i < NUM_SSE_REG; i++) {
-      printf("  movaps [rbp - %d], xmm%d\n",
-             stack_pos - 8 * NUM_INT_REG - 16 * i, i);
+      emit("  movaps [rbp - %d], xmm%d", stack_pos - 8 * NUM_INT_REG - 16 * i,
+           i);
     }
-    printf("%s:\n", end_label);
+    emit("%s:", end_label);
   }
 
   int arg_stack_offset = 16;
@@ -2003,9 +2014,8 @@ static void emit_func(Function *func) {
         int copy_size = 0;
         while (size - copy_size > 0) {
           const Reg *r = get_int_reg_for_copy(size - copy_size);
-          printf("  mov %s, [rbp + %d]\n", r->rax,
-                 arg_stack_offset + copy_size);
-          printf("  mov [rbp - %d], %s\n", dst_offset - copy_size, r->rax);
+          emit("  mov %s, [rbp + %d]", r->rax, arg_stack_offset + copy_size);
+          emit("  mov [rbp - %d], %s", dst_offset - copy_size, r->rax);
           copy_size += r->size;
         }
         arg_stack_offset += align(size, 8);
@@ -2018,36 +2028,36 @@ static void emit_func(Function *func) {
           int copy_size = 0;
           while (rest_size > 0) {
             if (rest_size >= 8) {
-              printf("  mov [rbp - %d], %s\n", dst_offset - j * 8 - copy_size,
-                     get_int_arg_reg(&Reg8, int_reg_idx));
+              emit("  mov [rbp - %d], %s", dst_offset - j * 8 - copy_size,
+                   get_int_arg_reg(&Reg8, int_reg_idx));
               rest_size -= 8;
               copy_size += 8;
               break;
             }
             if (rest_size >= 4) {
-              printf("  mov [rbp - %d], %s\n", dst_offset - j * 8 - copy_size,
-                     get_int_arg_reg(&Reg4, int_reg_idx));
+              emit("  mov [rbp - %d], %s", dst_offset - j * 8 - copy_size,
+                   get_int_arg_reg(&Reg4, int_reg_idx));
               rest_size -= 4;
               copy_size += 4;
               if (rest_size > 0) {
-                printf("  shr %s, 32\n", get_int_arg_reg(&Reg8, int_reg_idx));
+                emit("  shr %s, 32", get_int_arg_reg(&Reg8, int_reg_idx));
               }
               continue;
             }
             if (rest_size >= 2) {
-              printf("  mov [rbp - %d], %s\n", dst_offset - j * 8 - copy_size,
-                     get_int_arg_reg(&Reg2, int_reg_idx));
+              emit("  mov [rbp - %d], %s", dst_offset - j * 8 - copy_size,
+                   get_int_arg_reg(&Reg2, int_reg_idx));
               rest_size -= 2;
               copy_size += 2;
               if (rest_size > 0) {
-                printf("  shr %s, 16\n", get_int_arg_reg(&Reg8, int_reg_idx));
+                emit("  shr %s, 16", get_int_arg_reg(&Reg8, int_reg_idx));
               }
               continue;
             }
 
             assert(rest_size == 1);
-            printf("  mov [rbp - %d], %s\n", dst_offset - j * 8 - copy_size,
-                   get_int_arg_reg(&Reg1, int_reg_idx));
+            emit("  mov [rbp - %d], %s", dst_offset - j * 8 - copy_size,
+                 get_int_arg_reg(&Reg1, int_reg_idx));
             rest_size -= 1;
             copy_size += 1;
             assert(rest_size == 0);
@@ -2060,10 +2070,10 @@ static void emit_func(Function *func) {
       case ARG_CLASS_SSE: {
         assert(size <= 8);
         if (size == 8) {
-          printf("  movsd [rbp - %d], xmm%d\n", dst_offset, sse_reg_idx);
+          emit("  movsd [rbp - %d], xmm%d", dst_offset, sse_reg_idx);
         } else {
           assert(size == 4);
-          printf("  movss [rbp - %d], xmm%d\n", dst_offset, sse_reg_idx);
+          emit("  movss [rbp - %d], xmm%d", dst_offset, sse_reg_idx);
         }
         sse_reg_idx++;
         continue;
@@ -2076,26 +2086,26 @@ static void emit_func(Function *func) {
   reg_fp_offset = 8 * NUM_INT_REG + 16 * sse_reg_idx;
   overflow_arg_area_offset = arg_stack_offset;
 
-  printf("  # reg_gp_offset: %d\n", reg_gp_offset);
-  printf("  # reg_fp_offset: %d\n", reg_fp_offset);
-  printf("  # overflow_arg_area: [rbp + %d]\n", overflow_arg_area_offset);
-  printf("  # %s body\n", func->name);
+  emit("  # reg_gp_offset: %d", reg_gp_offset);
+  emit("  # reg_fp_offset: %d", reg_fp_offset);
+  emit("  # overflow_arg_area: [rbp + %d]", overflow_arg_area_offset);
+  emit("  # %s body", func->name);
 
   emit_stmt(func->body);
 
   // main関数の場合、returnなしに関数末尾まで到達した場合、戻り値は0にする
   if (strcmp(func->name, "main") == 0) {
-    printf("mov eax, 0\n");
+    emit("mov eax, 0");
   }
 
   // エピローグ
   // 最後の式の結果がRAXに残っているのでそれが返り値になる
   assert(stack_pos == align(stack_size, 16) + align(reg_save_area_size, 16) +
                           ret_stack_offset);
-  printf("%s:\n", epilogue_label);
-  printf("  mov rsp, rbp\n");
-  printf("  pop rbp\n");
-  printf("  ret\n");
+  emit("%s:", epilogue_label);
+  emit("  mov rsp, rbp");
+  emit("  pop rbp");
+  emit("  ret");
   stack_pos = INVALID_STACK_POS;
 }
 
@@ -2107,20 +2117,20 @@ static void emit_gvar_init(Initializer *init, const Range *range,
       int size = get_val_size(expr->val_type, expr->range);
       switch (size) {
       case 1:
-        printf("  .byte %s\n", num2str(expr->num, expr->range));
+        emit("  .byte %s", num2str(expr->num, expr->range));
         break;
       case 2:
-        printf("  .word %s\n", num2str(expr->num, expr->range));
+        emit("  .word %s", num2str(expr->num, expr->range));
         break;
       case 4:
-        printf("  .long %s\n", num2str(expr->num, expr->range));
+        emit("  .long %s", num2str(expr->num, expr->range));
         break;
       case 8:
-        printf("  .quad %s\n", num2str(expr->num, expr->range));
+        emit("  .quad %s", num2str(expr->num, expr->range));
         break;
       case 16:
-        printf("  .quad 0x%016lx\n", expr->num.bytes[0]);
-        printf("  .quad 0x%016lx\n", expr->num.bytes[1]);
+        emit("  .quad 0x%016lx", expr->num.bytes[0]);
+        emit("  .quad 0x%016lx", expr->num.bytes[1]);
         break;
       default:
         range_internal_error(range, "invalid value size: %d", size);
@@ -2128,7 +2138,7 @@ static void emit_gvar_init(Initializer *init, const Range *range,
     } else if (expr->ty == EX_ADDRESS) {
       Expr *operand = expr->unop.operand;
       if (operand->ty == EX_GLOBAL_VAR) {
-        printf("  .quad %s\n", operand->global_var.name);
+        emit("  .quad %s", operand->global_var.name);
         return;
       }
       if (operand->ty == EX_COMPOUND) {
@@ -2141,7 +2151,7 @@ static void emit_gvar_init(Initializer *init, const Range *range,
         gvar->init = compound->compound;
         vec_push(gvar_list, gvar);
 
-        printf("  .quad %s\n", gvar->name);
+        emit("  .quad %s", gvar->name);
         return;
       }
       range_error(
@@ -2150,7 +2160,7 @@ static void emit_gvar_init(Initializer *init, const Range *range,
     } else if (expr->ty == EX_COMPOUND) {
       emit_gvar_init(expr->compound, expr->range, gvar_list);
     } else if (expr->ty == EX_STR) {
-      printf("  .quad %s\n", expr->str->name);
+      emit("  .quad %s", expr->str->name);
     } else {
       range_error(range, "数値でもポインタでもありません: %d %s", expr->ty,
                   format_type(expr->val_type, false));
@@ -2171,7 +2181,7 @@ static void emit_gvar_init(Initializer *init, const Range *range,
       if (i > 0) {
         Member *member = vec_get(body->member_list, i);
         if (offset < member->offset) {
-          printf("  .zero %d\n", member->offset - offset);
+          emit("  .zero %d", member->offset - offset);
           offset = member->offset;
         }
         assert(offset == member->offset);
@@ -2181,7 +2191,7 @@ static void emit_gvar_init(Initializer *init, const Range *range,
     }
     int ty_size = get_val_size(init->type, range);
     if (offset < ty_size) {
-      printf("  .zero %d\n", ty_size - offset);
+      emit("  .zero %d", ty_size - offset);
       offset = ty_size;
     }
     assert(body->has_flex_array || offset == ty_size);
@@ -2193,7 +2203,7 @@ static void emit_gvar_init(Initializer *init, const Range *range,
     for (int i = 0; i < vec_len(init->elements); i++) {
       Initializer *meminit = vec_get(init->elements, i);
       if (meminit == NULL) {
-        printf("  .zero %d\n", get_val_size(init->type->array.elem, range));
+        emit("  .zero %d", get_val_size(init->type->array.elem, range));
         continue;
       }
       emit_gvar_init(meminit, range, gvar_list);
@@ -2207,31 +2217,32 @@ static void emit_gvar_init(Initializer *init, const Range *range,
 static void emit_gvar(GlobalVar *gvar, Vector *gvar_list) {
   Initializer *init = gvar->init;
   if (init == NULL) {
-    printf("  .bss\n");
+    emit("  .bss");
     if (!gvar->storage_class.is_static) {
-      printf(".global %s\n", gvar->name);
+      emit(".global %s", gvar->name);
     }
-    printf("%s:\n", gvar->name);
-    printf("  .zero %d\n", get_val_size(gvar->type, gvar->range));
+    emit("%s:", gvar->name);
+    emit("  .zero %d", get_val_size(gvar->type, gvar->range));
   } else {
-    printf("  .data\n");
+    emit("  .data");
     if (!gvar->storage_class.is_static) {
-      printf(".global %s\n", gvar->name);
+      emit(".global %s", gvar->name);
     }
-    printf("%s:\n", gvar->name);
+    emit("%s:", gvar->name);
     emit_gvar_init(init, gvar->range, gvar_list);
   }
 }
 
 static void emit_str(StringLiteral *str) {
-  printf("%s:\n", str->name);
-  printf("  .string %s\n", format_string_literal(str->val));
+  emit("%s:", str->name);
+  emit("  .string %s", format_string_literal(str->val));
 }
 
-void gen(TranslationUnit *tunit) {
-  printf(".intel_syntax noprefix\n");
+void gen(FILE *fp, TranslationUnit *tunit) {
+  output_fp = fp;
+  emit(".intel_syntax noprefix");
 
-  printf("  .text\n");
+  emit("  .text");
   for (int i = 0; i < vec_len(tunit->func_list); i++) {
     emit_func(vec_get(tunit->func_list, i));
   }
@@ -2239,7 +2250,7 @@ void gen(TranslationUnit *tunit) {
     GlobalVar *gvar = vec_remove(tunit->gvar_list, 0);
     emit_gvar(gvar, tunit->gvar_list);
   }
-  printf("  .section .rodata\n");
+  emit("  .section .rodata");
   for (int i = 0; i < vec_len(tunit->str_list); i++) {
     emit_str(vec_get(tunit->str_list, i));
   }
