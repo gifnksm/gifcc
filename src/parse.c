@@ -170,7 +170,7 @@ static Expr *new_expr(int ty, Type *val_type, const Range *range);
 static Expr *new_expr_num(Number val, const Range *range);
 static Expr *new_expr_ident(Scope *scope, Token *ident);
 static Expr *new_expr_str(Scope *scope, const char *val, const Range *range);
-static Expr *new_expr_generic(Scope *scope, Expr *cond, Vector *assoc_list);
+static Expr *new_expr_generic(Scope *scope, Expr *control, Vector *assoc_list);
 static Expr *new_expr_call(Scope *scope, Expr *callee, Vector *argument,
                            const Range *range);
 static Expr *new_expr_builtin_va_start(Scope *scope, Expr *callee,
@@ -1639,14 +1639,14 @@ static Expr *new_expr_unary(Scope *scope, int op, Expr *operand,
       operand->val_type = new_type_ptr(new_type(TY_CHAR, EMPTY_TYPE_QUALIFIER),
                                        EMPTY_TYPE_QUALIFIER);
       return operand;
-    } else {
-      if (is_array_type(operand->val_type)) {
-        val_type =
-            new_type_ptr(operand->val_type->array.elem, EMPTY_TYPE_QUALIFIER);
-      } else {
-        val_type = new_type_ptr(operand->val_type, EMPTY_TYPE_QUALIFIER);
-      }
     }
+    if (is_array_type(operand->val_type)) {
+      val_type =
+          new_type_ptr(operand->val_type->array.elem, EMPTY_TYPE_QUALIFIER);
+    } else {
+      val_type = new_type_ptr(operand->val_type, EMPTY_TYPE_QUALIFIER);
+    }
+
     break;
   }
   case EX_INDIRECT: {

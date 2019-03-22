@@ -176,7 +176,8 @@ void reader_add_file(Reader *reader, FILE *fp, const char *filename) {
   (void)switch_file(reader, file);
 }
 
-void reader_set_position(Reader *reader, int *line, const char *filename) {
+void reader_set_position(Reader *reader, const int *line,
+                         const char *filename) {
   int current_line;
   reader_get_position(reader, reader->offset, NULL, &current_line, NULL);
 
