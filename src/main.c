@@ -2,6 +2,7 @@
 #include <assert.h>
 #include <getopt.h>
 #include <inttypes.h>
+#include <libgen.h>
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -618,7 +619,7 @@ int main(int argc, char **argv) {
     }
   }
   if (output == NULL) {
-    output = replace_suffix(filename, ".c", ".s");
+    output = replace_suffix(basename(strdup(filename)), ".c", ".s");
   }
 
   Reader *reader = new_reader();
