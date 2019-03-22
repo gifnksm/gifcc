@@ -248,9 +248,7 @@ static const SseOp *get_sse_op(Type *type, const Range *range) {
 
 char *make_label(const char *s) {
   static int count = 0;
-  char buf[256];
-  sprintf(buf, ".L.%s.%d", s, count++);
-  return strdup(buf);
+  return format(".L.%s.%d", s, count++);
 }
 
 static char *num2str(Number num, const Range *range) {
@@ -1723,7 +1721,7 @@ static void emit_stmt(Stmt *stmt) {
     vec_pop(break_labels);
     range_assert(stmt->range, stack_pos == base_stack_pos,
                  "stack position mismatch");
-    printf("%s:", end_label);
+    emit("%s:", end_label);
     return;
   }
   case ST_CASE:

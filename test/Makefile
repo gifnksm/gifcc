@@ -20,7 +20,7 @@ gcc-build: $(foreach name,$(NAMES),gcc-build-$(name))
 .PHONY: gcc-build
 
 define defrules
-build-$(1): $(OUTDIR)/$(1).token $(OUTDIR)/$(1).ast $(OUTDIR)/$(1).sema $(OUTDIR)/$(1).s $(OUTDIR)/$(1)
+build-$(1): $(OUTDIR)/$(1).s $(OUTDIR)/$(1)
 .PHONY: build-$(1)
 
 run-$(1): build-$(1)
@@ -36,21 +36,8 @@ gcc-run-$(1): $(OUTDIR)/$(1).gcc
 endef
 $(foreach name,$(NAMES),$(eval $(call defrules,$(name))))
 
-$(OUTDIR)/%.token: %.c $(HEADERS) $(GIFCC) | $(OUTDIR)/
-	$(GIFCC) --emit token $< > $@.tmp
-	mv $@.tmp $@
-
-$(OUTDIR)/%.ast: %.c $(HEADERS) $(GIFCC) | $(OUTDIR)/
-	$(GIFCC) --emit ast $< > $@.tmp
-	mv $@.tmp $@
-
-$(OUTDIR)/%.sema: %.c $(HEADERS) $(GIFCC) | $(OUTDIR)/
-	$(GIFCC) --emit sema $< > $@.tmp
-	mv $@.tmp $@
-
 $(OUTDIR)/%.s: %.c $(HEADERS) $(GIFCC) | $(OUTDIR)/
-	$(GIFCC) $< > $@.tmp
-	mv $@.tmp $@
+	$(GIFCC) $< --emit all -o $@
 
 $(OUTDIR)/%: $(OUTDIR)/%.s
 	gcc -o $@ $<

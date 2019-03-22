@@ -15,7 +15,7 @@ cat ${input}
 
 set -x
 
-if ! gifcc "${input}" > "${OUTDIR}/${test}.s"; then
+if ! gifcc "${input}" --emit all -o "${OUTDIR}/${test}.s"; then
     exit 1
 fi
 

@@ -616,6 +616,12 @@ void map_put(Map *map, const char *key, void *val);
 void *map_get(Map *map, const char *key);
 bool map_remove(Map *map, const char *key);
 
+// file.c
+char *replace_suffix(const char *filename, const char *from_suffix,
+                     const char *to_suffix);
+FILE *open_output_file(const char *filename);
+void complete_output_file(void);
+
 // util.c
 char *format_string_literal(const char *str);
 char *__attribute__((format(printf, 1, 2))) format(const char *fmt, ...);

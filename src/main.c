@@ -557,13 +557,15 @@ typedef enum {
 struct option longopts[] = {
     {"test", no_argument, NULL, OPTVAL_TEST},
     {"emit", required_argument, NULL, OPTVAL_EMIT},
+    {"output", required_argument, NULL, 'o'},
     {NULL, 0, 0, 0},
 };
 
 int main(int argc, char **argv) {
   output_t emit_target = 0;
+  const char *output = NULL;
   while (true) {
-    int c = getopt_long(argc, argv, "", longopts, NULL);
+    int c = getopt_long(argc, argv, "o:", longopts, NULL);
     if (c == -1) {
       break;
     }
@@ -587,6 +589,9 @@ int main(int argc, char **argv) {
         error("不明なオプションの値です: %s", optarg);
         return 1;
       }
+      break;
+    case 'o':
+      output = optarg;
       break;
     case '?':
       return 1;
@@ -612,6 +617,9 @@ int main(int argc, char **argv) {
       error("ファイルが開けませんでした: %s", filename);
     }
   }
+  if (output == NULL) {
+    output = replace_suffix(filename, ".c", ".s");
+  }
 
   Reader *reader = new_reader();
   reader_add_file(reader, file, filename);
@@ -619,34 +627,40 @@ int main(int argc, char **argv) {
   Tokenizer *tokenizer = new_tokenizer(reader);
   if (emit_target & EMIT_TOKEN) {
     emit_target ^= EMIT_TOKEN;
-    token_add_listener(tokenizer, token_listener, stdout);
+    FILE *fp = open_output_file(replace_suffix(output, ".s", ".token"));
+    token_add_listener(tokenizer, token_listener, fp);
     if (emit_target == 0) {
       // consume all tokens to trigger event listener
       consume_all_tokens(tokenizer);
-      return 0;
+      goto End;
     }
   }
 
   TranslationUnit *tunit = parse(tokenizer);
   if (emit_target & EMIT_AST) {
     emit_target ^= EMIT_AST;
-    output_ast(stdout, tunit);
+    FILE *fp = open_output_file(replace_suffix(output, ".s", ".ast"));
+    output_ast(fp, tunit);
     if (emit_target == 0) {
-      return 0;
+      goto End;
     }
   }
 
   sema(tunit);
   if (emit_target & EMIT_SEMA) {
     emit_target ^= EMIT_SEMA;
-    output_ast(stdout, tunit);
+    FILE *fp = open_output_file(replace_suffix(output, ".s", ".sema"));
+    output_ast(fp, tunit);
     if (emit_target == 0) {
-      return 0;
+      goto End;
     }
   }
 
   assert(emit_target & EMIT_ASM);
-  gen(stdout, tunit);
+  FILE *fp = open_output_file(output);
+  gen(fp, tunit);
 
+End:
+  complete_output_file();
   return 0;
 }
