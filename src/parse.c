@@ -313,8 +313,7 @@ static GlobalVar *new_global_variable(Type *type, const char *name,
                                       StorageClassSpecifier scs);
 static TranslationUnit *translation_unit(Tokenizer *tokenizer);
 
-TranslationUnit *parse(Reader *reader) {
-  Tokenizer *tokenizer = new_tokenizer(reader);
+TranslationUnit *parse(Tokenizer *tokenizer) {
   return translation_unit(tokenizer);
 }
 

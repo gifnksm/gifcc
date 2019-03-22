@@ -15,6 +15,7 @@ struct Tokenizer {
   Vector *tokens;
   Map *define_map;
   Vector *pp_cond_stack;
+  Vector *listeners;
 };
 
 typedef struct {
@@ -211,6 +212,21 @@ Tokenizer *new_tokenizer(Reader *reader) {
   return tokenizer;
 }
 
+void consume_all_tokens(Tokenizer *tokenizer) {
+  Token *token = NULL;
+  do {
+    token = token_pop(tokenizer);
+  } while (token->ty != TK_EOF);
+}
+
+void token_add_listener(Tokenizer *tokenizer,
+                        tokenizer_listener_fun_t *listener) {
+  if (tokenizer->listeners == NULL) {
+    tokenizer->listeners = new_vector();
+  }
+  vec_push(tokenizer->listeners, listener);
+}
+
 static Tokenizer *tokenizer_from_tokens(Map *define_map, Vector *tokens) {
   Tokenizer *tokenizer = NEW(Tokenizer);
   tokenizer->define_map = define_map;
@@ -256,6 +272,13 @@ Token *token_peek_ahead(Tokenizer *tokenizer, int n) {
         }
         if (last == NULL || last->ty != TK_STR || next->ty != TK_STR) {
           vec_push(tokenizer->tokens, next);
+          if (tokenizer->listeners != NULL) {
+            for (int i = 0; i < vec_len(tokenizer->listeners); i++) {
+              tokenizer_listener_fun_t *listener =
+                  vec_get(tokenizer->listeners, i);
+              listener(next);
+            }
+          }
           last = next;
           continue;
         }

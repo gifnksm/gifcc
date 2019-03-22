@@ -37,15 +37,15 @@ endef
 $(foreach name,$(NAMES),$(eval $(call defrules,$(name))))
 
 $(OUTDIR)/%.token: %.c $(HEADERS) $(GIFCC) | $(OUTDIR)/
-	$(GIFCC) --output token $< > $@.tmp
+	$(GIFCC) --emit token $< > $@.tmp
 	mv $@.tmp $@
 
 $(OUTDIR)/%.ast: %.c $(HEADERS) $(GIFCC) | $(OUTDIR)/
-	$(GIFCC) --output ast $< > $@.tmp
+	$(GIFCC) --emit ast $< > $@.tmp
 	mv $@.tmp $@
 
 $(OUTDIR)/%.sema: %.c $(HEADERS) $(GIFCC) | $(OUTDIR)/
-	$(GIFCC) --output sema $< > $@.tmp
+	$(GIFCC) --emit sema $< > $@.tmp
 	mv $@.tmp $@
 
 $(OUTDIR)/%.s: %.c $(HEADERS) $(GIFCC) | $(OUTDIR)/

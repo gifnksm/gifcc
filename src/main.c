@@ -23,34 +23,29 @@ noreturn void error_raw_v(const char *dbg_file, int dbg_line, const char *fmt,
   exit(1);
 }
 
-static void output_token(Reader *reader) {
-  Tokenizer *tokenizer = new_tokenizer(reader);
-  Token *token;
-  do {
-    token = token_pop(tokenizer);
-    const char *filename;
-    int line, column;
-    range_get_start(token->range, &filename, &line, &column);
-    printf("%s:%d:%d:\t%-8s", filename, line, column,
-           token_kind_to_str(token->ty));
-    switch (token->ty) {
-    case TK_NUM:
-      printf("%s", token->num);
-      break;
-    case TK_CHARCONST:
-      printf("%s", format_number(token->char_val));
-      break;
-    case TK_IDENT:
-      printf("%s", token->ident);
-      break;
-    case TK_STR:
-      printf("%s", format_string_literal(token->str));
-      break;
-    default:
-      break;
-    }
-    printf("\n");
-  } while (token->ty != TK_EOF);
+static void token_listener(const Token *token) {
+  const char *filename;
+  int line, column;
+  range_get_start(token->range, &filename, &line, &column);
+  printf("%s:%d:%d:\t%-8s", filename, line, column,
+         token_kind_to_str(token->ty));
+  switch (token->ty) {
+  case TK_NUM:
+    printf("%s", token->num);
+    break;
+  case TK_CHARCONST:
+    printf("%s", format_number(token->char_val));
+    break;
+  case TK_IDENT:
+    printf("%s", token->ident);
+    break;
+  case TK_STR:
+    printf("%s", format_string_literal(token->str));
+    break;
+  default:
+    break;
+  }
+  printf("\n");
 }
 
 static void dump_range_start(const Range *range) {
@@ -541,24 +536,24 @@ static void output_ast(TranslationUnit *tunit) {
 
 enum {
   OPTVAL_TEST = 256,
-  OPTVAL_OUTPUT,
+  OPTVAL_EMIT,
 };
 
 typedef enum {
-  OUTPUT_ASM,
-  OUTPUT_TOKEN,
-  OUTPUT_AST,
-  OUTPUT_SEMA,
+  EMIT_TOKEN = 1,
+  EMIT_AST = 2,
+  EMIT_SEMA = 4,
+  EMIT_ASM = 8,
 } output_t;
 
 struct option longopts[] = {
     {"test", no_argument, NULL, OPTVAL_TEST},
-    {"output", required_argument, NULL, OPTVAL_OUTPUT},
+    {"emit", required_argument, NULL, OPTVAL_EMIT},
     {NULL, 0, 0, 0},
 };
 
 int main(int argc, char **argv) {
-  output_t output_mode = OUTPUT_ASM;
+  output_t emit_target = 0;
   while (true) {
     int c = getopt_long(argc, argv, "", longopts, NULL);
     if (c == -1) {
@@ -569,15 +564,17 @@ int main(int argc, char **argv) {
     case OPTVAL_TEST:
       runtest();
       return 0;
-    case OPTVAL_OUTPUT:
+    case OPTVAL_EMIT:
       if (strcmp(optarg, "asm") == 0) {
-        output_mode = OUTPUT_ASM;
+        emit_target |= EMIT_ASM;
       } else if (strcmp(optarg, "token") == 0) {
-        output_mode = OUTPUT_TOKEN;
+        emit_target |= EMIT_TOKEN;
       } else if (strcmp(optarg, "ast") == 0) {
-        output_mode = OUTPUT_AST;
+        emit_target |= EMIT_AST;
       } else if (strcmp(optarg, "sema") == 0) {
-        output_mode = OUTPUT_SEMA;
+        emit_target |= EMIT_SEMA;
+      } else if (strcmp(optarg, "all") == 0) {
+        emit_target |= EMIT_ASM | EMIT_TOKEN | EMIT_AST | EMIT_SEMA;
       } else {
         error("不明なオプションの値です: %s", optarg);
         return 1;
@@ -586,6 +583,9 @@ int main(int argc, char **argv) {
     case '?':
       return 1;
     }
+  }
+  if (emit_target == 0) {
+    emit_target = EMIT_ASM;
   }
 
   if (optind > argc) {
@@ -608,23 +608,36 @@ int main(int argc, char **argv) {
   Reader *reader = new_reader();
   reader_add_file(reader, file, filename);
 
-  if (output_mode == OUTPUT_TOKEN) {
-    output_token(reader);
-    return 0;
+  Tokenizer *tokenizer = new_tokenizer(reader);
+  if (emit_target & EMIT_TOKEN) {
+    emit_target ^= EMIT_TOKEN;
+    token_add_listener(tokenizer, token_listener);
+    if (emit_target == 0) {
+      // consume all tokens to trigger event listener
+      consume_all_tokens(tokenizer);
+      return 0;
+    }
   }
 
-  TranslationUnit *tunit = parse(reader);
-  if (output_mode == OUTPUT_AST) {
+  TranslationUnit *tunit = parse(tokenizer);
+  if (emit_target & EMIT_AST) {
+    emit_target ^= EMIT_AST;
     output_ast(tunit);
-    return 0;
+    if (emit_target == 0) {
+      return 0;
+    }
   }
 
   sema(tunit);
-  if (output_mode == OUTPUT_SEMA) {
+  if (emit_target & EMIT_SEMA) {
+    emit_target ^= EMIT_SEMA;
     output_ast(tunit);
-    return 0;
+    if (emit_target == 0) {
+      return 0;
+    }
   }
 
+  assert(emit_target & EMIT_ASM);
   gen(tunit);
 
   return 0;

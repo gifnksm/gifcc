@@ -87,9 +87,6 @@ enum {
   TK_EOF,           // 入力の終わりを表すトークン
 };
 
-typedef struct Reader Reader;
-typedef struct Tokenizer Tokenizer;
-
 typedef struct Range Range;
 
 #define SET_NUMBER_VAL(dest, num)                                              \
@@ -558,6 +555,9 @@ typedef struct TranslationUnit {
   Vector *str_list;
 } TranslationUnit;
 
+typedef struct Reader Reader;
+typedef struct Tokenizer Tokenizer;
+typedef void tokenizer_listener_fun_t(const Token *);
 typedef struct Scope Scope;
 
 #define error(fmt, ...) error_raw(__FILE__, __LINE__, (fmt), ##__VA_ARGS__)
@@ -705,6 +705,9 @@ char *format_number(Number num);
 
 // tokenize.c
 Tokenizer *new_tokenizer(Reader *reader);
+void consume_all_tokens(Tokenizer *tokenizer);
+void token_add_listener(Tokenizer *tokenizer,
+                        tokenizer_listener_fun_t *listener);
 void token_succ(Tokenizer *tokenizer);
 Token *token_peek(Tokenizer *tokenizer);
 Token *token_peek_ahead(Tokenizer *tokenizer, int n);
@@ -752,7 +755,7 @@ Scope *new_pp_scope(const Tokenizer *tokenizer);
 int get_val_size(const Type *ty, const Range *range);
 int get_val_align(const Type *ty, const Range *range);
 Expr *constant_expression(Tokenizer *tokenizer, Scope *scope);
-TranslationUnit *parse(Reader *reader);
+TranslationUnit *parse(Tokenizer *tokenizer);
 
 // sema.c
 void sema_expr(Expr *expr);

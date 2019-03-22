@@ -110,13 +110,13 @@ define gifcc-build
 $(STAGE$(1)_GIFCC): $(STAGE$(1)_OBJS)
 	$(CC) $(LDFLAGS) -o $$@ $$^
 $(OUTDIR)/stage$(1)/%.token: src/%.c $(STAGE$(1)_CC) | $(OUTDIR)/stage$(1)/
-	$(STAGE$(1)_CC) $(STAGE$(1)_CFLAGS) $$< --output token > $$@.tmp
+	$(STAGE$(1)_CC) $(STAGE$(1)_CFLAGS) $$< --emit token > $$@.tmp
 	mv $$@.tmp $$@
 $(OUTDIR)/stage$(1)/%.ast: src/%.c $(STAGE$(1)_CC) | $(OUTDIR)/stage$(1)/
-	$(STAGE$(1)_CC) $(STAGE$(1)_CFLAGS) $$< --output ast > $$@.tmp
+	$(STAGE$(1)_CC) $(STAGE$(1)_CFLAGS) $$< --emit ast > $$@.tmp
 	mv $$@.tmp $$@
 $(OUTDIR)/stage$(1)/%.sema: src/%.c $(STAGE$(1)_CC) | $(OUTDIR)/stage$(1)/
-	$(STAGE$(1)_CC) $(STAGE$(1)_CFLAGS) $$< --output sema > $$@.tmp
+	$(STAGE$(1)_CC) $(STAGE$(1)_CFLAGS) $$< --emit sema > $$@.tmp
 	mv $$@.tmp $$@
 $(OUTDIR)/stage$(1)/%.s: src/%.c $(STAGE$(1)_CC) | $(OUTDIR)/stage$(1)/
 	$(STAGE$(1)_CC) $(STAGE$(1)_CFLAGS) $$< > $$@.tmp
