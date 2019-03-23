@@ -54,7 +54,7 @@ stage3: $(STAGE3_GIFCC) $(STAGE3_TOKENS) $(STAGE3_ASTS) $(STAGE3_SEMAS) $(STAGE3
 gcc-test:
 .PHONY: gcc-test
 gcc-test-compile:
-	$(MAKE) -C test gcc-run STAGE=gcc
+	$$(MAKE) -C test gcc-run STAGE=gcc
 .PHONY: gcc-test-compile
 gcc-test: gcc-test-compile
 
@@ -64,15 +64,15 @@ stage$(1)-test:
 stage$(1)-test-full: stage$(1)-test
 .PHONY: stage$(1)-test-full
 
-stage$(1)-test-gifcc: $(STAGE$(1)_GIFCC)
+stage$(1)-test-gifcc: $$(STAGE$(1)_GIFCC)
 	$$< --test
 .PHONY: stage$(1)-test-gifcc
 stage$(1)-test: stage$(1)-test-gifcc
-stage$(1)-test-compile: $(STAGE$(1)_GIFCC)
-	$(MAKE) -C test STAGE=stage$(1) run
+stage$(1)-test-compile: $$(STAGE$(1)_GIFCC)
+	$$(MAKE) -C test STAGE=stage$(1) run
 .PHONY: stage$(1)-test-compile
 stage$(1)-test: stage$(1)-test-compile
-stage$(1)-test-c-testsuite: $(STAGE$(1)_GIFCC)
+stage$(1)-test-c-testsuite: $$(STAGE$(1)_GIFCC)
 	./scripts/run_c-testsuite stage$(1)
 .PHONY: stage$(1)-test-c-testsuite
 stage$(1)-test-full: stage$(1)-test-c-testsuite
@@ -101,12 +101,12 @@ $(OUTDIR)/stage1/%.o: src/%.c $(GEN_HDRS) Makefile | $(OUTDIR)/stage1/
 	$(STAGE1_CC) $(STAGE1_CFLAGS) -c -o $@ $<
 
 define gifcc-build
-$(STAGE$(1)_GIFCC): $(STAGE$(1)_OBJS)
-	$(CC) $(LDFLAGS) -o $$@ $$^
-$(OUTDIR)/stage$(1)/%.s: src/%.c $(STAGE$(1)_CC) | $(OUTDIR)/stage$(1)/
-	$(STAGE$(1)_CC) $(STAGE$(1)_CFLAGS) $$< -o $$@
-$(OUTDIR)/stage$(1)/%.o: $(OUTDIR)/stage$(1)/%.s
-	$(CC) -c -o $$@ $$<
+$$(STAGE$(1)_GIFCC): $$(STAGE$(1)_OBJS)
+	$$(CC) $$(LDFLAGS) -o $$@ $$^
+$$(OUTDIR)/stage$(1)/%.s: src/%.c $$(STAGE$(1)_CC) | $$(OUTDIR)/stage$(1)/
+	$$(STAGE$(1)_CC) $$(STAGE$(1)_CFLAGS) $$< -o $$@
+$$(OUTDIR)/stage$(1)/%.o: $$(OUTDIR)/stage$(1)/%.s
+	$$(CC) -c -o $$@ $$<
 endef
 
 $(eval $(call gifcc-build,2))
