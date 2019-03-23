@@ -177,19 +177,21 @@ void register_struct_member(Type *type, char *member_name, Type *member_type,
   int index = vec_len(body->member_list);
   Member *member = new_member(member_name, member_type, offset, index, range);
   vec_push(body->member_list, member);
+
   if (member_name == NULL) {
-    assert(member_type->ty == TY_STRUCT || member_type->ty == TY_UNION);
-    StructBody *member_body = member_type->struct_body;
-    Map *inner_members = member_body->member_name_map;
-    for (int i = 0; i < map_size(inner_members); i++) {
-      Member *inner = map_get_by_index(inner_members, i, NULL);
-      Member *inner_member = new_member(inner->name, inner->type,
-                                        offset + inner->offset, index, range);
-      if (map_get(body->member_name_map, inner_member->name)) {
-        range_error(range, "同じ名前のメンバ変数が複数あります: %s",
-                    inner_member->name);
+    if (member_type->ty == TY_STRUCT || member_type->ty == TY_UNION) {
+      StructBody *member_body = member_type->struct_body;
+      Map *inner_members = member_body->member_name_map;
+      for (int i = 0; i < map_size(inner_members); i++) {
+        Member *inner = map_get_by_index(inner_members, i, NULL);
+        Member *inner_member = new_member(inner->name, inner->type,
+                                          offset + inner->offset, index, range);
+        if (map_get(body->member_name_map, inner_member->name)) {
+          range_error(range, "同じ名前のメンバ変数が複数あります: %s",
+                      inner_member->name);
+        }
+        map_put(body->member_name_map, inner_member->name, inner_member);
       }
-      map_put(body->member_name_map, inner_member->name, inner_member);
     }
   } else {
     if (map_get(body->member_name_map, member->name)) {

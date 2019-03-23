@@ -258,6 +258,9 @@ static void declaration_specifiers(Tokenizer *tokenizer, Scope *scope,
 static Type *struct_or_union_specifier(Scope *scope, Tokenizer *tokenizer,
                                        Token *token);
 static void struct_declaration(Scope *scope, Tokenizer *tokenizer, Type *type);
+static void struct_declarator(Scope *scope, Tokenizer *tokenizer,
+                              Type *base_type, Token **name, Type **type,
+                              const Range **range);
 static Type *specifier_qualifier_list(Scope *scope, Tokenizer *tokenizer);
 static Type *enum_specifier(Scope *scope, Tokenizer *tokenizer, Token *token);
 static void enumerator(Scope *scope, Tokenizer *tokenizer, Type *type,
@@ -2705,18 +2708,56 @@ static void struct_declaration(Scope *scope, Tokenizer *tokenizer, Type *type) {
   Type *member_type = base_type;
   const Range *range = token_peek(tokenizer)->range;
   if (token_peek(tokenizer)->ty != ';') {
-    declarator(scope, tokenizer, base_type, &member_name, &member_type, &range);
+    struct_declarator(scope, tokenizer, base_type, &member_name, &member_type,
+                      &range);
   }
   register_struct_member(type, member_name != NULL ? member_name->ident : NULL,
                          member_type, range);
 
   while (token_consume(tokenizer, ',')) {
-    declarator(scope, tokenizer, base_type, &member_name, &member_type, &range);
+    struct_declarator(scope, tokenizer, base_type, &member_name, &member_type,
+                      &range);
     register_struct_member(type,
                            member_name != NULL ? member_name->ident : NULL,
                            member_type, range);
   }
   token_expect(tokenizer, ';');
+}
+
+static void struct_declarator(Scope *scope, Tokenizer *tokenizer,
+                              Type *base_type, Token **name, Type **type,
+                              const Range **range) {
+  if (token_peek(tokenizer)->ty != ':') {
+    declarator(scope, tokenizer, base_type, name, type, range);
+  }
+
+  if (token_consume(tokenizer, ':')) {
+    if (!is_integer_type(*type)) {
+      range_error(*range, "bit-field has non-integral type '%s'",
+                  format_type(*type, false));
+    }
+
+    Expr *expr = constant_expression(tokenizer, scope);
+    assert(expr->ty == EX_NUM);
+    int bit_width;
+    int size = get_val_size(*type, *range);
+    SET_NUMBER_VAL(bit_width, &expr->num);
+
+    if (bit_width < 0) {
+      range_error(*range, "bit-field has negative width (%d)", bit_width);
+    }
+    if (bit_width > size * CHAR_BIT) {
+      range_error(
+          *range,
+          "width of bit-field (%d bits) exceeds witdh of its type (%d bits)",
+          bit_width, size * CHAR_BIT);
+    }
+    if (name != NULL && bit_width == 0) {
+      range_error(*range, "named bit-field '%s' has zero width",
+                  (*name)->ident);
+    }
+    // TODO: implement bit-field
+  }
 }
 
 static Type *specifier_qualifier_list(Scope *scope, Tokenizer *tokenizer) {
