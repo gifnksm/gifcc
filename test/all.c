@@ -2626,7 +2626,7 @@ static void test82(void) {
   CHECK_INT(7, test82_s.c.x);
 }
 
-int main(void) {
+int main(int argc, char *argv[]) {
   Test test_list[] = {
       TEST(test01), TEST(test02), TEST(test03), TEST(test04), TEST(test05),
       TEST(test06), TEST(test07), TEST(test08), TEST(test09), TEST(test10),
@@ -2646,7 +2646,5 @@ int main(void) {
       TEST(test76), TEST(test77), TEST(test78), TEST(test79), TEST(test80),
       TEST(test81), TEST(test82), {NULL, NULL},
   };
-  RUN_TEST(test_list);
-
-  return 0;
+  RUN_TEST(argc, argv, test_list);
 }
