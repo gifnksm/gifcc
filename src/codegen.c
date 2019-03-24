@@ -1292,131 +1292,144 @@ static void emit_expr_binop(Expr *expr) {
 }
 
 static void emit_expr_binop_int(Expr *expr) {
-  assert(is_int_reg_type(expr->binop.lhs->val_type));
+  Expr *lhs = expr->binop.lhs;
+  Expr *rhs = expr->binop.rhs;
+  assert(is_int_reg_type(lhs->val_type));
 
-  const Reg *r = get_int_reg(expr->val_type, expr->range);
-  emit_expr(expr->binop.lhs);
-  emit_expr(expr->binop.rhs);
+  const Reg *rex = get_int_reg(expr->val_type, expr->range);
+  const Reg *rop = get_int_reg(lhs->val_type, lhs->range);
+  emit_expr(lhs);
+  emit_expr(rhs);
 
   switch (expr->ty) {
   case EX_ADD:
+    assert(rex->size == rop->size);
     emit_pop("rdi");
-    emit("  add [rsp], %s", r->rdi);
+    emit("  add [rsp], %s", rop->rdi);
     break;
   case EX_SUB:
+    assert(rex->size == rop->size);
     emit_pop("rdi");
-    emit("  sub [rsp], %s", r->rdi);
+    emit("  sub [rsp], %s", rop->rdi);
     break;
   case EX_MUL:
+    assert(rex->size == rop->size);
     emit_pop("rdi");
     emit_pop("rax");
-    emit("  imul %s, %s", r->rax, r->rdi);
+    emit("  imul %s, %s", rop->rax, rop->rdi);
     emit_push("rax");
     break;
   case EX_DIV:
+    assert(rex->size == rop->size);
     emit_pop("rdi");
     emit_pop("rax");
-    emit("  mov %s, 0", r->rdx);
-    if (is_signed_int_type(expr->binop.lhs->val_type, expr->binop.lhs->range)) {
-      emit("  idiv %s", r->rdi);
+    emit("  mov %s, 0", rop->rdx);
+    if (is_signed_int_type(lhs->val_type, lhs->range)) {
+      emit("  idiv %s", rop->rdi);
     } else {
-      emit("  div %s", r->rdi);
+      emit("  div %s", rop->rdi);
     }
     emit_push("rax");
     break;
   case EX_MOD:
+    assert(rex->size == rop->size);
     emit_pop("rdi");
     emit_pop("rax");
-    emit("  mov %s, 0", r->rdx);
-    if (is_signed_int_type(expr->binop.lhs->val_type, expr->binop.lhs->range)) {
-      emit("  idiv %s", r->rdi);
+    emit("  mov %s, 0", rop->rdx);
+    if (is_signed_int_type(lhs->val_type, lhs->range)) {
+      emit("  idiv %s", rop->rdi);
     } else {
-      emit("  div %s", r->rdi);
+      emit("  div %s", rop->rdi);
     }
-    emit("  mov %s, %s", r->rax, r->rdx);
+    emit("  mov %s, %s", rex->rax, rop->rdx);
     emit_push("rax");
     break;
   case EX_EQEQ:
     emit_pop("rdi");
-    emit("  cmp [rsp], %s", r->rdi);
+    emit("  cmp [rsp], %s", rop->rdi);
     emit("  sete al");
-    emit("  movzx %s, al", r->rax);
-    emit("  mov [rsp], %s", r->rax);
+    emit("  movzx %s, al", rex->rax);
+    emit("  mov [rsp], %s", rex->rax);
     break;
   case EX_NOTEQ:
     emit_pop("rdi");
-    emit("  cmp [rsp], %s", r->rdi);
+    emit("  cmp [rsp], %s", rop->rdi);
     emit("  setne al");
-    emit("  movzx %s, al", r->rax);
-    emit("  mov [rsp], %s", r->rax);
+    emit("  movzx %s, al", rex->rax);
+    emit("  mov [rsp], %s", rex->rax);
     break;
   case EX_LT:
     emit_pop("rdi");
-    emit("  cmp [rsp], %s", r->rdi);
-    if (is_signed_int_type(expr->binop.lhs->val_type, expr->binop.lhs->range)) {
+    emit("  cmp [rsp], %s", rop->rdi);
+    if (is_signed_int_type(lhs->val_type, lhs->range)) {
       emit("  setl al");
     } else {
       emit("  setb al");
     }
-    emit("  movzx %s, al", r->rax);
-    emit("  mov [rsp], %s", r->rax);
+    emit("  movzx %s, al", rex->rax);
+    emit("  mov [rsp], %s", rex->rax);
     break;
   case EX_GT:
     emit_pop("rdi");
-    emit("  cmp [rsp], %s", r->rdi);
-    if (is_signed_int_type(expr->binop.lhs->val_type, expr->binop.lhs->range)) {
+    emit("  cmp [rsp], %s", rop->rdi);
+    if (is_signed_int_type(lhs->val_type, lhs->range)) {
       emit("  setg al");
     } else {
       emit("  seta al");
     }
-    emit("  movzx %s, al", r->rax);
-    emit("  mov [rsp], %s", r->rax);
+    emit("  movzx %s, al", rex->rax);
+    emit("  mov [rsp], %s", rex->rax);
     break;
   case EX_LTEQ:
     emit_pop("rdi");
-    emit("  cmp [rsp], %s", r->rdi);
-    if (is_signed_int_type(expr->binop.lhs->val_type, expr->binop.lhs->range)) {
+    emit("  cmp [rsp], %s", rop->rdi);
+    if (is_signed_int_type(lhs->val_type, lhs->range)) {
       emit("  setle al");
     } else {
       emit("  setbe al");
     }
-    emit("  movzx %s, al", r->rax);
-    emit("  mov [rsp], %s", r->rax);
+    emit("  movzx %s, al", rex->rax);
+    emit("  mov [rsp], %s", rex->rax);
     break;
   case EX_GTEQ:
     emit_pop("rdi");
-    emit("  cmp [rsp], %s", r->rdi);
-    if (is_signed_int_type(expr->binop.lhs->val_type, expr->binop.lhs->range)) {
+    emit("  cmp [rsp], %s", rop->rdi);
+    if (is_signed_int_type(lhs->val_type, lhs->range)) {
       emit("  setge al");
     } else {
       emit("  setae al");
     }
-    emit("  movzx %s, al", r->rax);
-    emit("  mov [rsp], %s", r->rax);
+    emit("  movzx %s, al", rex->rax);
+    emit("  mov [rsp], %s", rex->rax);
     break;
   case EX_LSHIFT:
+    assert(rex->size == rop->size);
     emit_pop("rcx");
-    emit("  shl %s [rsp], cl", r->ptr);
+    emit("  shl %s [rsp], cl", rop->ptr);
     break;
   case EX_RSHIFT:
+    assert(rex->size == rop->size);
     emit_pop("rcx");
-    if (is_signed_int_type(expr->binop.lhs->val_type, expr->binop.lhs->range)) {
-      emit("  sar %s [rsp], cl", r->ptr);
+    if (is_signed_int_type(lhs->val_type, lhs->range)) {
+      emit("  sar %s [rsp], cl", rop->ptr);
     } else {
-      emit("  shr %s [rsp], cl", r->ptr);
+      emit("  shr %s [rsp], cl", rop->ptr);
     }
     break;
   case EX_AND:
+    assert(rex->size == rop->size);
     emit_pop("rdi");
-    emit("  and [rsp], %s", r->rdi);
+    emit("  and [rsp], %s", rop->rdi);
     break;
   case EX_XOR:
+    assert(rex->size == rop->size);
     emit_pop("rdi");
-    emit("  xor [rsp], %s", r->rdi);
+    emit("  xor [rsp], %s", rop->rdi);
     break;
   case EX_OR:
+    assert(rex->size == rop->size);
     emit_pop("rdi");
-    emit("  or [rsp], %s", r->rdi);
+    emit("  or [rsp], %s", rop->rdi);
     break;
   default:
     range_error(expr->range, "不正な演算子です: %d", expr->ty);

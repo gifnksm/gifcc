@@ -26,19 +26,19 @@ Number new_number(type_t ty, unsigned long long val) {
     num.s_llong_val = val;
     return num;
   case TY_U_CHAR:
-    num.s_char_val = val;
+    num.u_char_val = val;
     return num;
   case TY_U_INT:
-    num.s_int_val = val;
+    num.u_int_val = val;
     return num;
   case TY_U_SHORT:
-    num.s_short_val = val;
+    num.u_short_val = val;
     return num;
   case TY_U_LONG:
-    num.s_long_val = val;
+    num.u_long_val = val;
     return num;
   case TY_U_LLONG:
-    num.s_llong_val = val;
+    num.u_llong_val = val;
     return num;
   case TY_PTR:
     num.ptr_val = val;
