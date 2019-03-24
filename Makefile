@@ -25,6 +25,13 @@ STAGE3_CC=$(STAGE2_GIFCC)
 STAGE3_CFLAGS=--emit all
 STAGE3_GIFCC=target/stage3/gifcc
 
+LCOV_OPT=\
+  --rc lcov_branch_coverage=1 \
+  --rc lcov_excl_br_line='\Wassert\(' \
+  --rc lcov_excl_line='\Wassert\((false|0)\);'
+GENHTML_OPT=\
+  --rc lcov_branch_coverage=1
+
 LDFLAGS=
 
 ifdef ASAN
@@ -99,8 +106,8 @@ clang-tidy: $(GEN_HDRS)
 	clang-tidy -fix -fix-errors $(SRCS) -- $(STAGE1_CFLAGS)
 .PHONY: clang-tidy
 lcov:
-	lcov --capture --directory . --output-file target/coverage.info --rc lcov_branch_coverage=1
-	genhtml target/coverage.info --output-directory target/html --rc genhtml_branch_coverage=1
+	lcov --capture --directory . --output-file target/coverage.info $(LCOV_OPT)
+	genhtml target/coverage.info --output-directory target/html $(GENHTML_OPT)
 
 $(STAGE1_GIFCC): $(STAGE1_OBJS)
 	$(CC) $(LDFLAGS) -o $@ $^
