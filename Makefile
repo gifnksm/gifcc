@@ -47,9 +47,9 @@ test-full: stage1-test-full
 
 stage1: $(STAGE1_GIFCC) target/stage1/
 .PHONY: stage1
-stage2: $(STAGE2_GIFCC) target/stage2/
+stage2: $(STAGE2_GIFCC) $(STAGE2_ASMS) target/stage2/
 .PHONY: stage2
-stage3: $(STAGE3_GIFCC) target/stage3/
+stage3: $(STAGE3_GIFCC) $(STAGE3_ASMS) target/stage3/
 .PHONY: stage3
 
 gcc-test:

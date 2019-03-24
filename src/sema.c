@@ -1,5 +1,7 @@
 #include "gifcc.h"
 
+#include <string.h>
+
 static void walk_initializer(Initializer *init);
 
 #define UNARYOP_PROLOGUE(op, r, a, range) switch ((op)) {
