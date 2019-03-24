@@ -1,6 +1,7 @@
 OUTDIR=./target
 
 GEN_HDRS=src/include_path.h
+HDRS=$(filter-out $(GEN_HDRS),$(wildcard src/*.h)) $(GEN_HDRS)
 SRCS=$(wildcard src/*.c)
 
 STAGE1_OBJS=$(patsubst src/%.c,$(OUTDIR)/stage1/%.o,$(SRCS))
@@ -91,11 +92,11 @@ $(eval $(call stage-test,3))
 clean:
 	$(RM) -r target $(GEN_HDRS)
 .PHONY: clean
-format:
+format: $(GEN_HDRS)
 	clang-format -i $(SRCS) $(HDRS)
 .PHONY: format
-clang-tidy:
-	clang-tidy -fix -fix-errors $(SRCS) -- $(CFLAGS)
+clang-tidy: $(GEN_HDRS)
+	clang-tidy -fix -fix-errors $(SRCS) -- $(STAGE1_CFLAGS)
 .PHONY: clang-tidy
 lcov:
 	lcov --capture --directory . --output-file target/coverage.info --rc lcov_branch_coverage=1
