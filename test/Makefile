@@ -15,7 +15,9 @@ build: $(foreach name,$(NAMES),build-$(name))
 
 define build-rules
 run-$(1): build-$(1)
-	$(OUTDIR)/$(1)
+	$(OUTDIR)/$(1) $(OUTDIR)/$(1).tap
+	mkdir -p ../target/test-results/$(STAGE)-compile-$(1)
+	tap-xunit < $(OUTDIR)/$(1).tap > ../target/test-results/$(STAGE)-compile-$(1)/results.xml
 .PHONY: run-$(1)
 
 build-$(1): $(OUTDIR)/$(1).s $(OUTDIR)/$(1)

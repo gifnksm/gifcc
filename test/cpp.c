@@ -94,8 +94,7 @@ static void test03(void) {
   TEST_PRINTF("__LINE__ = %d", __LINE__);
 }
 
-int main(void) {
+int main(int argc, char *argv[]) {
   Test test_list[] = {TEST(test01), TEST(test02), TEST(test03), {NULL, NULL}};
-  RUN_TEST(test_list);
-  return 0;
+  RUN_TEST(argc, argv, test_list);
 }
