@@ -31,7 +31,7 @@ COPY \
 RUN \
         set -x && \
         pacman -Syu --noconfirm && \
-        pacman -S base-devel npm python3 git --noconfirm && \
+        pacman -S base-devel npm python3 git clang --noconfirm && \
         pacman -U *.tar.xz --noconfirm && \
         rm *.tar.xz && \
         pacman -Scc --noconfirm

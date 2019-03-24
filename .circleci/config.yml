@@ -97,6 +97,12 @@ jobs:
       - store_test_results:
           path: target/test-results
 
+  asan:
+    docker:
+      - image: gifnksm/gifcc-build:archlinux
+    steps:
+      - checkout
+      - run: make stage1 stage1-test-full stage2 ASAN=1
   coverage:
     docker:
       - image: gifnksm/gifcc-build:archlinux
@@ -105,6 +111,20 @@ jobs:
       - run: make stage1 stage1-test-full stage2 COVERAGE=1
       - run: make lcov
       - codecov/upload
+  clang-format:
+    docker:
+      - image: gifnksm/gifcc-build:archlinux
+    steps:
+      - checkout
+      - run: make format
+      - run: git diff --exit-code
+  clang-tidy:
+    docker:
+      - image: gifnksm/gifcc-build:archlinux
+    steps:
+      - checkout
+      - run: make clang-tidy
+      - run: git diff --exit-code
 
 workflows:
   version: 2
@@ -127,7 +147,10 @@ workflows:
       - stage3-test:
           requires:
             - stage3-build
+      - asan
       - coverage
+      - clang-format
+      - clang-tidy
 
   nightly:
     triggers:
