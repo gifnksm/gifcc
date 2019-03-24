@@ -16,6 +16,12 @@ ADD \
         /home/builder/
 RUN tar xvf tmsu.tar.gz
 RUN cd /home/builder/tmsu && sudo -u builder makepkg -s --noconfirm
+ADD \
+        --chown=builder \
+        https://aur.archlinux.org/cgit/aur.git/snapshot/lcov.tar.gz \
+        /home/builder/
+RUN tar xvf lcov.tar.gz
+RUN cd /home/builder/lcov && sudo -u builder makepkg -s --noconfirm
 
 FROM archlinux/base
 COPY \
