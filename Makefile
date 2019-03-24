@@ -98,8 +98,8 @@ clang-tidy:
 	clang-tidy -fix -fix-errors $(SRCS) -- $(CFLAGS)
 .PHONY: clang-tidy
 lcov:
-	lcov --capture --directory . --output-file target/coverage.info
-	genhtml target/coverage.info --output-directory target/html
+	lcov --capture --directory . --output-file target/coverage.info --rc lcov_branch_coverage=1
+	genhtml target/coverage.info --output-directory target/html --rc genhtml_branch_coverage=1
 
 $(STAGE1_GIFCC): $(STAGE1_OBJS)
 	$(CC) $(LDFLAGS) -o $@ $^

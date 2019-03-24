@@ -1,4 +1,6 @@
-version: 2
+version: 2.1
+orbs:
+  codecov: codecov/codecov@1.0.4
 jobs:
   build-docker-image:
     docker:
@@ -95,6 +97,15 @@ jobs:
       - store_test_results:
           path: target/test-results
 
+  coverage:
+    docker:
+      - image: gifnksm/gifcc-build:archlinux
+    steps:
+      - checkout
+      - run: make stage1 stage1-test-full stage2 COVERAGE=1
+      - run: make lcov
+      - codecov/upload
+
 workflows:
   version: 2
   commit:
@@ -116,6 +127,7 @@ workflows:
       - stage3-test:
           requires:
             - stage3-build
+      - coverage
 
   nightly:
     triggers:
