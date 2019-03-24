@@ -1089,6 +1089,7 @@ static void emit_expr_cast(Expr *expr) {
     }
     emit("  fild %s [rsp]", conv->ptr);
     emit("  fstp TBYTE PTR [rsp - 8]");
+    emit("  mov %s [rsp + 4], 0", Reg4.ptr);
     emit_stack_sub(8);
     return;
   }
@@ -1104,6 +1105,7 @@ static void emit_expr_cast(Expr *expr) {
     const SseOp *from_op = get_sse_op(operand->val_type, operand->range);
     emit("  fld %s [rsp]", from_op->ptr);
     emit("  fstp TBYTE PTR [rsp - 8]");
+    emit("  mov %s [rsp + 4], 0", Reg4.ptr);
     emit_stack_sub(8);
     return;
   }
