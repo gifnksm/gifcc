@@ -27,13 +27,13 @@ STAGE3_GIFCC=target/stage3/gifcc
 LDFLAGS=
 
 ifdef ASAN
-  STAGE1_CFLAGS  += -fsanitize=address
+  STAGE1_CFLAGS += -fsanitize=address
   LDFLAGS += -fsanitize=address
   export ASAN_OPTIONS=detect_leaks=0
 endif
 
 ifdef COVERAGE
-  STAGE1_CFLAGS  += --coverage
+  STAGE1_CFLAGS += --coverage
   LDFLAGS += --coverage
 endif
 
@@ -46,9 +46,9 @@ test-full: stage1-test-full
 
 stage1: $(STAGE1_GIFCC) target/stage1/
 .PHONY: stage1
-stage2: $(STAGE2_GIFCC) $(STAGE2_TOKENS) $(STAGE2_ASTS) $(STAGE2_SEMAS) $(STAGE2_ASMS) target/stage2/
+stage2: $(STAGE2_GIFCC) target/stage2/
 .PHONY: stage2
-stage3: $(STAGE3_GIFCC) $(STAGE3_TOKENS) $(STAGE3_ASTS) $(STAGE3_SEMAS) $(STAGE3_ASMS) target/stage3/
+stage3: $(STAGE3_GIFCC) target/stage3/
 .PHONY: stage3
 
 gcc-test:
@@ -56,7 +56,7 @@ gcc-test:
 gcc-test-full: gcc-test
 .PHONY: gcc-test-full
 gcc-test-compile:
-	$(MAKE) -C test gcc-run STAGE=gcc
+	$(MAKE) -C test run STAGE=gcc
 .PHONY: gcc-test-compile
 gcc-test: gcc-test-compile
 gcc-test-c-testsuite:

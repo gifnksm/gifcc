@@ -13,37 +13,26 @@ run: $(foreach name,$(NAMES),run-$(name))
 build: $(foreach name,$(NAMES),build-$(name))
 .PHONY: build
 
-gcc-run: $(foreach name,$(NAMES),gcc-run-$(name))
-.PHONY: gcc-run
-
-gcc-build: $(foreach name,$(NAMES),gcc-build-$(name))
-.PHONY: gcc-build
-
-define defrules
-build-$(1): $(OUTDIR)/$(1).s $(OUTDIR)/$(1)
-.PHONY: build-$(1)
-
+define build-rules
 run-$(1): build-$(1)
 	$(OUTDIR)/$(1)
 .PHONY: run-$(1)
 
-gcc-build-$(1): $(OUTDIR)/$(1).gcc
-.PHONY: gcc-build-$(1)
-
-gcc-run-$(1): $(OUTDIR)/$(1).gcc
-	$(OUTDIR)/$(1).gcc
-.PHONY: gcc-run-$(1)
+build-$(1): $(OUTDIR)/$(1).s $(OUTDIR)/$(1)
+.PHONY: build-$(1)
 endef
-$(foreach name,$(NAMES),$(eval $(call defrules,$(name))))
+$(foreach name,$(NAMES),$(eval $(call build-rules,$(name))))
 
+ifeq ($(STAGE),gcc)
+$(OUTDIR)/%.s: %.c $(HEADERS) | $(OUTDIR)/
+	gcc -S -g3 -w -o $@ $<
+else
 $(OUTDIR)/%.s: %.c $(HEADERS) $(GIFCC) | $(OUTDIR)/
 	$(GIFCC) $< --emit all -o $@
+endif
 
 $(OUTDIR)/%: $(OUTDIR)/%.s
 	gcc -o $@ $<
-
-$(OUTDIR)/%.gcc: %.c $(HEADERS) | $(OUTDIR)/
-	gcc -g3 -w -o $@ $<
 
 %/:
 	mkdir -p $@
