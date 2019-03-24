@@ -53,6 +53,14 @@ jobs:
             - target/stage3
             - src/include_path.h
 
+  gcc-test:
+    docker:
+        - image: gifnksm/gifcc-build:archlinux
+    steps:
+      - checkout
+      - run: make gcc-test-full
+      - store_test_results:
+          path: target/test-results
   stage1-test:
     docker:
       - image: gifnksm/gifcc-build:archlinux
@@ -98,6 +106,7 @@ workflows:
       - stage3-build:
           requires:
             - stage2-build
+      - gcc-test
       - stage1-test:
           requires:
             - stage1-build

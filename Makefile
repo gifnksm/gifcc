@@ -53,10 +53,16 @@ stage3: $(STAGE3_GIFCC) $(STAGE3_TOKENS) $(STAGE3_ASTS) $(STAGE3_SEMAS) $(STAGE3
 
 gcc-test:
 .PHONY: gcc-test
+gcc-test-full: gcc-test
+.PHONY: gcc-test-full
 gcc-test-compile:
-	$$(MAKE) -C test gcc-run STAGE=gcc
+	$(MAKE) -C test gcc-run STAGE=gcc
 .PHONY: gcc-test-compile
 gcc-test: gcc-test-compile
+gcc-test-c-testsuite:
+	./scripts/run_c-testsuite gcc
+.PHONY: gcc-c-testsuite
+gcc-test-full: gcc-test-c-testsuite
 
 define stage-test
 stage$(1)-test:

@@ -5,6 +5,18 @@ CURDIR=$(readlink -f $(dirname $0))
 REPOROOT=$(readlink -f ${CURDIR}/..)
 PATH="$(readlink -f ${REPOROOT}/target/${STAGE}):${PATH}"
 
+case "${STAGE}" in
+    gcc)
+        COMPILER=gcc-x86_64
+        ;;
+    stage*)
+        COMPILER=gifcc-x86_64
+        ;;
+    *)
+        echo "unknown stage: ${STAGE}" >&2
+        exit 1
+esac
+
 export OUTDIR="$(readlink -f ${REPOROOT}/target/${STAGE}/c-testsuite)"
 mkdir -p "${OUTDIR}"
 
@@ -18,7 +30,7 @@ fi
 
 cp ${REPOROOT}/scripts/gifcc-x86_64 ${REPOROOT}/external/c-testsuite/runners/single-exec/
 OUTPUT="${REPOROOT}/target/${STAGE}/c-testsuite/result.tap"
-./single-exec gifcc-x86_64 | tee ${OUTPUT} | grep -v '^#'
+./single-exec "${COMPILER}" | tee ${OUTPUT} | grep -v '^#'
 
 PASS="$(grep '^ok' ${OUTPUT} | grep -v '# SKIP' | wc -l)"
 FAIL="$(grep '^not ok' ${OUTPUT} | wc -l)"
@@ -34,4 +46,3 @@ printf "total %5d\n" ${TOTAL}
 
 mkdir -p ${REPOROOT}/target/test-results/${STAGE}-c-testsuite
 tap-xunit < ${OUTPUT} > ${REPOROOT}/target/test-results/${STAGE}-c-testsuite/results.xml || true
-
