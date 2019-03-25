@@ -100,6 +100,7 @@ static void dump_expr_end(FILE *fp, const Expr *expr, int level) {
   fprintf(fp, ")\n");
 }
 static void dump_expr(FILE *fp, Expr *expr, int level);
+static void dump_stmt(FILE *fp, Stmt *stmt, int level);
 static void dump_init(FILE *fp, Initializer *init, const Range *range,
                       int level);
 static void dump_unop_expr(FILE *fp, Expr *expr, char *label, int level) {
@@ -132,6 +133,11 @@ static void dump_expr(FILE *fp, Expr *expr, int level) {
   case EX_COMPOUND:
     dump_expr_start(fp, expr, level, "COMPOUND");
     dump_init(fp, expr->compound, expr->range, level + 1);
+    dump_expr_end(fp, expr, level);
+    return;
+  case EX_STMT:
+    dump_expr_start(fp, expr, level, "STMT");
+    dump_stmt(fp, expr->stmt, level + 1);
     dump_expr_end(fp, expr, level);
     return;
 
@@ -331,6 +337,7 @@ dump_stmt_oneline(FILE *fp, const Stmt *stmt, int level, const char *fmt, ...) {
   va_start(ap, fmt);
   dump_range_start(fp, stmt->range);
   dump_indent(fp, level);
+  dump_type(fp, stmt->val_type);
   fprintf(fp, "{");
   vfprintf(fp, fmt, ap);
   fprintf(fp, "}\n");
@@ -342,6 +349,7 @@ dump_stmt_start(FILE *fp, const Stmt *stmt, int level, const char *fmt, ...) {
   va_start(ap, fmt);
   dump_range_start(fp, stmt->range);
   dump_indent(fp, level);
+  dump_type(fp, stmt->val_type);
   fprintf(fp, "{");
   vfprintf(fp, fmt, ap);
   fprintf(fp, "\n");

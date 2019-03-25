@@ -2,6 +2,7 @@
 
 #include <string.h>
 
+static void walk_stmt(Stmt *stmt);
 static void walk_initializer(Initializer *init);
 
 #define UNARYOP_PROLOGUE(op, r, a, range) switch ((op)) {
@@ -619,6 +620,9 @@ static void walk_expr(Expr *expr) {
     return;
   case EX_COMPOUND:
     walk_initializer(expr->compound);
+    return;
+  case EX_STMT:
+    walk_stmt(expr->stmt);
     return;
 
   case EX_PRE_INC:

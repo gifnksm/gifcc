@@ -327,7 +327,8 @@ Token *token_consume2(Tokenizer *tokenizer, int ty1, int ty2) {
 Token *token_expect(Tokenizer *tokenizer, int ty) {
   Token *token = token_pop(tokenizer);
   if (token->ty != ty) {
-    range_error(token->range, "%sがありません", token_kind_to_str(ty));
+    range_error(token->range, "%s expected, but found %s",
+                token_kind_to_str(ty), token_kind_to_str(token->ty));
   }
   return token;
 }
