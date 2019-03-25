@@ -2626,6 +2626,15 @@ static void test82(void) {
   CHECK_INT(7, test82_s.c.x);
 }
 
+static void test83(void) {
+  CHECK_INT(3, ({ 3; }));
+  CHECK_INT(12, ({
+              int x = 4;
+              int y = 3;
+              (x * y);
+            }));
+}
+
 int main(int argc, char *argv[]) {
   Test test_list[] = {
       TEST(test01), TEST(test02), TEST(test03), TEST(test04), TEST(test05),
@@ -2644,7 +2653,7 @@ int main(int argc, char *argv[]) {
       TEST(test66), TEST(test67), TEST(test68), TEST(test69), TEST(test70),
       TEST(test71), TEST(test72), TEST(test73), TEST(test74), TEST(test75),
       TEST(test76), TEST(test77), TEST(test78), TEST(test79), TEST(test80),
-      TEST(test81), TEST(test82), {NULL, NULL},
+      TEST(test81), TEST(test82), TEST(test83), {NULL, NULL},
   };
   RUN_TEST(argc, argv, test_list);
 }

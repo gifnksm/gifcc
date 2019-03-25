@@ -225,6 +225,7 @@ typedef enum {
   EX_GLOBAL_VAR,
   EX_STR,
   EX_COMPOUND,
+  EX_STMT,
 
   // prefix unary operator
   EX_PRE_INC,
@@ -407,6 +408,7 @@ typedef struct Scope Scope;
 typedef Expr *builtin_func_handler_t(Scope *scope, Expr *callee,
                                      Vector *argument, const Range *range);
 
+typedef struct Stmt Stmt;
 typedef struct Expr {
   expr_t ty;
   Type *val_type; // 値の型
@@ -455,6 +457,9 @@ typedef struct Expr {
       Vector *exprs;
     } comma;
 
+    // EX_STMT
+    Stmt *stmt;
+
     // EX_BUILTIN_FUNC
     struct {
       const char *name;
@@ -498,6 +503,7 @@ typedef struct Expr {
 
 typedef struct Stmt {
   stmt_t ty;
+  Type *val_type;
   const Range *range;
 
   // ST_LABEL, ST_GOTO

@@ -148,6 +148,7 @@ static void emit_expr_num(Expr *expr);
 static void emit_expr_stack_var(Expr *expr);
 static void emit_expr_global_var(Expr *expr);
 static void emit_expr_str(Expr *expr);
+static void emit_expr_stmt(Expr *expr);
 static void emit_expr_call(Expr *expr);
 static void emit_expr_dot(Expr *expr);
 static void emit_expr_comma(Expr *expr);
@@ -170,6 +171,7 @@ static void emit_expr_binop(Expr *expr);
 static void emit_expr_binop_int(Expr *expr);
 static void emit_expr_binop_sse(Expr *expr);
 static void emit_expr_binop_x87(Expr *expr);
+static void emit_stmt(Stmt *stmt, bool leave_value);
 static void emit_gvar(GlobalVar *gvar, Vector *gvar_list);
 
 static bool is_int_reg_type(Type *type) {
@@ -414,6 +416,10 @@ static void emit_expr(Expr *expr) {
   case EX_STR:
     emit_expr_str(expr);
     return;
+  case EX_STMT:
+    emit_expr_stmt(expr);
+    return;
+
   case EX_CALL:
     emit_expr_call(expr);
     return;
@@ -646,6 +652,12 @@ static void emit_expr_str(Expr *expr) {
   emit_push("rax");
 }
 
+static void emit_expr_stmt(Expr *expr) {
+  assert(expr->ty == EX_STMT);
+
+  emit_stmt(expr->stmt, true);
+}
+
 static void emit_expr_call(Expr *expr) {
   assert(expr->ty == EX_CALL);
 
@@ -779,7 +791,7 @@ static void emit_expr_call(Expr *expr) {
   }
   emit("  mov al, %d", num_vararg_sse_reg);
 
-  assert(stack_pos % 16 == 0);
+  range_assert(expr->range, stack_pos % 16 == 0, "stack position mismatch");
   if (call_direct) {
     emit("  call %s", expr->call.callee->global_var.name);
   } else {
@@ -1647,7 +1659,7 @@ static void emit_expr_binop_x87(Expr *expr) {
   return;
 }
 
-static void emit_stmt(Stmt *stmt) {
+static void emit_stmt(Stmt *stmt, bool leave_value) {
   const char *filename;
   int line;
   int column;
@@ -1664,21 +1676,34 @@ static void emit_stmt(Stmt *stmt) {
 
     // 式の評価結果としてスタックに一つの値が残っている
     // はずなので、スタックが溢れないようにポップしておく
-    if (stmt->expr->val_type->ty != TY_VOID) {
+    if (stmt->expr->val_type->ty != TY_VOID && !leave_value) {
       int size = get_val_size(stmt->expr->val_type, stmt->expr->range);
       emit_stack_add(align(size, 8));
     }
-    range_assert(stmt->range, stack_pos == base_stack_pos,
-                 "stack position mismatch");
+    if (stmt->val_type->ty == TY_VOID || !leave_value) {
+      range_assert(stmt->range, stack_pos == base_stack_pos,
+                   "stack position mismatch");
+    } else {
+      int size = get_val_size(stmt->val_type, stmt->range);
+      range_assert(stmt->range, stack_pos - align(size, 8) == base_stack_pos,
+                   "stack position mismatch");
+    }
     return;
   }
   case ST_COMPOUND: {
     int base_stack_pos = stack_pos;
     for (int i = 0; i < vec_len(stmt->stmts); i++) {
-      emit_stmt(vec_get(stmt->stmts, i));
+      bool is_last = i == vec_len(stmt->stmts) - 1;
+      emit_stmt(vec_get(stmt->stmts, i), leave_value && is_last);
     }
-    range_assert(stmt->range, stack_pos == base_stack_pos,
-                 "stack position mismatch");
+    if (stmt->val_type->ty == TY_VOID || !leave_value) {
+      range_assert(stmt->range, stack_pos == base_stack_pos,
+                   "stack position mismatch");
+    } else {
+      int size = get_val_size(stmt->val_type, stmt->range);
+      range_assert(stmt->range, stack_pos - align(size, 8) == base_stack_pos,
+                   "stack position mismatch");
+    }
     return;
   }
   case ST_IF: {
@@ -1694,13 +1719,13 @@ static void emit_stmt(Stmt *stmt) {
     emit("  cmp %s, 0", r->rax);
     emit("  je %s", else_label);
 
-    emit_stmt(stmt->then_stmt);
+    emit_stmt(stmt->then_stmt, false);
     range_assert(stmt->range, stack_pos == base_stack_pos,
                  "stack position mismatch");
     emit("  jmp %s", end_label);
 
     emit("%s:", else_label);
-    emit_stmt(stmt->else_stmt);
+    emit_stmt(stmt->else_stmt, false);
     range_assert(stmt->range, stack_pos == base_stack_pos,
                  "stack position mismatch");
 
@@ -1732,7 +1757,7 @@ static void emit_stmt(Stmt *stmt) {
       emit("  jmp %s", end_label);
     }
     vec_push(break_labels, end_label);
-    emit_stmt(stmt->body);
+    emit_stmt(stmt->body, false);
     vec_pop(break_labels);
     range_assert(stmt->range, stack_pos == base_stack_pos,
                  "stack position mismatch");
@@ -1743,7 +1768,7 @@ static void emit_stmt(Stmt *stmt) {
   case ST_DEFAULT:
   case ST_LABEL: {
     emit("%s:", stmt->label);
-    emit_stmt(stmt->body);
+    emit_stmt(stmt->body, leave_value);
     return;
   }
   case ST_WHILE: {
@@ -1762,7 +1787,7 @@ static void emit_stmt(Stmt *stmt) {
 
     vec_push(break_labels, end_label);
     vec_push(continue_labels, cond_label);
-    emit_stmt(stmt->body);
+    emit_stmt(stmt->body, false);
     range_assert(stmt->range, stack_pos == base_stack_pos,
                  "stack position mismatch");
     vec_pop(break_labels);
@@ -1781,7 +1806,7 @@ static void emit_stmt(Stmt *stmt) {
 
     vec_push(break_labels, end_label);
     vec_push(continue_labels, cond_label);
-    emit_stmt(stmt->body);
+    emit_stmt(stmt->body, false);
     range_assert(stmt->range, stack_pos == base_stack_pos,
                  "stack position mismatch");
     vec_pop(break_labels);
@@ -1824,7 +1849,7 @@ static void emit_stmt(Stmt *stmt) {
 
     vec_push(break_labels, end_label);
     vec_push(continue_labels, inc_label);
-    emit_stmt(stmt->body);
+    emit_stmt(stmt->body, false);
     vec_pop(break_labels);
     vec_pop(continue_labels);
     range_assert(stmt->range, stack_pos == base_stack_pos,
@@ -2104,7 +2129,7 @@ static void emit_func(Function *func) {
   emit("  # overflow_arg_area: [rbp + %d]", overflow_arg_area_offset);
   emit("  # %s body", func->name);
 
-  emit_stmt(func->body);
+  emit_stmt(func->body, false);
 
   // main関数の場合、returnなしに関数末尾まで到達した場合、戻り値は0にする
   if (strcmp(func->name, "main") == 0) {

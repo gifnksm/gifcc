@@ -170,6 +170,7 @@ static Expr *new_expr(int ty, Type *val_type, const Range *range);
 static Expr *new_expr_num(Number val, const Range *range);
 static Expr *new_expr_ident(Scope *scope, Token *ident);
 static Expr *new_expr_str(Scope *scope, const char *val, const Range *range);
+static Expr *new_expr_stmt(Stmt *stmt, const Range *range);
 static Expr *new_expr_generic(Scope *scope, Expr *control, Vector *assoc_list);
 static Expr *new_expr_call(Scope *scope, Expr *callee, Vector *argument,
                            const Range *range);
@@ -198,7 +199,8 @@ static Expr *new_expr_index(Scope *scope, Expr *array, Expr *index,
 static Expr *new_expr_dot(Expr *operand, const char *name, const Range *range);
 static Expr *new_expr_arrow(Scope *scope, Expr *operand, const char *name,
                             const Range *range);
-static Stmt *new_stmt(int ty, const Range *range);
+static Stmt *new_stmt(int ty, Type *val_type, const Range *range);
+static Stmt *new_stmt_null(const Range *range);
 static Stmt *new_stmt_expr(Expr *expr, const Range *range);
 static Stmt *new_stmt_if(Expr *cond, Stmt *then_stmt, Stmt *else_stmt,
                          const Range *range);
@@ -212,6 +214,8 @@ static Stmt *new_stmt_do_while(Expr *cond, Stmt *body, const Range *range);
 static Stmt *new_stmt_for(Expr *init, Expr *cond, Expr *inc, Stmt *body,
                           const Range *range);
 static Stmt *new_stmt_goto(char *name, const Range *range);
+static Stmt *new_stmt_break(const Range *range);
+static Stmt *new_stmt_continue(const Range *range);
 static Stmt *new_stmt_return(Scope *scope, Expr *expr, const Range *range);
 static Stmt *new_stmt_compound(Vector *stmts, const Range *range);
 
@@ -1366,6 +1370,12 @@ static Expr *new_expr_str(Scope *scope, const char *val, const Range *range) {
   return expr;
 }
 
+static Expr *new_expr_stmt(Stmt *stmt, const Range *range) {
+  Expr *expr = new_expr(EX_STMT, stmt->val_type, range);
+  expr->stmt = stmt;
+  return expr;
+}
+
 static Expr *new_expr_generic(Scope *scope, Expr *control, Vector *assoc_list) {
   control = coerce_func2ptr(scope, control);
   control = coerce_array2ptr(scope, control);
@@ -2023,22 +2033,27 @@ static Expr *new_expr_arrow(Scope *scope, Expr *operand, const char *name,
   return new_expr_unary(scope, EX_INDIRECT, expr, range);
 }
 
-static Stmt *new_stmt(int ty, const Range *range) {
+static Stmt *new_stmt(int ty, Type *val_type, const Range *range) {
   Stmt *stmt = NEW(Stmt);
   stmt->ty = ty;
+  stmt->val_type = val_type;
   stmt->range = range;
   return stmt;
 }
 
+static Stmt *new_stmt_null(const Range *range) {
+  return new_stmt(ST_NULL, new_type(TY_VOID, EMPTY_TYPE_QUALIFIER), range);
+}
+
 static Stmt *new_stmt_expr(Expr *expr, const Range *range) {
-  Stmt *stmt = new_stmt(ST_EXPR, range);
+  Stmt *stmt = new_stmt(ST_EXPR, expr->val_type, range);
   stmt->expr = expr;
   return stmt;
 }
 
 static Stmt *new_stmt_if(Expr *cond, Stmt *then_stmt, Stmt *else_stmt,
                          const Range *range) {
-  Stmt *stmt = new_stmt(ST_IF, range);
+  Stmt *stmt = new_stmt(ST_IF, new_type(TY_VOID, EMPTY_TYPE_QUALIFIER), range);
   stmt->cond = cond;
   stmt->then_stmt = then_stmt;
   stmt->else_stmt = else_stmt;
@@ -2046,7 +2061,8 @@ static Stmt *new_stmt_if(Expr *cond, Stmt *then_stmt, Stmt *else_stmt,
 }
 
 static Stmt *new_stmt_switch(Expr *cond, Stmt *body, const Range *range) {
-  Stmt *stmt = new_stmt(ST_SWITCH, range);
+  Stmt *stmt =
+      new_stmt(ST_SWITCH, new_type(TY_VOID, EMPTY_TYPE_QUALIFIER), range);
   stmt->cond = cond;
   stmt->body = body;
   stmt->cases = new_vector();
@@ -2055,7 +2071,8 @@ static Stmt *new_stmt_switch(Expr *cond, Stmt *body, const Range *range) {
 }
 
 static Stmt *new_stmt_case(Expr *expr, Stmt *body, const Range *range) {
-  Stmt *stmt = new_stmt(ST_CASE, range);
+  Stmt *stmt =
+      new_stmt(ST_CASE, new_type(TY_VOID, EMPTY_TYPE_QUALIFIER), range);
   stmt->expr = expr;
   stmt->label = make_label("case");
   stmt->body = body;
@@ -2063,7 +2080,8 @@ static Stmt *new_stmt_case(Expr *expr, Stmt *body, const Range *range) {
 }
 
 static Stmt *new_stmt_default(Stmt *body, const Range *range) {
-  Stmt *stmt = new_stmt(ST_DEFAULT, range);
+  Stmt *stmt =
+      new_stmt(ST_DEFAULT, new_type(TY_VOID, EMPTY_TYPE_QUALIFIER), range);
   stmt->label = make_label("default");
   stmt->body = body;
   return stmt;
@@ -2071,7 +2089,7 @@ static Stmt *new_stmt_default(Stmt *body, const Range *range) {
 
 static Stmt *new_stmt_label(FuncCtxt *fcx, char *name, Stmt *body,
                             const Range *range) {
-  Stmt *stmt = new_stmt(ST_LABEL, range);
+  Stmt *stmt = new_stmt(ST_LABEL, body->val_type, range);
   stmt->name = name;
   stmt->label = make_label(name);
   stmt->body = body;
@@ -2080,14 +2098,16 @@ static Stmt *new_stmt_label(FuncCtxt *fcx, char *name, Stmt *body,
 }
 
 static Stmt *new_stmt_while(Expr *cond, Stmt *body, const Range *range) {
-  Stmt *stmt = new_stmt(ST_WHILE, range);
+  Stmt *stmt =
+      new_stmt(ST_WHILE, new_type(TY_VOID, EMPTY_TYPE_QUALIFIER), range);
   stmt->cond = cond;
   stmt->body = body;
   return stmt;
 }
 
 static Stmt *new_stmt_do_while(Expr *cond, Stmt *body, const Range *range) {
-  Stmt *stmt = new_stmt(ST_DO_WHILE, range);
+  Stmt *stmt =
+      new_stmt(ST_DO_WHILE, new_type(TY_VOID, EMPTY_TYPE_QUALIFIER), range);
   stmt->cond = cond;
   stmt->body = body;
   return stmt;
@@ -2095,7 +2115,7 @@ static Stmt *new_stmt_do_while(Expr *cond, Stmt *body, const Range *range) {
 
 static Stmt *new_stmt_for(Expr *init, Expr *cond, Expr *inc, Stmt *body,
                           const Range *range) {
-  Stmt *stmt = new_stmt(ST_FOR, range);
+  Stmt *stmt = new_stmt(ST_FOR, new_type(TY_VOID, EMPTY_TYPE_QUALIFIER), range);
   stmt->init = init;
   stmt->cond = cond;
   stmt->inc = inc;
@@ -2104,13 +2124,23 @@ static Stmt *new_stmt_for(Expr *init, Expr *cond, Expr *inc, Stmt *body,
 }
 
 static Stmt *new_stmt_goto(char *name, const Range *range) {
-  Stmt *stmt = new_stmt(ST_GOTO, range);
+  Stmt *stmt =
+      new_stmt(ST_GOTO, new_type(TY_VOID, EMPTY_TYPE_QUALIFIER), range);
   stmt->name = name;
   return stmt;
 }
 
+static Stmt *new_stmt_break(const Range *range) {
+  return new_stmt(ST_BREAK, new_type(TY_VOID, EMPTY_TYPE_QUALIFIER), range);
+}
+
+static Stmt *new_stmt_continue(const Range *range) {
+  return new_stmt(ST_CONTINUE, new_type(TY_VOID, EMPTY_TYPE_QUALIFIER), range);
+}
+
 static Stmt *new_stmt_return(Scope *scope, Expr *expr, const Range *range) {
-  Stmt *stmt = new_stmt(ST_RETURN, range);
+  Stmt *stmt =
+      new_stmt(ST_RETURN, new_type(TY_VOID, EMPTY_TYPE_QUALIFIER), range);
   if (expr != NULL) {
     stmt->expr = new_expr_cast(scope, scope->func_ctxt->type->func.ret, expr,
                                expr->range);
@@ -2121,7 +2151,14 @@ static Stmt *new_stmt_return(Scope *scope, Expr *expr, const Range *range) {
 }
 
 static Stmt *new_stmt_compound(Vector *stmts, const Range *range) {
-  Stmt *stmt = new_stmt(ST_COMPOUND, range);
+  Type *type;
+  if (vec_len(stmts) != 0) {
+    Stmt *last = vec_last(stmts);
+    type = last->val_type;
+  } else {
+    type = new_type(TY_VOID, EMPTY_TYPE_QUALIFIER);
+  }
+  Stmt *stmt = new_stmt(ST_COMPOUND, type, range);
   stmt->stmts = stmts;
   return stmt;
 }
@@ -2272,6 +2309,14 @@ static Expr *primary_expression(Tokenizer *tokenizer, Scope *scope) {
   }
 
   if ((token = token_consume(tokenizer, '(')) != NULL) {
+    // NonStandard/GNU Statement Exprs
+    if (token_peek(tokenizer)->ty == '{') {
+      Scope *inner = new_inner_scope(scope);
+      Stmt *stmt = compound_statement(tokenizer, inner);
+      Token *end = token_expect(tokenizer, ')');
+      return new_expr_stmt(stmt, range_join(token->range, end->range));
+    }
+
     Expr *expr = expression(tokenizer, scope);
     Token *end = token_expect(tokenizer, ')');
     expr->range = range_join(token->range, end->range);
@@ -3393,7 +3438,7 @@ static Stmt *statement(Tokenizer *tokenizer, Scope *scope) {
     Expr *cond = expression(tokenizer, scope);
     token_expect(tokenizer, ')');
     Stmt *then_stmt = statement(tokenizer, scope);
-    Stmt *else_stmt = new_stmt(ST_NULL, then_stmt->range);
+    Stmt *else_stmt = new_stmt_null(then_stmt->range);
     const Range *range;
     if (token_consume(tokenizer, TK_ELSE)) {
       else_stmt = statement(tokenizer, scope);
@@ -3512,12 +3557,12 @@ static Stmt *statement(Tokenizer *tokenizer, Scope *scope) {
   case TK_BREAK: {
     token_succ(tokenizer);
     Token *end = token_expect(tokenizer, ';');
-    return new_stmt(ST_BREAK, range_join(start->range, end->range));
+    return new_stmt_break(range_join(start->range, end->range));
   }
   case TK_CONTINUE: {
     token_succ(tokenizer);
     Token *end = token_expect(tokenizer, ';');
-    return new_stmt(ST_CONTINUE, range_join(start->range, end->range));
+    return new_stmt_continue(range_join(start->range, end->range));
   }
   case TK_RETURN: {
     token_succ(tokenizer);
@@ -3534,7 +3579,7 @@ static Stmt *statement(Tokenizer *tokenizer, Scope *scope) {
   }
   case ';': {
     Token *end = token_pop(tokenizer);
-    return new_stmt(ST_NULL, end->range);
+    return new_stmt_null(end->range);
   }
   case TK_IDENT: {
     if (token_peek_ahead(tokenizer, 1)->ty == ':') {
