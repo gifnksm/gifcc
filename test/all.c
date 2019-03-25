@@ -2635,6 +2635,14 @@ static void test83(void) {
             }));
 }
 
+static void test84(void) {
+  bool cond = true;
+  3 ? TEST_PRINTF("OK") : abort();
+  0 ? abort() : TEST_PRINTF("OK");
+  cond ? TEST_PRINTF("OK") : abort();
+  !cond ? abort() : TEST_PRINTF("OK");
+}
+
 int main(int argc, char *argv[]) {
   Test test_list[] = {
       TEST(test01), TEST(test02), TEST(test03), TEST(test04), TEST(test05),
@@ -2653,7 +2661,7 @@ int main(int argc, char *argv[]) {
       TEST(test66), TEST(test67), TEST(test68), TEST(test69), TEST(test70),
       TEST(test71), TEST(test72), TEST(test73), TEST(test74), TEST(test75),
       TEST(test76), TEST(test77), TEST(test78), TEST(test79), TEST(test80),
-      TEST(test81), TEST(test82), TEST(test83), {NULL, NULL},
+      TEST(test81), TEST(test82), TEST(test83), TEST(test84), {NULL, NULL},
   };
   RUN_TEST(argc, argv, test_list);
 }
