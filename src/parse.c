@@ -1965,6 +1965,12 @@ static Expr *new_expr_cond(Scope *scope, Expr *cond, Expr *then_expr,
     val_type = then_expr->val_type;
   } else if (is_ptr_type(else_expr->val_type) && is_null_ptr_const(then_expr)) {
     val_type = else_expr->val_type;
+  } else if (then_expr->val_type->ty == TY_VOID ||
+             else_expr->val_type->ty == TY_VOID) {
+    // NonStandard/GNU? conditional expressions with only one void side
+    val_type = new_type(TY_VOID, EMPTY_TYPE_QUALIFIER);
+    then_expr = new_expr_cast(scope, val_type, then_expr, then_expr->range);
+    else_expr = new_expr_cast(scope, val_type, else_expr, else_expr->range);
   } else {
     if (!is_sametype(then_expr->val_type, else_expr->val_type)) {
       range_error(range, "条件演算子の両辺の型が異なります: %s, %s",
