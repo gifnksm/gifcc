@@ -150,9 +150,11 @@ set_predefined_special_macro(Map *map, char *name,
 static Vector *macro_date(Tokenizer *tokenizer __attribute__((unused))) {
   time_t now = time(NULL);
   struct tm now_tm;
-  char buf[30];
-  localtime_r(&now, &now_tm);
-  strftime(buf, sizeof(buf), "%b %e %Y", &now_tm);
+  static char buf[30] = "";
+  if (buf[0] == '\0') {
+    localtime_r(&now, &now_tm);
+    strftime(buf, sizeof(buf), "%b %e %Y", &now_tm);
+  }
 
   Vector *rep = new_vector();
   vec_push(rep, new_token_str(strdup(buf), range_builtin(tokenizer->reader)));
@@ -162,9 +164,11 @@ static Vector *macro_date(Tokenizer *tokenizer __attribute__((unused))) {
 static Vector *macro_time(Tokenizer *tokenizer __attribute__((unused))) {
   time_t now = time(NULL);
   struct tm now_tm;
-  char buf[30];
-  localtime_r(&now, &now_tm);
-  strftime(buf, sizeof(buf), "%T", &now_tm);
+  static char buf[30] = "";
+  if (buf[0] == '\0') {
+    localtime_r(&now, &now_tm);
+    strftime(buf, sizeof(buf), "%T", &now_tm);
+  }
 
   Vector *rep = new_vector();
   vec_push(rep, new_token_str(strdup(buf), range_builtin(tokenizer->reader)));
