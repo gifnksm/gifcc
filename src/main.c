@@ -132,7 +132,7 @@ static void dump_expr(FILE *fp, Expr *expr, int level) {
     return;
   case EX_COMPOUND:
     dump_expr_start(fp, expr, level, "COMPOUND");
-    dump_init(fp, expr->compound, expr->range, level + 1);
+    dump_init(fp, expr->compound.init, expr->range, level + 1);
     dump_expr_end(fp, expr, level);
     return;
   case EX_STMT:
@@ -375,6 +375,27 @@ static void dump_stmt(FILE *fp, Stmt *stmt, int level) {
     }
     dump_stmt_end(fp, stmt, level);
     return;
+  case ST_DECL:
+    dump_stmt_start(fp, stmt, level, "DECL");
+    for (int i = 0; i < vec_len(stmt->decl); i++) {
+      StackVarDecl *decl = vec_get(stmt->decl, i);
+      StackVar *svar = decl->stack_var;
+      Initializer *init = decl->init;
+      dump_range_start(fp, svar->range);
+      dump_indent(fp, level + 1);
+      dump_type(fp, svar->type);
+      if (decl->init != NULL) {
+        fprintf(fp, " %s = \n", svar->name);
+        dump_init(fp, init, svar->range, level + 2);
+        dump_range_end(fp, svar->range);
+        dump_indent(fp, level);
+        fprintf(fp, "\n");
+      } else {
+        fprintf(fp, " %s = \n", svar->name);
+      }
+    }
+    dump_stmt_end(fp, stmt, level);
+    return;
   case ST_IF:
     dump_stmt_start(fp, stmt, level, "IF");
     dump_expr(fp, stmt->cond, level + 1);
@@ -419,7 +440,7 @@ static void dump_stmt(FILE *fp, Stmt *stmt, int level) {
   case ST_FOR:
     dump_stmt_start(fp, stmt, level, "FOR");
     if (stmt->init != NULL) {
-      dump_expr(fp, stmt->init, level + 1);
+      dump_stmt(fp, stmt->init, level + 1);
     } else {
       dump_range_start(fp, stmt->range);
       dump_indent(fp, level + 1);

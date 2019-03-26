@@ -2643,6 +2643,18 @@ static void test84(void) {
   !cond ? abort() : TEST_PRINTF("OK");
 }
 
+static void test85(void) {
+  typedef union {
+    char x;
+    int a[16];
+  } U;
+
+  U u = {0};
+  for (int i = 0; i < 16; i++) {
+    CHECK_INT(0, u.a[i]);
+  }
+}
+
 int main(int argc, char *argv[]) {
   Test test_list[] = {
       TEST(test01), TEST(test02), TEST(test03), TEST(test04), TEST(test05),
@@ -2661,7 +2673,8 @@ int main(int argc, char *argv[]) {
       TEST(test66), TEST(test67), TEST(test68), TEST(test69), TEST(test70),
       TEST(test71), TEST(test72), TEST(test73), TEST(test74), TEST(test75),
       TEST(test76), TEST(test77), TEST(test78), TEST(test79), TEST(test80),
-      TEST(test81), TEST(test82), TEST(test83), TEST(test84), {NULL, NULL},
+      TEST(test81), TEST(test82), TEST(test83), TEST(test84), TEST(test85),
+      {NULL, NULL},
   };
   RUN_TEST(argc, argv, test_list);
 }

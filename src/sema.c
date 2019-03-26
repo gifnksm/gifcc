@@ -619,7 +619,7 @@ static void walk_expr(Expr *expr) {
   case EX_STR:
     return;
   case EX_COMPOUND:
-    walk_initializer(expr->compound);
+    walk_initializer(expr->compound.init);
     return;
   case EX_STMT:
     walk_stmt(expr->stmt);
@@ -830,6 +830,12 @@ static void walk_stmt(Stmt *stmt) {
       walk_stmt(vec_get(stmt->stmts, i));
     }
     return;
+  case ST_DECL:
+    for (int i = 0; i < vec_len(stmt->decl); i++) {
+      StackVarDecl *decl = vec_get(stmt->decl, i);
+      walk_initializer(decl->init);
+    }
+    return;
   case ST_IF:
     walk_expr(stmt->cond);
     walk_stmt(stmt->then_stmt);
@@ -864,7 +870,7 @@ static void walk_stmt(Stmt *stmt) {
     return;
   case ST_FOR:
     if (stmt->init != NULL) {
-      walk_expr(stmt->init);
+      walk_stmt(stmt->init);
     }
     if (stmt->cond != NULL) {
       walk_expr(stmt->cond);
