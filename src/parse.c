@@ -1360,10 +1360,21 @@ static Expr *new_expr_str(Scope *scope, const char *val, const Range *range) {
       new_type_array(new_type(TY_CHAR, EMPTY_TYPE_QUALIFIER),
                      new_number_int(strlen(val)), EMPTY_TYPE_QUALIFIER);
 
-  StringLiteral *lit = NEW(StringLiteral);
-  lit->name = make_label("str");
-  lit->val = val;
-  vec_push(scope->global_ctxt->str_list, lit);
+  StringLiteral *lit = NULL;
+  for (int i = 0; i < vec_len(scope->global_ctxt->str_list); i++) {
+    StringLiteral *l = vec_get(scope->global_ctxt->str_list, i);
+    if (strcmp(l->val, val) == 0) {
+      lit = l;
+      break;
+    }
+  }
+
+  if (lit == NULL) {
+    lit = NEW(StringLiteral);
+    lit->name = make_label("str");
+    lit->val = val;
+    vec_push(scope->global_ctxt->str_list, lit);
+  }
 
   Expr *expr = new_expr(EX_STR, type, range);
   expr->str = lit;
