@@ -290,6 +290,7 @@ typedef enum {
 typedef enum {
   ST_EXPR,
   ST_COMPOUND,
+  ST_DECL,
   ST_IF,
   ST_SWITCH,
   ST_CASE,
@@ -431,7 +432,10 @@ typedef struct Expr {
     const StringLiteral *str;
 
     // EX_COMPOUND
-    Initializer *compound;
+    struct {
+      StackVar *stack_var;
+      Initializer *init;
+    } compound;
 
     // EX_CALL
     struct {
@@ -501,6 +505,11 @@ typedef struct Expr {
   };
 } Expr;
 
+typedef struct {
+  StackVar *stack_var;
+  Initializer *init;
+} StackVarDecl;
+
 typedef struct Stmt {
   stmt_t ty;
   Type *val_type;
@@ -518,7 +527,7 @@ typedef struct Stmt {
   // ST_DEFAULT:  default: <body>
   // ST_LABEL:    <label>: <body>
   char *label;
-  struct Expr *init;
+  struct Stmt *init;
   struct Expr *cond;
   struct Expr *inc;
   struct Stmt *then_stmt;
@@ -534,7 +543,11 @@ typedef struct Stmt {
   // ST_RETURN: return <expr>:
   struct Expr *expr;
 
-  Vector *stmts; // tyがST_COMPOUNDの場合のみ使う
+  // ST_COMPOUND
+  Vector *stmts;
+
+  // ST_DECL
+  Vector *decl;
 } Stmt;
 
 typedef struct Member {

@@ -148,6 +148,7 @@ static void emit_expr_num(Expr *expr);
 static void emit_expr_stack_var(Expr *expr);
 static void emit_expr_global_var(Expr *expr);
 static void emit_expr_str(Expr *expr);
+static void emit_expr_compound(Expr *expr);
 static void emit_expr_stmt(Expr *expr);
 static void emit_expr_call(Expr *expr);
 static void emit_expr_dot(Expr *expr);
@@ -172,6 +173,11 @@ static void emit_expr_binop_int(Expr *expr);
 static void emit_expr_binop_sse(Expr *expr);
 static void emit_expr_binop_x87(Expr *expr);
 static void emit_stmt(Stmt *stmt, bool leave_value);
+static void emit_svar_zero(StackVar *svar);
+static void emit_svar_init(StackVar *svar, int offset, Initializer *init,
+                           const Range *range);
+static void emit_gvar_init(Initializer *init, const Range *range,
+                           Vector *gvar_list);
 static void emit_gvar(GlobalVar *gvar, Vector *gvar_list);
 
 static bool is_int_reg_type(Type *type) {
@@ -345,6 +351,20 @@ static void emit_push_xmm(int n) {
   emit("  movsd [rsp], xmm%d", n);
 }
 
+static void emit_push_stack_var(StackVar *svar) {
+  int size = get_val_size(svar->type, svar->range);
+  emit_stack_sub(align(size, 8));
+
+  int src_offset = svar->offset;
+  int copy_size = 0;
+  while (size - copy_size > 0) {
+    const Reg *r = get_int_reg_for_copy(size - copy_size);
+    emit("  mov %s, [rbp - %d]", r->rax, src_offset - copy_size);
+    emit("  mov [rsp + %d], %s", copy_size, r->rax);
+    copy_size += r->size;
+  }
+}
+
 static void emit_lval(Expr *expr) {
   if (expr->ty == EX_STACK_VAR) {
     StackVar *var = expr->stack_var;
@@ -383,8 +403,17 @@ static void emit_lval(Expr *expr) {
     }
     return;
   }
+  if (expr->ty == EX_COMPOUND) {
+    StackVar *svar = expr->compound.stack_var;
+    Initializer *init = expr->compound.init;
+    emit_svar_zero(svar);
+    emit_svar_init(svar, 0, init, svar->range);
+    emit("  lea rax, [rbp - %d]", svar->offset);
+    emit_push("rax");
+    return;
+  }
 
-  range_error(expr->range, "左辺値が変数ではありません: %d", expr->ty);
+  range_error(expr->range, "Invalid lvalue: %d", expr->ty);
 }
 
 static void emit_assign(Type *type, const Range *range, Expr *dest, Expr *src) {
@@ -415,6 +444,9 @@ static void emit_expr(Expr *expr) {
     return;
   case EX_STR:
     emit_expr_str(expr);
+    return;
+  case EX_COMPOUND:
+    emit_expr_compound(expr);
     return;
   case EX_STMT:
     emit_expr_stmt(expr);
@@ -498,7 +530,6 @@ static void emit_expr(Expr *expr) {
   case EX_OR:
     emit_expr_binop(expr);
     return;
-  case EX_COMPOUND:
   case EX_PLUS:
   case EX_LOG_NOT:
   case EX_MUL_ASSIGN:
@@ -613,19 +644,7 @@ static void emit_expr_num(Expr *expr) {
 
 static void emit_expr_stack_var(Expr *expr) {
   assert(expr->ty == EX_STACK_VAR);
-
-  StackVar *var = expr->stack_var;
-  int size = get_val_size(expr->val_type, expr->range);
-  emit_stack_sub(align(size, 8));
-
-  int src_offset = var->offset;
-  int copy_size = 0;
-  while (size - copy_size > 0) {
-    const Reg *r = get_int_reg_for_copy(size - copy_size);
-    emit("  mov %s, [rbp - %d]", r->rax, src_offset - copy_size);
-    emit("  mov [rsp + %d], %s", copy_size, r->rax);
-    copy_size += r->size;
-  }
+  emit_push_stack_var(expr->stack_var);
 }
 
 static void emit_expr_global_var(Expr *expr) {
@@ -650,6 +669,18 @@ static void emit_expr_str(Expr *expr) {
 
   emit("  lea rax, %s[rip]", expr->str->name);
   emit_push("rax");
+}
+
+static void emit_expr_compound(Expr *expr) {
+  assert(expr->ty == EX_COMPOUND);
+  assert(expr->compound.stack_var != NULL);
+
+  StackVar *svar = expr->compound.stack_var;
+  Initializer *init = expr->compound.init;
+  emit_svar_zero(svar);
+  emit_svar_init(svar, 0, init, svar->range);
+
+  emit_push_stack_var(svar);
 }
 
 static void emit_expr_stmt(Expr *expr) {
@@ -1706,6 +1737,16 @@ static void emit_stmt(Stmt *stmt, bool leave_value) {
     }
     return;
   }
+  case ST_DECL: {
+    for (int i = 0; i < vec_len(stmt->decl); i++) {
+      StackVarDecl *decl = vec_get(stmt->decl, i);
+      StackVar *svar = decl->stack_var;
+      Initializer *init = decl->init;
+      emit_svar_zero(svar);
+      emit_svar_init(svar, 0, init, svar->range);
+    }
+    return;
+  }
   case ST_IF: {
     int base_stack_pos = stack_pos;
     char *else_label = make_label("if.else");
@@ -1831,8 +1872,7 @@ static void emit_stmt(Stmt *stmt, bool leave_value) {
     char *inc_label = make_label("for.inc");
     char *end_label = make_label("for.end");
     if (stmt->init != NULL) {
-      emit_expr(stmt->init);
-      emit_pop("rax");
+      emit_stmt(stmt->init, false);
       range_assert(stmt->range, stack_pos == base_stack_pos,
                    "stack position mismatch");
     }
@@ -2147,6 +2187,62 @@ static void emit_func(Function *func) {
   stack_pos = INVALID_STACK_POS;
 }
 
+static void emit_svar_zero(StackVar *svar) {
+  int size = get_val_size(svar->type, svar->range);
+  int copy_size = 0;
+  while (size - copy_size > 0) {
+    const Reg *r = get_int_reg_for_copy(size - copy_size);
+    emit("  mov %s [rbp - %d], 0", r->ptr, svar->offset - copy_size);
+    copy_size += r->size;
+  }
+}
+
+static void emit_svar_init(StackVar *svar, int offset, Initializer *init,
+                           const Range *range) {
+  if (init == NULL) {
+    return;
+  }
+
+  if (init->expr != NULL) {
+    emit_expr(init->expr);
+    int size = get_val_size(init->expr->val_type, init->expr->range);
+    int copy_size = 0;
+    while (size - copy_size > 0) {
+      const Reg *r = get_int_reg_for_copy(size - copy_size);
+      emit("  mov %s, [rsp + %d]", r->rax, copy_size);
+      emit("  mov [rbp - %d], %s", svar->offset - copy_size - offset, r->rax);
+      copy_size += r->size;
+    }
+
+    emit_stack_add(align(size, 8));
+    return;
+  }
+
+  if (init->members != NULL) {
+    assert(init->type->ty == TY_STRUCT || init->type->ty == TY_UNION);
+    assert(vec_len(init->members) <= 1 || init->type->ty == TY_STRUCT);
+
+    for (int i = 0; i < vec_len(init->members); i++) {
+      MemberInitializer *meminit = vec_get(init->members, i);
+      const Member *member = meminit->member;
+      emit_svar_init(svar, offset + member->offset, meminit->init, range);
+    }
+    return;
+  }
+
+  if (init->elements != NULL) {
+    assert(init->type->ty == TY_ARRAY);
+    int size = get_val_size(init->type->array.elem, range);
+    for (int i = 0; i < vec_len(init->elements); i++) {
+      Initializer *meminit = vec_get(init->elements, i);
+      emit_svar_init(svar, offset + i * size, meminit, range);
+    }
+    return;
+  }
+
+  assert(false);
+}
+
 static void emit_gvar_init(Initializer *init, const Range *range,
                            Vector *gvar_list) {
   if (init->expr != NULL) {
@@ -2181,12 +2277,13 @@ static void emit_gvar_init(Initializer *init, const Range *range,
       }
       if (operand->ty == EX_COMPOUND) {
         Expr *compound = operand;
+        assert(compound->compound.stack_var == NULL);
         GlobalVar *gvar = NEW(GlobalVar);
         gvar->name = make_label("compound");
         gvar->type = compound->val_type;
         gvar->range = compound->range;
         gvar->storage_class.is_static = true;
-        gvar->init = compound->compound;
+        gvar->init = compound->compound.init;
         vec_push(gvar_list, gvar);
 
         emit("  .quad %s", gvar->name);
@@ -2196,7 +2293,8 @@ static void emit_gvar_init(Initializer *init, const Range *range,
           range,
           "グローバル変数またはコンパウンドリテラル以外へのポインタです");
     } else if (expr->ty == EX_COMPOUND) {
-      emit_gvar_init(expr->compound, expr->range, gvar_list);
+      assert(expr->compound.stack_var == NULL);
+      emit_gvar_init(expr->compound.init, expr->range, gvar_list);
     } else if (expr->ty == EX_STR) {
       emit("  .quad %s", expr->str->name);
     } else {
