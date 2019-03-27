@@ -30,19 +30,19 @@ fi
 
 cp ${REPOROOT}/scripts/gifcc-x86_64 ${REPOROOT}/external/c-testsuite/runners/single-exec/
 OUTPUT="${REPOROOT}/target/${STAGE}/c-testsuite/result.tap"
-./single-exec "${COMPILER}" | tee ${OUTPUT} | grep -v '^#'
+./single-exec "${COMPILER}" | tee ${OUTPUT} | grep --line-buffered -v '^#' | sed 's/^/['${STAGE}'] /'
 
 PASS="$(grep '^ok' ${OUTPUT} | grep -v '# SKIP' | wc -l)"
 FAIL="$(grep '^not ok' ${OUTPUT} | wc -l)"
 SKIP="$(grep '^ok' ${OUTPUT} | grep '# SKIP' | wc -l)"
 TOTAL=$((PASS + FAIL + SKIP))
 
-echo
-printf "pass  %5d\n" ${PASS}
-printf "fail  %5d\n" ${FAIL}
-printf "skip  %5d\n" ${SKIP}
-echo "-----------"
-printf "total %5d\n" ${TOTAL}
+echo   "[${STAGE}]"
+printf "[${STAGE}] pass  %5d\n" ${PASS}
+printf "[${STAGE}] fail  %5d\n" ${FAIL}
+printf "[${STAGE}] skip  %5d\n" ${SKIP}
+echo   "[${STAGE}] -----------"
+printf "[${STAGE}] total %5d\n" ${TOTAL}
 
 mkdir -p ${REPOROOT}/target/test-results/${STAGE}-c-testsuite
 tap-xunit < ${OUTPUT} > ${REPOROOT}/target/test-results/${STAGE}-c-testsuite/results.xml || true
