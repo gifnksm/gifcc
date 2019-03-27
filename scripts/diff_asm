@@ -1,0 +1,23 @@
+#!/bin/bash -eu
+
+SRC=$1
+DST=$2
+CURDIR=$(readlink -f $(dirname $0))
+REPOROOT=$(readlink -f ${CURDIR}/..)
+
+SRCDIR=${REPOROOT}/target/${SRC}
+DSTDIR=${REPOROOT}/target/${DST}
+
+if ! [ -d ${SRCDIR} ]; then
+    echo "Directory not exists: ${SRCDIR}" >&2
+    exit 1
+fi
+if ! [ -d ${DSTDIR} ]; then
+    echo "Directory not exists: ${DSTDIR}" >&2
+    exit 1
+fi
+
+(cd ${SRCDIR}; find -type f -name '*.s' | sort) | while read FILE; do
+    diff -u ${SRCDIR}/${FILE} ${DSTDIR}/${FILE}
+    echo "ok ${FILE}"
+done

@@ -71,9 +71,13 @@ jobs:
       - restore_cache:
           key: stage1-{{ .Environment.CIRCLE_SHA1 }}
       - run: touch target/stage*/*
-      - run: make stage1-test-full
+      - run: GIFCC_TIME=0 make stage1-test-full
       - store_test_results:
           path: target/test-results
+      - save_cache:
+          key: stage1-test-{{ .Environment.CIRCLE_SHA1 }}
+          paths:
+            - target/stage1
   stage2-test:
     docker:
       - image: gifnksm/gifcc-build:archlinux
@@ -82,9 +86,13 @@ jobs:
       - restore_cache:
           key: stage2-{{ .Environment.CIRCLE_SHA1 }}
       - run: touch target/stage*/*
-      - run: make stage2-test-full
+      - run: GIFCC_TIME=0 make stage2-test-full
       - store_test_results:
           path: target/test-results
+      - save_cache:
+          key: stage2-test-{{ .Environment.CIRCLE_SHA1 }}
+          paths:
+            - target/stage2
   stage3-test:
     docker:
       - image: gifnksm/gifcc-build:archlinux
@@ -93,9 +101,35 @@ jobs:
       - restore_cache:
           key: stage3-{{ .Environment.CIRCLE_SHA1 }}
       - run: touch target/stage*/*
-      - run: make stage3-test-full
+      - run: GIFCC_TIME=0 make stage3-test-full
       - store_test_results:
           path: target/test-results
+      - save_cache:
+          key: stage3-test-{{ .Environment.CIRCLE_SHA1 }}
+          paths:
+            - target/stage3
+
+  compare-stage1-stage2:
+    docker:
+      - image: gifnksm/gifcc-build:archlinux
+    steps:
+      - checkout
+      - restore_cache:
+          key: stage1-test-{{ .Environment.CIRCLE_SHA1 }}
+      - restore_cache:
+          key: stage2-test-{{ .Environment.CIRCLE_SHA1 }}
+      - run: ./scripts/diff_asm stage1 stage2
+
+  compare-stage2-stage3:
+    docker:
+      - image: gifnksm/gifcc-build:archlinux
+    steps:
+      - checkout
+      - restore_cache:
+          key: stage2-test-{{ .Environment.CIRCLE_SHA1 }}
+      - restore_cache:
+          key: stage3-test-{{ .Environment.CIRCLE_SHA1 }}
+      - run: ./scripts/diff_asm stage2 stage3
 
   asan:
     docker:
@@ -147,6 +181,14 @@ workflows:
       - stage3-test:
           requires:
             - stage3-build
+      - compare-stage1-stage2:
+          requires:
+            - stage1-test
+            - stage2-test
+      - compare-stage2-stage3:
+          requires:
+            - stage2-test
+            - stage3-test
       - asan
       - coverage
       - clang-format
