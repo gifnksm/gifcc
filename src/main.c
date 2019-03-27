@@ -24,12 +24,19 @@ noreturn void error_raw_v(const char *dbg_file, int dbg_line, const char *fmt,
   exit(1);
 }
 
+static const char *trim_filename(const char *filename) {
+  if (strncmp(filename, GIFCC_INCLUDE, sizeof(GIFCC_INCLUDE) - 1) == 0) {
+    return format("<gifcc>%s", &filename[sizeof(GIFCC_INCLUDE) - 1]);
+  }
+  return filename;
+}
+
 static void token_listener(void *arg, const Token *token) {
   FILE *fp = arg;
   const char *filename;
   int line, column;
   range_get_start(token->range, &filename, &line, &column);
-  fprintf(fp, "%s:%d:%d:\t%-8s", filename, line, column,
+  fprintf(fp, "%32s:%4d:%3d:\t%-8s", trim_filename(filename), line, column,
           token_kind_to_str(token->ty));
   switch (token->ty) {
   case TK_NUM:
@@ -54,13 +61,13 @@ static void dump_range_start(FILE *fp, const Range *range) {
   const char *filename;
   int line, column;
   range_get_start(range, &filename, &line, &column);
-  fprintf(fp, "%s:%d:%d\t", filename, line, column);
+  fprintf(fp, "%32s:%4d:%3d\t", trim_filename(filename), line, column);
 }
 static void dump_range_end(FILE *fp, const Range *range) {
   const char *filename;
   int line, column;
   range_get_end(range, &filename, &line, &column);
-  fprintf(fp, "%s:%d:%d\t", filename, line, column);
+  fprintf(fp, "%32s:%4d:%3d\t", trim_filename(filename), line, column);
 }
 
 static void dump_indent(FILE *fp, int level) {
@@ -387,9 +394,6 @@ static void dump_stmt(FILE *fp, Stmt *stmt, int level) {
       if (decl->init != NULL) {
         fprintf(fp, " %s = \n", svar->name);
         dump_init(fp, init, svar->range, level + 2);
-        dump_range_end(fp, svar->range);
-        dump_indent(fp, level);
-        fprintf(fp, "\n");
       } else {
         fprintf(fp, " %s = \n", svar->name);
       }
