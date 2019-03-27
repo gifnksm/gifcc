@@ -365,28 +365,25 @@ static void emit_push_stack_var(StackVar *svar) {
   }
 }
 
-static void emit_lval(Expr *expr) {
+static void emit_lval(Expr *expr, const char *reg) {
   if (expr->ty == EX_STACK_VAR) {
     StackVar *var = expr->stack_var;
     assert(var != NULL);
-    emit("  lea rax, [rbp - %d]", var->offset);
-    emit_push("rax");
+    emit("  lea %s, [rbp - %d]", reg, var->offset);
     return;
   }
   if (expr->ty == EX_GLOBAL_VAR) {
-    emit("  lea rax, %s[rip]", expr->global_var.name);
-    emit_push("rax");
+    emit("  lea %s, %s[rip]", reg, expr->global_var.name);
     return;
   }
   if (expr->ty == EX_INDIRECT) {
     emit_expr(expr->unop.operand);
+    emit_pop(reg);
     return;
   }
   if (expr->ty == EX_DOT) {
-    emit_lval(expr->dot.operand);
-    emit_pop("rax");
-    emit("  lea rax, [rax + %d]", expr->dot.member->offset);
-    emit_push("rax");
+    emit_lval(expr->dot.operand, reg);
+    emit("  lea %s, [%s + %d]", reg, reg, expr->dot.member->offset);
     return;
   }
   if (expr->ty == EX_COMMA) {
@@ -399,7 +396,7 @@ static void emit_lval(Expr *expr) {
         emit_stack_add(align(op_size, 8));
         continue;
       }
-      emit_lval(op);
+      emit_lval(op, reg);
     }
     return;
   }
@@ -408,8 +405,7 @@ static void emit_lval(Expr *expr) {
     Initializer *init = expr->compound.init;
     emit_svar_zero(svar);
     emit_svar_init(svar, 0, init, svar->range);
-    emit("  lea rax, [rbp - %d]", svar->offset);
-    emit_push("rax");
+    emit("  lea %s, [rbp - %d]", reg, svar->offset);
     return;
   }
 
@@ -418,8 +414,7 @@ static void emit_lval(Expr *expr) {
 
 static void emit_assign(Type *type, const Range *range, Expr *dest, Expr *src) {
   emit_expr(src);
-  emit_lval(dest);
-  emit_pop("rax");
+  emit_lval(dest, Reg8.rax);
 
   int size = get_val_size(type, range);
   int copy_size = 0;
@@ -474,7 +469,8 @@ static void emit_expr(Expr *expr) {
     emit_expr_cond(expr);
     return;
   case EX_ADDRESS:
-    emit_lval(expr->unop.operand);
+    emit_lval(expr->unop.operand, Reg8.rax);
+    emit_push(Reg8.rax);
     return;
   case EX_INDIRECT:
     emit_expr_indirect(expr);
@@ -1171,34 +1167,31 @@ static void emit_expr_pre_inc(Expr *expr) {
   assert(expr->ty == EX_PRE_INC);
 
   const Reg *r = get_int_reg(expr->val_type, expr->range);
-  emit_lval(expr->unop.operand);
-  emit("  mov rax, [rsp]");
+  emit_lval(expr->unop.operand, Reg8.rax);
   emit("  mov %s, [rax]", r->rdi);
   emit("  add %s, %d", r->rdi, get_incdec_size(expr));
   emit("  mov [rax], %s", r->rdi);
-  emit("  mov [rsp], rdi");
+  emit_push(Reg8.rdi);
 }
 
 static void emit_expr_pre_dec(Expr *expr) {
   assert(expr->ty == EX_PRE_DEC);
 
   const Reg *r = get_int_reg(expr->val_type, expr->range);
-  emit_lval(expr->unop.operand);
-  emit("  mov rax, [rsp]");
+  emit_lval(expr->unop.operand, Reg8.rax);
   emit("  mov %s, [rax]", r->rdi);
   emit("  sub %s, %d", r->rdi, get_incdec_size(expr));
   emit("  mov [rax], %s", r->rdi);
-  emit("  mov [rsp], rdi");
+  emit_push(Reg8.rdi);
 }
 
 static void emit_expr_post_inc(Expr *expr) {
   assert(expr->ty == EX_POST_INC);
 
   const Reg *r = get_int_reg(expr->val_type, expr->range);
-  emit_lval(expr->unop.operand);
-  emit("  mov rax, [rsp]");
+  emit_lval(expr->unop.operand, Reg8.rax);
   emit("  mov %s, [rax]", r->rdi);
-  emit("  mov [rsp], rdi");
+  emit_push(Reg8.rdi);
   emit("  add %s, %d", r->rdi, get_incdec_size(expr));
   emit("  mov [rax], %s", r->rdi);
 }
@@ -1207,10 +1200,9 @@ static void emit_expr_post_dec(Expr *expr) {
   assert(expr->ty == EX_POST_DEC);
 
   const Reg *r = get_int_reg(expr->val_type, expr->range);
-  emit_lval(expr->unop.operand);
-  emit("  mov rax, [rsp]");
+  emit_lval(expr->unop.operand, Reg8.rax);
   emit("  mov %s, [rax]", r->rdi);
-  emit("  mov [rsp], rdi");
+  emit_push(Reg8.rdi);
   emit("  sub %s, %d", r->rdi, get_incdec_size(expr));
   emit("  mov [rax], %s", r->rdi);
 }
