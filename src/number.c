@@ -141,41 +141,58 @@ Number new_number_wchar_t(wchar_t val) { return new_number(TY_WCHAR_T, val); }
 char *format_number(Number num) {
   switch (num.type) {
   case TY_BOOL:
-    return format("%d", num.bool_val);
+    return format("%d {0x%016lx, 0x%016lx}", num.bool_val, num.bytes[0],
+                  num.bytes[1]);
   case TY_CHAR:
-    return format("%hhd", num.char_val);
+    return format("%hhd {0x%016lx, 0x%016lx}", num.char_val, num.bytes[0],
+                  num.bytes[1]);
   case TY_S_CHAR:
-    return format("%hhd", num.s_char_val);
+    return format("%hhd {0x%016lx, 0x%016lx}", num.s_char_val, num.bytes[0],
+                  num.bytes[1]);
   case TY_S_SHORT:
-    return format("%hd", num.s_short_val);
+    return format("%hd {0x%016lx, 0x%016lx}", num.s_short_val, num.bytes[0],
+                  num.bytes[1]);
   case TY_S_INT:
-    return format("%d", num.s_int_val);
+    return format("%d {0x%016lx, 0x%016lx}", num.s_int_val, num.bytes[0],
+                  num.bytes[1]);
   case TY_S_LONG:
-    return format("%ld", num.s_long_val);
+    return format("%ld {0x%016lx, 0x%016lx}", num.s_long_val, num.bytes[0],
+                  num.bytes[1]);
   case TY_S_LLONG:
-    return format("%lld", num.s_llong_val);
+    return format("%lld {0x%016lx, 0x%016lx}", num.s_llong_val, num.bytes[0],
+                  num.bytes[1]);
   case TY_U_CHAR:
-    return format("%hhu", num.u_char_val);
+    return format("%hhu {0x%016lx, 0x%016lx}", num.u_char_val, num.bytes[0],
+                  num.bytes[1]);
   case TY_U_SHORT:
-    return format("%hu", num.u_short_val);
+    return format("%hu {0x%016lx, 0x%016lx}", num.u_short_val, num.bytes[0],
+                  num.bytes[1]);
   case TY_U_INT:
-    return format("%u", num.u_int_val);
+    return format("%u {0x%016lx, 0x%016lx}", num.u_int_val, num.bytes[0],
+                  num.bytes[1]);
   case TY_U_LONG:
-    return format("%lu", num.u_long_val);
+    return format("%lu {0x%016lx, 0x%016lx}", num.u_long_val, num.bytes[0],
+                  num.bytes[1]);
   case TY_U_LLONG:
-    return format("%llu", num.u_llong_val);
+    return format("%llu {0x%016lx, 0x%016lx}", num.u_llong_val, num.bytes[0],
+                  num.bytes[1]);
   case TY_PTR:
-    return format("%" PRIdPTR, num.ptr_val);
+    return format("%" PRIdPTR "{0x%016lx, 0x%016lx}", num.ptr_val, num.bytes[0],
+                  num.bytes[1]);
   case TY_ENUM:
-    return format("%d", num.enum_val);
+    return format("%d {0x%016lx, 0x%016lx}", num.enum_val, num.bytes[0],
+                  num.bytes[1]);
   case TY_FLOAT:
-    return format("%f", num.float_val);
+    return format("%f {0x%016lx, 0x%016lx}", num.float_val, num.bytes[0],
+                  num.bytes[1]);
   case TY_DOUBLE:
-    return format("%f", num.double_val);
+    return format("%f {0x%016lx, 0x%016lx}", num.double_val, num.bytes[0],
+                  num.bytes[1]);
   case TY_LDOUBLE:
-    return format("%Lf", num.ldouble_val);
+    return format("%Lf {0x%016lx, 0x%016lx}", num.ldouble_val, num.bytes[0],
+                  num.bytes[1]);
   case TY_VOID:
-    return format("void");
+    return format("void {0x%016lx, 0x%016lx}", num.bytes[0], num.bytes[1]);
   case TY_ARRAY:
   case TY_FUNC:
   case TY_STRUCT:

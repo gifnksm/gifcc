@@ -1146,8 +1146,8 @@ static void emit_expr_cast(Expr *expr) {
   if (is_sse_reg_type(operand->val_type) && is_x87_reg_type(expr->val_type)) {
     const SseOp *from_op = get_sse_op(operand->val_type, operand->range);
     emit("  fld %s [rsp]", from_op->ptr);
+    emit("  mov %s [rsp], 0", Reg8.ptr);
     emit("  fstp TBYTE PTR [rsp - 8]");
-    emit("  mov %s [rsp + 4], 0", Reg4.ptr);
     emit_stack_sub(8);
     return;
   }
