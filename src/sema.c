@@ -921,6 +921,7 @@ static void walk_stmt(Stmt *stmt) {
     if (stmt->default_case != NULL) {
       walk_stmt(stmt->default_case);
     }
+    walk_stmt(stmt->body);
     return;
   case ST_CASE:
     walk_expr(stmt->expr);
