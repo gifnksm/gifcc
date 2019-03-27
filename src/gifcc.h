@@ -420,12 +420,16 @@ typedef struct Expr {
     Number num;
 
     // EX_STACK_VAR
-    StackVar *stack_var;
+    struct {
+      StackVar *def;
+      int offset;
+    } stack_var;
 
     // EX_GLOBAL_VAR
     struct {
       const char *name;
       GlobalVar *def;
+      int offset;
     } global_var;
 
     // EX_STR
