@@ -148,10 +148,16 @@ set_predefined_special_macro(Map *map, char *name,
 }
 
 static Vector *macro_date(Tokenizer *tokenizer __attribute__((unused))) {
-  time_t now = time(NULL);
-  struct tm now_tm;
   static char buf[30] = "";
   if (buf[0] == '\0') {
+    time_t now;
+    struct tm now_tm;
+    const char *env = getenv("GIFCC_TIME");
+    if (env != NULL) {
+      now = atol(env);
+    } else {
+      now = time(NULL);
+    }
     localtime_r(&now, &now_tm);
     strftime(buf, sizeof(buf), "%b %e %Y", &now_tm);
   }
@@ -162,10 +168,16 @@ static Vector *macro_date(Tokenizer *tokenizer __attribute__((unused))) {
 }
 
 static Vector *macro_time(Tokenizer *tokenizer __attribute__((unused))) {
-  time_t now = time(NULL);
-  struct tm now_tm;
   static char buf[30] = "";
   if (buf[0] == '\0') {
+    time_t now;
+    struct tm now_tm;
+    const char *env = getenv("GIFCC_TIME");
+    if (env != NULL) {
+      now = atol(env);
+    } else {
+      now = time(NULL);
+    }
     localtime_r(&now, &now_tm);
     strftime(buf, sizeof(buf), "%T", &now_tm);
   }
