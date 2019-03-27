@@ -1335,11 +1335,13 @@ static Expr *new_expr_ident(Scope *scope, Token *ident) {
   Expr *expr = new_expr(ty, type, range);
   switch (ty) {
   case EX_STACK_VAR:
-    expr->stack_var = svar;
+    expr->stack_var.def = svar;
+    expr->stack_var.offset = 0;
     break;
   case EX_GLOBAL_VAR:
     expr->global_var.name = gvar != NULL ? gvar->name : name;
     expr->global_var.def = gvar;
+    expr->global_var.offset = 0;
     break;
   case EX_NUM:
     expr->num = *num_val;

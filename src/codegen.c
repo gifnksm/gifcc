@@ -351,15 +351,15 @@ static void emit_push_xmm(int n) {
   emit("  movsd [rsp], xmm%d", n);
 }
 
-static void emit_push_stack_var(StackVar *svar) {
-  int size = get_val_size(svar->type, svar->range);
+static void emit_push_stack_var(StackVar *svar, Type *type, int offset) {
+  int size = get_val_size(type, svar->range);
   emit_stack_sub(align(size, 8));
 
   int src_offset = svar->offset;
   int copy_size = 0;
   while (size - copy_size > 0) {
     const Reg *r = get_int_reg_for_copy(size - copy_size);
-    emit("  mov %s, [rbp - %d]", r->rax, src_offset - copy_size);
+    emit("  mov %s, [rbp - %d]", r->rax, src_offset - copy_size - offset);
     emit("  mov [rsp + %d], %s", copy_size, r->rax);
     copy_size += r->size;
   }
@@ -367,13 +367,14 @@ static void emit_push_stack_var(StackVar *svar) {
 
 static void emit_lval(Expr *expr, const char *reg) {
   if (expr->ty == EX_STACK_VAR) {
-    StackVar *var = expr->stack_var;
+    StackVar *var = expr->stack_var.def;
     assert(var != NULL);
-    emit("  lea %s, [rbp - %d]", reg, var->offset);
+    emit("  lea %s, [rbp - %d]", reg, var->offset - expr->stack_var.offset);
     return;
   }
   if (expr->ty == EX_GLOBAL_VAR) {
-    emit("  lea %s, %s[rip]", reg, expr->global_var.name);
+    emit("  lea %s, %s[rip + %d]", reg, expr->global_var.name,
+         expr->global_var.offset);
     return;
   }
   if (expr->ty == EX_INDIRECT) {
@@ -640,7 +641,8 @@ static void emit_expr_num(Expr *expr) {
 
 static void emit_expr_stack_var(Expr *expr) {
   assert(expr->ty == EX_STACK_VAR);
-  emit_push_stack_var(expr->stack_var);
+  emit_push_stack_var(expr->stack_var.def, expr->val_type,
+                      expr->stack_var.offset);
 }
 
 static void emit_expr_global_var(Expr *expr) {
@@ -654,7 +656,8 @@ static void emit_expr_global_var(Expr *expr) {
 
   while (size - copy_size > 0) {
     const Reg *r = get_int_reg_for_copy(size - copy_size);
-    emit("  mov %s, %s[rip + %d]", r->rax, name, copy_size);
+    emit("  mov %s, %s[rip + %d]", r->rax, name,
+         expr->global_var.offset + copy_size);
     emit("  mov [rsp + %d], %s", copy_size, r->rax);
     copy_size += r->size;
   }
@@ -676,7 +679,7 @@ static void emit_expr_compound(Expr *expr) {
   emit_svar_zero(svar);
   emit_svar_init(svar, 0, init, svar->range);
 
-  emit_push_stack_var(svar);
+  emit_push_stack_var(svar, expr->val_type, 0);
 }
 
 static void emit_expr_stmt(Expr *expr) {

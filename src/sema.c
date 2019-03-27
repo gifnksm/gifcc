@@ -30,6 +30,14 @@ static void walk_initializer(Initializer *init);
   UNARYOP_BODY_ARITH(__VA_ARGS__)                                              \
   UNARYOP_EPILOGUE(__VA_ARGS__)
 
+static void replace_expr(Expr *dest, Expr *src) {
+  Type *type = dest->val_type;
+  const Range *range = dest->range;
+  *dest = *src;
+  dest->val_type = type;
+  dest->range = range;
+}
+
 static void eval_unop(Expr *expr) {
   Expr *operand = expr->unop.operand;
   if (operand->ty != EX_NUM) {
@@ -135,11 +143,7 @@ static void eval_cast(Expr *expr) {
   }
 
   if (is_ptr_type(expr->val_type) && is_ptr_type(operand->val_type)) {
-    Type *type = expr->val_type;
-    const Range *range = expr->range;
-    *expr = *operand;
-    expr->val_type = type;
-    expr->range = range;
+    replace_expr(expr, operand);
     return;
   }
 
@@ -263,6 +267,64 @@ static void eval_cast(Expr *expr) {
 static void eval_binop(Expr *expr) {
   Expr *lhs = expr->binop.lhs;
   Expr *rhs = expr->binop.rhs;
+  if (expr->ty == EX_ADD || expr->ty == EX_SUB) {
+    Expr *gvar = NULL;
+    Expr *svar = NULL;
+    Expr *offset = NULL;
+    if (lhs->ty == EX_NUM && rhs->ty == EX_ADDRESS) {
+      Expr *pointee = rhs->unop.operand;
+      if (pointee->ty == EX_STACK_VAR) {
+        svar = rhs;
+        offset = lhs;
+      } else if (pointee->ty == EX_GLOBAL_VAR) {
+        gvar = rhs;
+        offset = lhs;
+      } else {
+      }
+    } else if (rhs->ty == EX_NUM && lhs->ty == EX_ADDRESS) {
+      Expr *pointee = lhs->unop.operand;
+      if (pointee->ty == EX_STACK_VAR) {
+        svar = lhs;
+        offset = rhs;
+      } else if (pointee->ty == EX_GLOBAL_VAR) {
+        gvar = lhs;
+        offset = rhs;
+      } else {
+      }
+    } else {
+    }
+
+    if (svar != NULL) {
+      assert(svar->ty == EX_ADDRESS && svar->unop.operand->ty == EX_STACK_VAR);
+      int val;
+      SET_NUMBER_VAL(val, &offset->num);
+      expr_t ex = expr->ty;
+      replace_expr(expr, svar);
+      if (ex == EX_ADD) {
+        expr->unop.operand->stack_var.offset += val;
+      } else {
+        assert(ex == EX_SUB);
+        expr->unop.operand->stack_var.offset -= val;
+      }
+      return;
+    }
+
+    if (gvar != NULL) {
+      assert(gvar->ty == EX_ADDRESS && gvar->unop.operand->ty == EX_GLOBAL_VAR);
+      int val;
+      SET_NUMBER_VAL(val, &offset->num);
+      expr_t ex = expr->ty;
+      replace_expr(expr, gvar);
+      if (ex == EX_ADD) {
+        expr->unop.operand->global_var.offset += val;
+      } else {
+        assert(ex == EX_SUB);
+        expr->unop.operand->global_var.offset -= val;
+      }
+      return;
+    }
+  }
+
   if (lhs->ty != EX_NUM || rhs->ty != EX_NUM) {
     return;
   }
@@ -627,14 +689,14 @@ static void walk_expr(Expr *expr) {
 
   case EX_PRE_INC:
   case EX_PRE_DEC:
-  case EX_ADDRESS:
   case EX_INDIRECT:
+  case EX_ADDRESS:
     walk_expr(expr->unop.operand);
     return;
   case EX_PLUS: {
     Expr *operand = expr->unop.operand;
     walk_expr(operand);
-    *expr = *operand;
+    replace_expr(expr, operand);
     return;
   }
   case EX_MINUS:
@@ -664,6 +726,18 @@ static void walk_expr(Expr *expr) {
     return;
   case EX_DOT:
     walk_expr(expr->dot.operand);
+    if (expr->dot.operand->ty == EX_GLOBAL_VAR) {
+      Member *member = expr->dot.member;
+      replace_expr(expr, expr->dot.operand);
+      expr->global_var.offset += member->offset;
+      return;
+    }
+    if (expr->dot.operand->ty == EX_STACK_VAR) {
+      Member *member = expr->dot.member;
+      replace_expr(expr, expr->dot.operand);
+      expr->stack_var.offset += member->offset;
+      return;
+    }
     return;
 
   case EX_ADD:
@@ -790,10 +864,8 @@ static void walk_expr(Expr *expr) {
       } else {
         taken = expr->cond.else_expr;
       }
-      const Range *range = expr->range;
       walk_expr(taken);
-      *expr = *taken;
-      expr->range = range;
+      replace_expr(expr, taken);
       return;
     }
     walk_expr(expr->cond.then_expr);

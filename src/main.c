@@ -128,10 +128,12 @@ static void dump_expr(FILE *fp, Expr *expr, int level) {
     dump_expr_oneline(fp, expr, level, "NUM %s", format_number(expr->num));
     return;
   case EX_STACK_VAR:
-    dump_expr_oneline(fp, expr, level, "STACK_VAR %s", expr->stack_var->name);
+    dump_expr_oneline(fp, expr, level, "STACK_VAR %s+%d",
+                      expr->stack_var.def->name, expr->stack_var.offset);
     return;
   case EX_GLOBAL_VAR:
-    dump_expr_oneline(fp, expr, level, "GLOBAL_VAR %s", expr->global_var.name);
+    dump_expr_oneline(fp, expr, level, "GLOBAL_VAR %s+%d",
+                      expr->global_var.name, expr->global_var.offset);
     return;
   case EX_STR:
     dump_expr_oneline(fp, expr, level, "STR %s:%s",
