@@ -201,6 +201,11 @@ static void dump_expr(FILE *fp, Expr *expr, int level) {
     dump_expr(fp, expr->dot.operand, level + 1);
     dump_expr_end(fp, expr, level);
     return;
+  case EX_ARROW:
+    dump_expr_start(fp, expr, level, "ARROW %s", expr->arrow.member->name);
+    dump_expr(fp, expr->arrow.operand, level + 1);
+    dump_expr_end(fp, expr, level);
+    return;
 
   // binary operator
   case EX_ADD:

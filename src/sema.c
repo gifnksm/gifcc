@@ -738,6 +738,25 @@ static void walk_expr(Expr *expr) {
       expr->stack_var.offset += member->offset;
       return;
     }
+    if (expr->dot.operand->ty == EX_ADDRESS) {
+      Member *member = expr->dot.member;
+      Expr *operand = expr->dot.operand;
+      expr->ty = EX_ARROW;
+      expr->arrow.member = member;
+      expr->arrow.operand = operand->unop.operand;
+      return;
+    }
+    return;
+  case EX_ARROW:
+    walk_expr(expr->dot.operand);
+    if (expr->arrow.operand->ty == EX_ADDRESS) {
+      Member *member = expr->arrow.member;
+      Expr *operand = expr->arrow.operand;
+      expr->ty = EX_DOT;
+      expr->dot.member = member;
+      expr->dot.operand = operand->unop.operand;
+      return;
+    }
     return;
 
   case EX_ADD:

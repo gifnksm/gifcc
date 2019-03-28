@@ -196,7 +196,8 @@ static Expr *new_expr_cond(Scope *scope, Expr *cond, Expr *then_expr,
                            Expr *else_expr, const Range *range);
 static Expr *new_expr_index(Scope *scope, Expr *array, Expr *index,
                             const Range *range);
-static Expr *new_expr_dot(Expr *operand, const char *name, const Range *range);
+static Expr *new_expr_dot(Scope *scope, Expr *operand, const char *name,
+                          const Range *range);
 static Expr *new_expr_arrow(Scope *scope, Expr *operand, const char *name,
                             const Range *range);
 static Stmt *new_stmt(int ty, Type *val_type, const Range *range);
@@ -2002,7 +2003,11 @@ static Expr *new_expr_index(Scope *scope, Expr *array, Expr *index,
                         range);
 }
 
-static Expr *new_expr_dot(Expr *operand, const char *name, const Range *range) {
+static Expr *new_expr_dot(Scope *scope, Expr *operand, const char *name,
+                          const Range *range) {
+  operand = coerce_array2ptr(scope, operand);
+  operand = coerce_func2ptr(scope, operand);
+
   if (operand->val_type->ty != TY_STRUCT && operand->val_type->ty != TY_UNION) {
     range_error(range, "構造体または共用体以外のメンバへのアクセスです");
   }
@@ -2010,6 +2015,10 @@ static Expr *new_expr_dot(Expr *operand, const char *name, const Range *range) {
   StructBody *body = operand->val_type->struct_body;
   Member *member =
       body->member_name_map ? map_get(body->member_name_map, name) : NULL;
+  if (member == NULL) {
+    range_error(range, "存在しないメンバへのアクセスです: %s %s",
+                format_type(operand->val_type, false), name);
+  }
 
   Expr *expr = new_expr(EX_DOT, member->type, range);
   expr->dot.operand = operand;
@@ -2035,11 +2044,11 @@ static Expr *new_expr_arrow(Scope *scope, Expr *operand, const char *name,
     range_error(range, "存在しないメンバへのアクセスです: %s %s",
                 format_type(operand->val_type, false), name);
   }
-  Expr *expr =
-      new_expr(EX_ADD, new_type_ptr(member->type, EMPTY_TYPE_QUALIFIER), range);
-  expr->binop.lhs = operand;
-  expr->binop.rhs = new_expr_num(new_number_size_t(member->offset), range);
-  return new_expr_unary(scope, EX_INDIRECT, expr, range);
+
+  Expr *expr = new_expr(EX_ARROW, member->type, range);
+  expr->arrow.operand = operand;
+  expr->arrow.member = member;
+  return expr;
 }
 
 static Stmt *new_stmt(int ty, Type *val_type, const Range *range) {
@@ -2394,7 +2403,7 @@ static Expr *postfix_expression(Tokenizer *tokenizer, Scope *scope) {
 
     if (token_consume(tokenizer, '.')) {
       Token *member = token_expect(tokenizer, TK_IDENT);
-      expr = new_expr_dot(expr, member->ident,
+      expr = new_expr_dot(scope, expr, member->ident,
                           range_join(expr->range, member->range));
       continue;
     }
