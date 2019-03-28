@@ -687,10 +687,22 @@ static void walk_expr(Expr *expr) {
     walk_stmt(expr->stmt);
     return;
 
+  case EX_INDIRECT:
+    walk_expr(expr->unop.operand);
+    if (expr->unop.operand->ty == EX_ADDRESS) {
+      replace_expr(expr, expr->unop.operand->unop.operand);
+      return;
+    }
+    return;
+  case EX_ADDRESS:
+    walk_expr(expr->unop.operand);
+    if (expr->unop.operand->ty == EX_INDIRECT) {
+      replace_expr(expr, expr->unop.operand->unop.operand);
+      return;
+    }
+    return;
   case EX_PRE_INC:
   case EX_PRE_DEC:
-  case EX_INDIRECT:
-  case EX_ADDRESS:
     walk_expr(expr->unop.operand);
     return;
   case EX_PLUS: {
@@ -744,6 +756,7 @@ static void walk_expr(Expr *expr) {
       expr->ty = EX_ARROW;
       expr->arrow.member = member;
       expr->arrow.operand = operand->unop.operand;
+      walk_expr(expr);
       return;
     }
     return;
@@ -755,6 +768,7 @@ static void walk_expr(Expr *expr) {
       expr->ty = EX_DOT;
       expr->dot.member = member;
       expr->dot.operand = operand->unop.operand;
+      walk_expr(expr);
       return;
     }
     return;
