@@ -152,6 +152,7 @@ static void emit_expr_compound(Expr *expr);
 static void emit_expr_stmt(Expr *expr);
 static void emit_expr_call(Expr *expr);
 static void emit_expr_dot(Expr *expr);
+static void emit_expr_arrow(Expr *expr);
 static void emit_expr_comma(Expr *expr);
 static void emit_expr_log_and(Expr *expr);
 static void emit_expr_log_or(Expr *expr);
@@ -387,6 +388,12 @@ static void emit_lval(Expr *expr, const char *reg) {
     emit("  lea %s, [%s + %d]", reg, reg, expr->dot.member->offset);
     return;
   }
+  if (expr->ty == EX_ARROW) {
+    emit_expr(expr->arrow.operand);
+    emit_pop(Reg8.rax);
+    emit("  lea %s, [%s + %d]", reg, Reg8.rax, expr->arrow.member->offset);
+    return;
+  }
   if (expr->ty == EX_COMMA) {
     Vector *exprs = expr->comma.exprs;
     for (int i = 0; i < vec_len(exprs); i++) {
@@ -456,6 +463,9 @@ static void emit_expr(Expr *expr) {
     return;
   case EX_DOT:
     emit_expr_dot(expr);
+    return;
+  case EX_ARROW:
+    emit_expr_arrow(expr);
     return;
   case EX_COMMA:
     emit_expr_comma(expr);
@@ -863,7 +873,7 @@ static void emit_expr_dot(Expr *expr) {
   int offset = member->offset;
   int mem_size = get_val_size(member->type, expr->range);
   int size_diff = align(size, 8) - align(mem_size, 8);
-  emit_expr(expr->dot.operand);
+  emit_expr(operand);
 
   int copy_size = 0;
   while (mem_size - copy_size > 0) {
@@ -880,6 +890,28 @@ static void emit_expr_dot(Expr *expr) {
     copy_size += r->size;
   }
   emit_stack_add(size_diff);
+}
+
+static void emit_expr_arrow(Expr *expr) {
+  assert(expr->ty == EX_ARROW);
+
+  Expr *operand = expr->arrow.operand;
+  Member *member = expr->arrow.member;
+  int offset = member->offset;
+  int mem_size = get_val_size(member->type, expr->range);
+
+  emit_expr(operand);
+  emit_pop(Reg8.rax);
+
+  int copy_size = 0;
+  while (mem_size - copy_size > 0) {
+    const Reg *r = get_int_reg_for_copy(mem_size - copy_size);
+    emit("  mov %s, [%s + %d]", r->rdi, Reg8.rax, offset + copy_size);
+    emit("  mov [rsp - %d], %s", align(mem_size, 8) - copy_size, r->rdi);
+    copy_size += r->size;
+  }
+
+  emit_stack_sub(align(mem_size, 8));
 }
 
 static void emit_expr_comma(Expr *expr) {
