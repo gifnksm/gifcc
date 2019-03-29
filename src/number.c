@@ -138,6 +138,43 @@ Number new_number_ptrdiff_t(ptrdiff_t val) {
 }
 Number new_number_wchar_t(wchar_t val) { return new_number(TY_WCHAR_T, val); }
 
+static bool is_number_has_int_value(Number num, unsigned long long expected) {
+  switch (num.type) {
+  case TY_BOOL:
+  case TY_CHAR:
+  case TY_S_CHAR:
+  case TY_S_INT:
+  case TY_S_SHORT:
+  case TY_S_LONG:
+  case TY_S_LLONG:
+  case TY_U_CHAR:
+  case TY_U_INT:
+  case TY_U_SHORT:
+  case TY_U_LONG:
+  case TY_U_LLONG:
+  case TY_PTR:
+  case TY_ENUM: {
+    unsigned long long val;
+    SET_NUMBER_VAL(val, &num);
+    return val == expected;
+  }
+
+  case TY_FLOAT:
+  case TY_DOUBLE:
+  case TY_LDOUBLE:
+  case TY_STRUCT:
+  case TY_UNION:
+  case TY_ARRAY:
+  case TY_VOID:
+  case TY_FUNC:
+  case TY_BUILTIN:
+    break;
+  }
+  return false;
+}
+
+bool is_number_zero(Number num) { return is_number_has_int_value(num, 0); }
+
 char *format_number(Number num) {
   switch (num.type) {
   case TY_BOOL:

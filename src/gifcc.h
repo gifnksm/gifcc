@@ -737,6 +737,7 @@ Number new_number_int(int val);
 Number new_number_size_t(size_t val);
 Number new_number_ptrdiff_t(ptrdiff_t val);
 Number new_number_wchar_t(wchar_t val);
+bool is_number_zero(Number num);
 char *format_number(Number num);
 
 // tokenize.c
