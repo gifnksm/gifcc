@@ -901,7 +901,7 @@ static void emit_expr_dot(Expr *expr) {
   Member *member = expr->dot.member;
   int size = get_val_size(operand->val_type, operand->range);
   int offset = member->offset;
-  int mem_size = get_val_size(member->type, expr->range);
+  int mem_size = get_val_size(expr->val_type, expr->range);
   int size_diff = align(size, 8) - align(mem_size, 8);
   emit_expr(operand);
 

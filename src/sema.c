@@ -690,7 +690,8 @@ static void walk_expr(Expr *expr) {
   case EX_INDIRECT:
     walk_expr(expr->unop.operand);
     if (expr->unop.operand->ty == EX_ADDRESS) {
-      replace_expr(expr, expr->unop.operand->unop.operand);
+      Expr *operand = expr->unop.operand->unop.operand;
+      replace_expr(expr, operand);
       return;
     }
     return;
