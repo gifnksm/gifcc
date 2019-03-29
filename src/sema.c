@@ -2,6 +2,7 @@
 
 #include <string.h>
 
+static void walk_expr(Expr *expr);
 static void walk_stmt(Stmt *stmt);
 static void walk_initializer(Initializer *init);
 
@@ -267,6 +268,33 @@ static void eval_cast(Expr *expr) {
 static void eval_binop(Expr *expr) {
   Expr *lhs = expr->binop.lhs;
   Expr *rhs = expr->binop.rhs;
+  if (lhs->ty == EX_NUM) {
+    if (is_number_zero(lhs->num)) {
+      if (expr->ty == EX_ADD) {
+        replace_expr(expr, rhs);
+        return;
+      }
+      if (expr->ty == EX_SUB) {
+        expr->ty = EX_MINUS;
+        expr->unop.operand = rhs;
+        walk_expr(expr);
+        return;
+      }
+    }
+  }
+  if (rhs->ty == EX_NUM) {
+    if (is_number_zero(rhs->num)) {
+      if (expr->ty == EX_ADD) {
+        replace_expr(expr, lhs);
+        return;
+      }
+      if (expr->ty == EX_SUB) {
+        replace_expr(expr, lhs);
+        return;
+      }
+    }
+  }
+
   if (expr->ty == EX_ADD || expr->ty == EX_SUB) {
     Expr *gvar = NULL;
     Expr *svar = NULL;
