@@ -152,22 +152,22 @@ static void dump_expr(FILE *fp, Expr *expr, int level) {
 
   // prefix unary operator
   case EX_PRE_INC:
-    dump_unop_expr(fp, expr, "[++(PRE)]", level);
+    dump_unop_expr(fp, expr, "PRE_INC", level);
     return;
   case EX_PRE_DEC:
-    dump_unop_expr(fp, expr, "[--(PRE)]", level);
+    dump_unop_expr(fp, expr, "PRE_DEC", level);
     return;
   case EX_ADDRESS:
-    dump_unop_expr(fp, expr, "[&]", level);
+    dump_unop_expr(fp, expr, "ADDRESS", level);
     return;
   case EX_INDIRECT:
-    dump_unop_expr(fp, expr, "[*]", level);
+    dump_unop_expr(fp, expr, "INDIRECT", level);
     return;
   case EX_PLUS:
-    dump_unop_expr(fp, expr, "[+]", level);
+    dump_unop_expr(fp, expr, "PLUS", level);
     return;
   case EX_MINUS:
-    dump_unop_expr(fp, expr, "[-]", level);
+    dump_unop_expr(fp, expr, "MINUS", level);
     return;
   case EX_NOT:
     dump_unop_expr(fp, expr, "[~]", level);
@@ -191,10 +191,10 @@ static void dump_expr(FILE *fp, Expr *expr, int level) {
     dump_expr_end(fp, expr, level);
     return;
   case EX_POST_INC:
-    dump_unop_expr(fp, expr, "[++(POST)]", level);
+    dump_unop_expr(fp, expr, "POST_INC", level);
     return;
   case EX_POST_DEC:
-    dump_unop_expr(fp, expr, "[--(POST)]", level);
+    dump_unop_expr(fp, expr, "POST_DEC", level);
     return;
   case EX_DOT:
     dump_expr_start(fp, expr, level, "DOT %s", expr->dot.member->name);
