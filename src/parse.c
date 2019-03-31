@@ -94,7 +94,10 @@ typedef struct Designator {
   designator_t type;
   const Range *range;
   union {
-    Number index;
+    struct {
+      Number first;
+      Number last;
+    } index;
     const char *member;
   };
 } Designator;
@@ -1971,7 +1974,7 @@ static Expr *new_expr_cond(Scope *scope, Expr *cond, Expr *then_expr,
     val_type = else_expr->val_type;
   } else if (then_expr->val_type->ty == TY_VOID ||
              else_expr->val_type->ty == TY_VOID) {
-    // NonStandard/GNU? conditional expressions with only one void side
+    // NonStandard/GNU?: conditional expressions with only one void side
     val_type = new_type(TY_VOID, EMPTY_TYPE_QUALIFIER);
     then_expr = new_expr_cast(scope, val_type, then_expr, then_expr->range);
     else_expr = new_expr_cast(scope, val_type, else_expr, else_expr->range);
@@ -2336,7 +2339,7 @@ static Expr *primary_expression(Tokenizer *tokenizer, Scope *scope) {
   }
 
   if ((token = token_consume(tokenizer, '(')) != NULL) {
-    // NonStandard/GNU Statement Exprs
+    // NonStandard/GNU: Statement Exprs
     if (token_peek(tokenizer)->ty == '{') {
       Scope *inner = new_inner_scope(scope);
       Stmt *stmt = compound_statement(tokenizer, inner);
@@ -3088,13 +3091,20 @@ static void abstract_declarator(Scope *scope, Tokenizer *tokenizer,
 static Designator *designator(Tokenizer *tokenizer, Scope *scope) {
   Token *token;
   if ((token = token_consume(tokenizer, '[')) != NULL) {
-    Number index = integer_constant_expression(tokenizer, scope);
+    Number first = integer_constant_expression(tokenizer, scope);
+    Number last = first;
+    if (token_consume(tokenizer, TK_ELIPSIS)) {
+      // NonStandard/GNU: designated initializers for initializing a range of
+      // elements
+      last = integer_constant_expression(tokenizer, scope);
+    }
     Token *end = token_expect(tokenizer, ']');
     const Range *range = range_join(token->range, end->range);
 
     Designator *desig = NEW(Designator);
     desig->type = DESIG_INDEX;
-    desig->index = index;
+    desig->index.first = first;
+    desig->index.last = last;
     desig->range = range;
     return desig;
   }
@@ -3273,7 +3283,8 @@ static void assign_union_initializer(Scope *scope, Vector *list, bool is_root,
   }
 }
 
-static bool consume_array_designator(Type *type, InitElem *elem, int *elemidx) {
+static bool consume_array_designator(Type *type, InitElem *elem, int *first,
+                                     int *last) {
   assert(type->ty == TY_ARRAY);
 
   if (elem->designation == NULL) {
@@ -3292,11 +3303,12 @@ static bool consume_array_designator(Type *type, InitElem *elem, int *elemidx) {
         "field designator cannot initialize non-struct, non-union type: %s",
         format_type(type, false));
   }
-  SET_NUMBER_VAL(*elemidx, &desig->index);
-  if (type->array.len >= 0 && *elemidx >= type->array.len) {
+  SET_NUMBER_VAL(*first, &desig->index.first);
+  SET_NUMBER_VAL(*last, &desig->index.last);
+  if (type->array.len >= 0 && *last >= type->array.len) {
     range_error(desig->range,
-                "array designator index (%d) exceeds array bounds (%d)",
-                *elemidx, type->array.len);
+                "array designator index (%d) exceeds array bounds (%d)", *last,
+                type->array.len);
   }
   return true;
 }
@@ -3359,21 +3371,24 @@ static void assign_array_initializer(Scope *scope, Vector *list, bool is_root,
     }
     is_first = false;
 
-    if (!consume_array_designator(type, elem, &elemidx)) {
+    int first = elemidx, last = elemidx;
+    if (!consume_array_designator(type, elem, &first, &last)) {
       if (type->array.len >= 0 && elemidx >= type->array.len) {
         break;
       }
     }
 
     if (type->array.len < 0) {
-      vec_extend((*init)->elements, elemidx + 1);
+      vec_extend((*init)->elements, last + 1);
     }
 
     Initializer *eleminit = NULL;
     assign_initializer_list(scope, list, false, type->array.elem, range,
                             &eleminit);
-    vec_set((*init)->elements, elemidx, eleminit);
-    elemidx++;
+    for (int i = first; i <= last; i++) {
+      vec_set((*init)->elements, i, eleminit);
+    }
+    elemidx = last + 1;
   }
 
   if (type->array.len < 0) {

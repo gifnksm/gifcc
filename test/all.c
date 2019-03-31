@@ -2657,6 +2657,27 @@ static void test85(void) {
   }
 }
 
+static void test86(void) {
+  int a[] = {
+      [0 ... 4] = 10,
+      [5 ... 9] = 20,
+      [15 ... 19] = 30,
+  };
+  CHECK_INT(20 * sizeof(int), sizeof(a));
+  for (int i = 0; i < 5; i++) {
+    CHECK_INT(10, a[i]);
+  }
+  for (int i = 5; i < 10; i++) {
+    CHECK_INT(20, a[i]);
+  }
+  for (int i = 10; i < 15; i++) {
+    CHECK_INT(0, a[i]);
+  }
+  for (int i = 15; i < 20; i++) {
+    CHECK_INT(30, a[i]);
+  }
+}
+
 int main(int argc, char *argv[]) {
   Test test_list[] = {
       TEST(test01), TEST(test02), TEST(test03), TEST(test04), TEST(test05),
@@ -2676,7 +2697,7 @@ int main(int argc, char *argv[]) {
       TEST(test71), TEST(test72), TEST(test73), TEST(test74), TEST(test75),
       TEST(test76), TEST(test77), TEST(test78), TEST(test79), TEST(test80),
       TEST(test81), TEST(test82), TEST(test83), TEST(test84), TEST(test85),
-      {NULL, NULL},
+      TEST(test86), {NULL, NULL},
   };
   RUN_TEST(argc, argv, test_list);
 }
