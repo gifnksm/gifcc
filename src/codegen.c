@@ -415,13 +415,15 @@ static void emit_lval(Expr *expr, const char *reg) {
   }
   if (expr->ty == EX_DOT) {
     emit_lval(expr->dot.operand, reg);
-    emit("  lea %s, %s", reg, addr2(reg, expr->dot.member->offset));
+    int offset = get_members_offset(expr->dot.members);
+    emit("  lea %s, %s", reg, addr2(reg, offset));
     return;
   }
   if (expr->ty == EX_ARROW) {
     emit_expr(expr->arrow.operand);
     emit_pop(Reg8.rax);
-    emit("  lea %s, %s", reg, addr2(Reg8.rax, expr->arrow.member->offset));
+    int offset = get_members_offset(expr->dot.members);
+    emit("  lea %s, %s", reg, addr2(Reg8.rax, offset));
     return;
   }
   if (expr->ty == EX_COMMA) {
@@ -898,9 +900,8 @@ static void emit_expr_dot(Expr *expr) {
   assert(expr->ty == EX_DOT);
 
   Expr *operand = expr->dot.operand;
-  Member *member = expr->dot.member;
+  int offset = get_members_offset(expr->arrow.members);
   int size = get_val_size(operand->val_type, operand->range);
-  int offset = member->offset;
   int mem_size = get_val_size(expr->val_type, expr->range);
   int size_diff = align(size, 8) - align(mem_size, 8);
   emit_expr(operand);
@@ -926,9 +927,8 @@ static void emit_expr_arrow(Expr *expr) {
   assert(expr->ty == EX_ARROW);
 
   Expr *operand = expr->arrow.operand;
-  Member *member = expr->arrow.member;
-  int offset = member->offset;
-  int mem_size = get_val_size(member->type, expr->range);
+  int offset = get_members_offset(expr->arrow.members);
+  int mem_size = get_val_size(expr->val_type, expr->range);
 
   emit_expr(operand);
   emit_pop(Reg8.rax);
