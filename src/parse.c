@@ -206,7 +206,7 @@ static Stmt *new_stmt_expr(Expr *expr, const Range *range);
 static Stmt *new_stmt_if(Expr *cond, Stmt *then_stmt, Stmt *else_stmt,
                          const Range *range);
 static Stmt *new_stmt_switch(Expr *cond, Stmt *body, const Range *range);
-static Stmt *new_stmt_case(Expr *expr, Stmt *body, const Range *range);
+static Stmt *new_stmt_case(Number val, Stmt *body, const Range *range);
 static Stmt *new_stmt_default(Stmt *body, const Range *range);
 static Stmt *new_stmt_label(FuncCtxt *fcx, char *name, Stmt *body,
                             const Range *range);
@@ -2090,10 +2090,10 @@ static Stmt *new_stmt_switch(Expr *cond, Stmt *body, const Range *range) {
   return stmt;
 }
 
-static Stmt *new_stmt_case(Expr *expr, Stmt *body, const Range *range) {
+static Stmt *new_stmt_case(Number val, Stmt *body, const Range *range) {
   Stmt *stmt =
       new_stmt(ST_CASE, new_type(TY_VOID, EMPTY_TYPE_QUALIFIER), range);
-  stmt->expr = expr;
+  stmt->case_val = val;
   stmt->label = make_label("case");
   stmt->body = body;
   return stmt;
@@ -2627,9 +2627,19 @@ Expr *constant_expression(Tokenizer *tokenizer, Scope *scope) {
   Expr *expr = conditional_expression(tokenizer, scope);
   sema_expr(expr);
   if (expr->ty != EX_NUM) {
-    range_error(expr->range, "定数式ではありません");
+    range_error(expr->range, "not a constant expression");
   }
   return expr;
+}
+
+Number integer_constant_expression(Tokenizer *tokenizer, Scope *scope) {
+  Expr *expr = constant_expression(tokenizer, scope);
+  assert(expr->ty == EX_NUM);
+  if (!is_integer_type(expr->val_type)) {
+    range_error(expr->range,
+                "expression is not an integer constant expression");
+  }
+  return expr->num;
 }
 
 static Vector *declaration(Tokenizer *tokenizer, Scope *scope) {
@@ -2809,11 +2819,10 @@ static void struct_declarator(Scope *scope, Tokenizer *tokenizer,
                   format_type(*type, false));
     }
 
-    Expr *expr = constant_expression(tokenizer, scope);
-    assert(expr->ty == EX_NUM);
+    Number num = integer_constant_expression(tokenizer, scope);
     int bit_width;
     int size = get_val_size(*type, *range);
-    SET_NUMBER_VAL(bit_width, &expr->num);
+    SET_NUMBER_VAL(bit_width, &num);
 
     if (bit_width < 0) {
       range_error(*range, "bit-field has negative width (%d)", bit_width);
@@ -2887,13 +2896,8 @@ static void enumerator(Scope *scope, Tokenizer *tokenizer, Type *type,
                        int *val) {
   Token *ident = token_expect(tokenizer, TK_IDENT);
   if (token_consume(tokenizer, '=')) {
-    Expr *expr = constant_expression(tokenizer, scope);
-    expr = new_expr_cast(scope, type, expr, expr->range);
-    sema_expr(expr);
-    if (expr->ty != EX_NUM) {
-      range_error(expr->range, "列挙型の値が定数式の数値ではありません");
-    }
-    SET_NUMBER_VAL(*val, &expr->num);
+    Number num = integer_constant_expression(tokenizer, scope);
+    SET_NUMBER_VAL(*val, &num);
   }
   token_consume(tokenizer, ',');
 
@@ -2984,9 +2988,8 @@ static void direct_declarator_common(Scope *scope, Tokenizer *tokenizer,
       } else if (token_peek(tokenizer)->ty == ']') {
         *placeholder = *new_type_unsized_array(inner, tq);
       } else {
-        Expr *len = constant_expression(tokenizer, scope);
-        assert(len->ty == EX_NUM);
-        *placeholder = *new_type_array(inner, len->num, tq);
+        Number num = integer_constant_expression(tokenizer, scope);
+        *placeholder = *new_type_array(inner, num, tq);
       }
       placeholder = inner;
       Token *end = token_expect(tokenizer, ']');
@@ -3083,22 +3086,23 @@ static void abstract_declarator(Scope *scope, Tokenizer *tokenizer,
 }
 
 static Designator *designator(Tokenizer *tokenizer, Scope *scope) {
-  Designator *desig = NEW(Designator);
-
   Token *token;
   if ((token = token_consume(tokenizer, '[')) != NULL) {
-    desig->type = DESIG_INDEX;
-    Expr *index = constant_expression(tokenizer, scope);
-    assert(index->ty == EX_NUM);
-    desig->index = index->num;
+    Number index = integer_constant_expression(tokenizer, scope);
     Token *end = token_expect(tokenizer, ']');
-    desig->range = range_join(token->range, end->range);
+    const Range *range = range_join(token->range, end->range);
+
+    Designator *desig = NEW(Designator);
+    desig->type = DESIG_INDEX;
+    desig->index = index;
+    desig->range = range;
     return desig;
   }
 
   if ((token = token_consume(tokenizer, '.')) != NULL) {
-    desig->type = DESIG_MEMBER;
     Token *ident = token_expect(tokenizer, TK_IDENT);
+    Designator *desig = NEW(Designator);
+    desig->type = DESIG_MEMBER;
     desig->member = ident->ident;
     desig->range = range_join(token->range, ident->range);
     return desig;
@@ -3489,11 +3493,11 @@ static Stmt *statement(Tokenizer *tokenizer, Scope *scope) {
   }
   case TK_CASE: {
     token_succ(tokenizer);
-    Expr *expr = constant_expression(tokenizer, scope);
+    Number num = integer_constant_expression(tokenizer, scope);
     token_expect(tokenizer, ':');
     Stmt *body = statement(tokenizer, scope);
     Stmt *stmt =
-        new_stmt_case(expr, body, range_join(start->range, body->range));
+        new_stmt_case(num, body, range_join(start->range, body->range));
     if (vec_len(scope->func_ctxt->switches) <= 0) {
       range_error(stmt->range, "switch文中でない箇所にcase文があります");
     }
