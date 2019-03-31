@@ -32,7 +32,7 @@ LCOV_OPT=\
 GENHTML_OPT=\
   --rc lcov_branch_coverage=1
 
-LDFLAGS=
+LDFLAGS=-no-pie
 
 ifdef ASAN
   STAGE1_CFLAGS += -fsanitize=address
