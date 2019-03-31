@@ -441,8 +441,7 @@ static void dump_stmt(FILE *fp, Stmt *stmt, int level) {
     dump_stmt_end(fp, stmt, level);
     return;
   case ST_CASE:
-    dump_stmt_start(fp, stmt, level, "CASE");
-    dump_expr(fp, stmt->expr, level + 1);
+    dump_stmt_start(fp, stmt, level, "CASE %s", format_number(stmt->case_val));
     dump_stmt(fp, stmt->body, level + 1);
     dump_stmt_end(fp, stmt, level);
     return;

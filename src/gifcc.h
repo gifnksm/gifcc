@@ -550,9 +550,11 @@ typedef struct Stmt {
   struct Stmt *default_case;
 
   // ST_EXPR:   <expr>;
-  // ST_CASE:   case <expr>:
-  // ST_RETURN: return <expr>:
+  // ST_RETURN: return <expr>;
   struct Expr *expr;
+
+  // ST_CASE: case <case_val>:
+  struct Number case_val;
 
   // ST_COMPOUND
   Vector *stmts;
@@ -792,6 +794,7 @@ Scope *new_pp_scope(const Tokenizer *tokenizer);
 int get_val_size(const Type *ty, const Range *range);
 int get_val_align(const Type *ty, const Range *range);
 Expr *constant_expression(Tokenizer *tokenizer, Scope *scope);
+Number integer_constant_expression(Tokenizer *tokenizer, Scope *scope);
 TranslationUnit *parse(Tokenizer *tokenizer);
 
 // sema.c

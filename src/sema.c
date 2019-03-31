@@ -1000,7 +1000,6 @@ static void walk_stmt(Stmt *stmt) {
     walk_stmt(stmt->body);
     return;
   case ST_CASE:
-    walk_expr(stmt->expr);
     walk_stmt(stmt->body);
     return;
   case ST_DEFAULT:

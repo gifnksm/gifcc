@@ -1836,14 +1836,15 @@ static void emit_stmt(Stmt *stmt, bool leave_value) {
     const Reg *r = get_int_reg(stmt->cond->val_type, stmt->cond->range);
     emit_expr(stmt->cond);
     for (int i = 0; i < vec_len(stmt->cases); i++) {
-      Stmt *case_expr = vec_get(stmt->cases, i);
-      emit_expr(case_expr->expr);
-      emit_pop(Reg8.rax);
+      Stmt *case_stmt = vec_get(stmt->cases, i);
+      assert(case_stmt->ty == ST_CASE);
+      emit("  mov %s, %s", Reg8.rax,
+           num2str(case_stmt->case_val, case_stmt->range));
       emit_pop(Reg8.rdi);
       range_assert(stmt->range, stack_pos == base_stack_pos,
                    "stack position mismatch");
       emit("  cmp %s, %s", r->rax, r->rdi);
-      emit("  je %s", case_expr->label);
+      emit("  je %s", case_stmt->label);
       emit_push(Reg8.rdi);
     }
     emit_pop(Reg8.rdi);
