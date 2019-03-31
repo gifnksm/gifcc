@@ -765,42 +765,56 @@ static void walk_expr(Expr *expr) {
   case EX_POST_DEC:
     walk_expr(expr->unop.operand);
     return;
-  case EX_DOT:
-    walk_expr(expr->dot.operand);
-    if (expr->dot.operand->ty == EX_GLOBAL_VAR) {
-      Member *member = expr->dot.member;
-      replace_expr(expr, expr->dot.operand);
-      expr->global_var.offset += member->offset;
+  case EX_DOT: {
+    Expr *operand = expr->dot.operand;
+    Vector *members = expr->dot.members;
+    walk_expr(operand);
+    if (operand->ty == EX_GLOBAL_VAR) {
+      int offset = get_members_offset(expr->dot.members);
+      replace_expr(expr, operand);
+      expr->global_var.offset += offset;
       return;
     }
-    if (expr->dot.operand->ty == EX_STACK_VAR) {
-      Member *member = expr->dot.member;
-      replace_expr(expr, expr->dot.operand);
-      expr->stack_var.offset += member->offset;
+    if (operand->ty == EX_STACK_VAR) {
+      int offset = get_members_offset(expr->dot.members);
+      replace_expr(expr, operand);
+      expr->stack_var.offset += offset;
       return;
     }
-    if (expr->dot.operand->ty == EX_ADDRESS) {
-      Member *member = expr->dot.member;
-      Expr *operand = expr->dot.operand;
+    if (operand->ty == EX_ADDRESS) {
       expr->ty = EX_ARROW;
-      expr->arrow.member = member;
+      expr->arrow.members = members;
       expr->arrow.operand = operand->unop.operand;
       walk_expr(expr);
       return;
     }
+    if (operand->ty == EX_DOT) {
+      vec_append(operand->dot.members, members);
+      replace_expr(expr, operand);
+      walk_expr(expr);
+      return;
+    }
+    if (operand->ty == EX_ARROW) {
+      vec_append(operand->arrow.members, members);
+      replace_expr(expr, operand);
+      walk_expr(expr);
+      return;
+    }
     return;
-  case EX_ARROW:
-    walk_expr(expr->dot.operand);
-    if (expr->arrow.operand->ty == EX_ADDRESS) {
-      Member *member = expr->arrow.member;
-      Expr *operand = expr->arrow.operand;
+  }
+  case EX_ARROW: {
+    Expr *operand = expr->arrow.operand;
+    Vector *members = expr->arrow.members;
+    walk_expr(operand);
+    if (operand->ty == EX_ADDRESS) {
       expr->ty = EX_DOT;
-      expr->dot.member = member;
+      expr->dot.members = members;
       expr->dot.operand = operand->unop.operand;
       walk_expr(expr);
       return;
     }
     return;
+  }
 
   case EX_ADD:
   case EX_SUB:

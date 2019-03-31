@@ -2549,17 +2549,19 @@ static void test77(void) {
 }
 
 typedef struct Test78_S {
-  int a;
-  int b;
-  int c;
+  struct {
+    int a;
+    int b;
+    int c;
+  } x;
 } Test78_S;
 
 static Test78_S test78_f(void) { return (Test78_S){1, 2, 3}; }
 
 static void test78(void) {
-  CHECK_INT(6, test78_f().a + test78_f().b + test78_f().c);
+  CHECK_INT(6, test78_f().x.a + test78_f().x.b + test78_f().x.c);
   Test78_S s = test78_f();
-  CHECK_INT(6, s.a + s.b + s.c);
+  CHECK_INT(6, s.x.a + s.x.b + s.x.c);
 }
 
 static void test79(void) {

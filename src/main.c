@@ -196,16 +196,36 @@ static void dump_expr(FILE *fp, Expr *expr, int level) {
   case EX_POST_DEC:
     dump_unop_expr(fp, expr, "POST_DEC", level);
     return;
-  case EX_DOT:
-    dump_expr_start(fp, expr, level, "DOT %s", expr->dot.member->name);
+  case EX_DOT: {
+    String *s = new_string();
+    for (int i = 0; i < vec_len(expr->dot.members); i++) {
+      Member *m = vec_get(expr->dot.members, i);
+      if (i > 0) {
+        str_push(s, '.');
+      }
+      str_append(s, m->name);
+    }
+    str_push(s, '\0');
+    dump_expr_start(fp, expr, level, "DOT %s", str_get_raw(s));
     dump_expr(fp, expr->dot.operand, level + 1);
     dump_expr_end(fp, expr, level);
     return;
-  case EX_ARROW:
-    dump_expr_start(fp, expr, level, "ARROW %s", expr->arrow.member->name);
+  }
+  case EX_ARROW: {
+    String *s = new_string();
+    for (int i = 0; i < vec_len(expr->arrow.members); i++) {
+      Member *m = vec_get(expr->arrow.members, i);
+      if (i > 0) {
+        str_push(s, '.');
+      }
+      str_append(s, m->name);
+    }
+    str_push(s, '\0');
+    dump_expr_start(fp, expr, level, "ARROW %s", str_get_raw(s));
     dump_expr(fp, expr->arrow.operand, level + 1);
     dump_expr_end(fp, expr, level);
     return;
+  }
 
   // binary operator
   case EX_ADD:

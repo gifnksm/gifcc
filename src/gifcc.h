@@ -451,13 +451,13 @@ typedef struct Expr {
     // EX_DOT
     struct {
       Expr *operand;
-      Member *member;
+      Vector *members;
     } dot;
 
     // EX_ARROW
     struct {
       Expr *operand;
-      Member *member;
+      Vector *members;
     } arrow;
 
     // EX_COND
@@ -805,6 +805,15 @@ void gen(FILE *fp, TranslationUnit *tunit);
 // inline functions
 static inline char *get_label(Function *func, char *name) {
   return map_get(func->label_map, name);
+}
+
+static inline int get_members_offset(Vector *members) {
+  int offset = 0;
+  for (int i = 0; i < vec_len(members); i++) {
+    Member *member = vec_get(members, i);
+    offset += member->offset;
+  }
+  return offset;
 }
 
 #endif // GIFCC_H

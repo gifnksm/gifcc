@@ -2022,7 +2022,8 @@ static Expr *new_expr_dot(Scope *scope, Expr *operand, const char *name,
 
   Expr *expr = new_expr(EX_DOT, member->type, range);
   expr->dot.operand = operand;
-  expr->dot.member = member;
+  expr->dot.members = new_vector();
+  vec_push(expr->dot.members, member);
   return expr;
 }
 
@@ -2047,7 +2048,8 @@ static Expr *new_expr_arrow(Scope *scope, Expr *operand, const char *name,
 
   Expr *expr = new_expr(EX_ARROW, member->type, range);
   expr->arrow.operand = operand;
-  expr->arrow.member = member;
+  expr->arrow.members = new_vector();
+  vec_push(expr->arrow.members, member);
   return expr;
 }
 
