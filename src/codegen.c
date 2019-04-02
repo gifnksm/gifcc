@@ -33,57 +33,75 @@ typedef struct {
   const char *r11;
 } Reg;
 
+const struct {
+  const char *rbp;
+  const char *rsp;
+  const char *rip;
+} R = {
+    .rbp = "%rbp",
+    .rsp = "%rsp",
+    .rip = "%rip",
+};
+
+const char *SseReg[] = {
+    "%xmm0", "%xmm1", "%xmm2", "%xmm3", "%xmm4", "%xmm5", "%xmm6", "%xmm7",
+};
+const char *X87Reg[] = {
+    "%st(0)", "%st(1)", "%st(2)", "%st(3)",
+    "%st(4)", "%st(5)", "%st(6)", "%st(7)",
+};
+
 const Reg Reg8 = {
     .s.size = 8,
     .s.ptr = "QWORD PTR",
-    .rax = "rax",
-    .rdi = "rdi",
-    .rsi = "rsi",
-    .rdx = "rdx",
-    .rcx = "rcx",
-    .r8 = "r8",
-    .r9 = "r9",
-    .r10 = "r10",
-    .r11 = "r11",
+    .rax = "%rax",
+    .rdi = "%rdi",
+    .rsi = "%rsi",
+    .rdx = "%rdx",
+    .rcx = "%rcx",
+    .r8 = "%r8",
+    .r9 = "%r9",
+    .r10 = "%r10",
+    .r11 = "%r11",
 };
 const Reg Reg4 = {
     .s.size = 4,
     .s.ptr = "DWORD PTR",
-    .rax = "eax",
-    .rdi = "edi",
-    .rsi = "esi",
-    .rdx = "edx",
-    .rcx = "ecx",
-    .r8 = "r8d",
-    .r9 = "r9d",
-    .r10 = "r10d",
-    .r11 = "r11d",
+    .rax = "%eax",
+    .rdi = "%edi",
+    .rsi = "%esi",
+    .rdx = "%edx",
+    .rcx = "%ecx",
+    .r8 = "%r8d",
+    .r9 = "%r9d",
+    .r10 = "%r10d",
+    .r11 = "%r11d",
 };
 const Reg Reg2 = {
     .s.size = 2,
     .s.ptr = "WORD PTR",
-    .rax = "ax",
-    .rdi = "di",
-    .rsi = "si",
-    .rdx = "dx",
-    .rcx = "cx",
-    .r8 = "r8w",
-    .r9 = "r9w",
-    .r10 = "r10w",
-    .r11 = "r11w",
+    .rax = "%ax",
+    .rdi = "%di",
+    .rsi = "%si",
+    .rdx = "%dx",
+    .rcx = "%cx",
+    .r8 = "%r8w",
+    .r9 = "%r9w",
+    .r10 = "%r10w",
+    .r11 = "%r11w",
 };
 const Reg Reg1 = {
     .s.size = 1,
     .s.ptr = "BYTE PTR",
-    .rax = "al",
-    .rdi = "dil",
-    .rsi = "sil",
-    .rdx = "dl",
-    .rcx = "cl",
-    .r8 = "r8b",
-    .r9 = "r9b",
-    .r10 = "r10b",
-    .r11 = "r11b",
+    .rax = "%al",
+    .rdi = "%dil",
+    .rsi = "%sil",
+    .rdx = "%dl",
+    .rcx = "%cl",
+    .r8 = "%r8b",
+    .r9 = "%r9b",
+    .r10 = "%r10b",
+    .r11 = "%r11b",
 };
 
 typedef struct {
@@ -335,6 +353,13 @@ static char *sized_addr2(RegSize s, const char *reg, int offset) {
   return format("%s %s", s.ptr, addr2(reg, offset));
 }
 
+static char *symbol_addr(const char *symbol) {
+  return format("%s %s", symbol, addr(R.rip));
+}
+static char *symbol_addr2(const char *symbol, int offset) {
+  return format("%s %s", symbol, addr2(R.rip, offset));
+}
+
 static int get_incdec_size(Expr *expr) {
   if (is_ptr_type(expr->val_type)) {
     return get_val_size(expr->val_type->ptr, expr->range);
@@ -375,37 +400,37 @@ static __attribute__((format(printf, 1, 2))) void emit_comment(const char *fmt,
 static void emit_stack_sub(int size) {
   stack_pos += size;
   assert(stack_pos >= 0);
-  emit_op2("sub", "rsp", format("%d", size));
-  emit_comment("=> rsp = rbp - %d", stack_pos);
+  emit_op2("sub", R.rsp, format("%d", size));
+  emit_comment("=> %s = %s", R.rsp, addr2(R.rbp, -stack_pos));
 }
 static void emit_stack_add(int size) {
   stack_pos -= size;
   assert(stack_pos >= 0);
-  emit_op2("add", "rsp", format("%d", size));
-  emit_comment("=> rsp = rbp - %d", stack_pos);
+  emit_op2("add", R.rsp, format("%d", size));
+  emit_comment("=> %s = %s", R.rsp, addr2(R.rbp, -stack_pos));
 }
 
 static void emit_pop(const char *operand) {
   stack_pos -= 8;
   assert(stack_pos >= 0);
   emit_op1("pop", operand);
-  emit_comment("=> rsp = rbp - %d", stack_pos);
+  emit_comment("=> %s = %s", R.rsp, addr2(R.rbp, -stack_pos));
 }
 static void emit_push(const char *operand) {
   stack_pos += 8;
   assert(stack_pos >= 0);
   emit_op1("push", operand);
-  emit_comment("=> rsp = rbp - %d", stack_pos);
+  emit_comment("=> %s = %s", R.rsp, addr2(R.rbp, -stack_pos));
 }
 
 static void emit_pop_xmm(int n) {
-  emit_op2("movsd", format("xmm%d", n), addr("rsp"));
+  emit_op2("movsd", SseReg[n], addr(R.rsp));
   emit_stack_add(8);
 }
 
 static void emit_push_xmm(int n) {
   emit_stack_sub(8);
-  emit_op2("movsd", addr("rsp"), format("xmm%d", n));
+  emit_op2("movsd", addr(R.rsp), SseReg[n]);
 }
 
 static void emit_push_stack_var(StackVar *svar, Type *type, int offset) {
@@ -416,8 +441,8 @@ static void emit_push_stack_var(StackVar *svar, Type *type, int offset) {
   int copy_size = 0;
   while (size - copy_size > 0) {
     const Reg *r = get_int_reg_for_copy(size - copy_size);
-    emit_op2("mov", r->rax, addr2("rbp", -src_offset + copy_size + offset));
-    emit_op2("mov", addr2("rsp", copy_size), r->rax);
+    emit_op2("mov", r->rax, addr2(R.rbp, -src_offset + copy_size + offset));
+    emit_op2("mov", addr2(R.rsp, copy_size), r->rax);
     copy_size += r->s.size;
   }
 }
@@ -426,13 +451,12 @@ static void emit_lval(Expr *expr, const char *reg) {
   if (expr->ty == EX_STACK_VAR) {
     StackVar *var = expr->stack_var.def;
     assert(var != NULL);
-    emit_op2("lea", reg, addr2("rbp", -var->offset + expr->stack_var.offset));
+    emit_op2("lea", reg, addr2(R.rbp, -var->offset + expr->stack_var.offset));
     return;
   }
   if (expr->ty == EX_GLOBAL_VAR) {
     emit_op2("lea", reg,
-             format("%s %s", expr->global_var.name,
-                    addr2("rip", expr->global_var.offset)));
+             symbol_addr2(expr->global_var.name, expr->global_var.offset));
     return;
   }
   if (expr->ty == EX_INDIRECT) {
@@ -472,7 +496,7 @@ static void emit_lval(Expr *expr, const char *reg) {
     Initializer *init = expr->compound.init;
     emit_svar_zero(svar);
     emit_svar_init(svar, 0, init, svar->range);
-    emit_op2("lea", reg, addr2("rbp", -svar->offset));
+    emit_op2("lea", reg, addr2(R.rbp, -svar->offset));
     return;
   }
 
@@ -487,7 +511,7 @@ static void emit_assign(Type *type, const Range *range, Expr *dest, Expr *src) {
   int copy_size = 0;
   while (size - copy_size > 0) {
     const Reg *r = get_int_reg_for_copy(size - copy_size);
-    emit_op2("mov", r->rdi, addr2("rsp", copy_size));
+    emit_op2("mov", r->rdi, addr2(R.rsp, copy_size));
     emit_op2("mov", addr2(Reg8.rax, copy_size), r->rdi);
     copy_size += r->s.size;
   }
@@ -701,9 +725,9 @@ static void emit_expr_num(Expr *expr) {
     assert(is_x87_reg_type(expr->val_type));
     assert(size == 16);
     emit_op2("mov", Reg8.rax, format("0x%016lx", expr->num.bytes[0]));
-    emit_op2("mov", addr2("rsp", -16), Reg8.rax);
+    emit_op2("mov", addr2(R.rsp, -16), Reg8.rax);
     emit_op2("mov", Reg8.rax, format("0x%016lx", expr->num.bytes[1]));
-    emit_op2("mov", addr2("rsp", -8), Reg8.rax);
+    emit_op2("mov", addr2(R.rsp, -8), Reg8.rax);
     emit_stack_sub(16);
   }
 }
@@ -726,9 +750,8 @@ static void emit_expr_global_var(Expr *expr) {
   while (size - copy_size > 0) {
     const Reg *r = get_int_reg_for_copy(size - copy_size);
     emit_op2("mov", r->rax,
-             format("%s %s", name,
-                    addr2("rip", expr->global_var.offset + copy_size)));
-    emit_op2("mov", addr2("rsp", copy_size), r->rax);
+             symbol_addr2(name, expr->global_var.offset + copy_size));
+    emit_op2("mov", addr2(R.rsp, copy_size), r->rax);
     copy_size += r->s.size;
   }
 }
@@ -736,7 +759,7 @@ static void emit_expr_global_var(Expr *expr) {
 static void emit_expr_str(Expr *expr) {
   assert(expr->ty == EX_STR);
 
-  emit_op2("lea", Reg8.rax, format("%s %s", expr->str->name, addr("rip")));
+  emit_op2("lea", Reg8.rax, symbol_addr(expr->str->name));
   emit_push(Reg8.rax);
 }
 
@@ -887,7 +910,7 @@ static void emit_expr_call(Expr *expr) {
   }
   if (ret_class == ARG_CLASS_MEMORY) {
     // rdiには戻り値の格納先を設定
-    emit_op2("lea", Reg8.rdi, addr2("rsp", arg_size));
+    emit_op2("lea", Reg8.rdi, addr2(R.rsp, arg_size));
   }
   emit_op2("mov", Reg1.rax, format("%d", num_vararg_sse_reg));
 
@@ -917,7 +940,7 @@ static void emit_expr_call(Expr *expr) {
       break;
     case ARG_CLASS_X87:
       emit_stack_sub(16);
-      emit_op1("fstp", sized_addr(X87Size, "rsp"));
+      emit_op1("fstp", sized_addr(X87Size, R.rsp));
       break;
     }
   }
@@ -937,15 +960,15 @@ static void emit_expr_dot(Expr *expr) {
   int copy_size = 0;
   while (mem_size - copy_size > 0) {
     const Reg *r = get_int_reg_for_copy(mem_size - copy_size);
-    emit_op2("mov", r->rax, addr2("rsp", offset + copy_size));
-    emit_op2("mov", addr2("rsp", -align(mem_size, 8) + copy_size), r->rax);
+    emit_op2("mov", r->rax, addr2(R.rsp, offset + copy_size));
+    emit_op2("mov", addr2(R.rsp, -align(mem_size, 8) + copy_size), r->rax);
     copy_size += r->s.size;
   }
   copy_size = 0;
   while (mem_size - copy_size > 0) {
     const Reg *r = get_int_reg_for_copy(mem_size - copy_size);
-    emit_op2("mov", r->rax, addr2("rsp", -align(mem_size, 8) + copy_size));
-    emit_op2("mov", addr2("rsp", size_diff + copy_size), r->rax);
+    emit_op2("mov", r->rax, addr2(R.rsp, -align(mem_size, 8) + copy_size));
+    emit_op2("mov", addr2(R.rsp, size_diff + copy_size), r->rax);
     copy_size += r->s.size;
   }
   emit_stack_add(size_diff);
@@ -965,7 +988,7 @@ static void emit_expr_arrow(Expr *expr) {
   while (mem_size - copy_size > 0) {
     const Reg *r = get_int_reg_for_copy(mem_size - copy_size);
     emit_op2("mov", r->rdi, addr2(Reg8.rax, offset + copy_size));
-    emit_op2("mov", addr2("rsp", -align(mem_size, 8) + copy_size), r->rdi);
+    emit_op2("mov", addr2(R.rsp, -align(mem_size, 8) + copy_size), r->rdi);
     copy_size += r->s.size;
   }
 
@@ -1077,7 +1100,7 @@ static void emit_expr_indirect(Expr *expr) {
   while (size - copy_size > 0) {
     const Reg *r = get_int_reg_for_copy(size - copy_size);
     emit_op2("mov", r->rdi, addr2(Reg8.rax, copy_size));
-    emit_op2("mov", addr2("rsp", copy_size), r->rdi);
+    emit_op2("mov", addr2(R.rsp, copy_size), r->rdi);
     copy_size += r->s.size;
   }
 }
@@ -1089,7 +1112,7 @@ static void emit_expr_minus(Expr *expr) {
 
   if (is_int_reg_type(expr->val_type)) {
     const Reg *r = get_int_reg(expr->val_type, expr->range);
-    emit_op1("neg", sized_addr(r->s, "rsp"));
+    emit_op1("neg", sized_addr(r->s, R.rsp));
     return;
   }
 
@@ -1098,23 +1121,23 @@ static void emit_expr_minus(Expr *expr) {
 
     const SseOp *op = get_sse_op(expr->val_type, expr->range);
     if (expr->val_type->ty == TY_DOUBLE) {
-      emit_op2("mov", sized_addr2(Reg4.s, "rsp", -4), "0x80000000");
-      emit_op2("mov", sized_addr2(Reg4.s, "rsp", -8), "0x00000000");
+      emit_op2("mov", sized_addr2(Reg4.s, R.rsp, -4), "0x80000000");
+      emit_op2("mov", sized_addr2(Reg4.s, R.rsp, -8), "0x00000000");
     } else {
       assert(expr->val_type->ty == TY_FLOAT);
-      emit_op2("mov", sized_addr2(Reg4.s, "rsp", -4), "0x00000000");
-      emit_op2("mov", sized_addr2(Reg4.s, "rsp", -8), "0x80000000");
+      emit_op2("mov", sized_addr2(Reg4.s, R.rsp, -4), "0x00000000");
+      emit_op2("mov", sized_addr2(Reg4.s, R.rsp, -8), "0x80000000");
     }
-    emit_op2("movsd", "xmm1", sized_addr2(Reg8.s, "rsp", -8));
-    emit_op2(op->xor, "xmm0", "xmm1");
+    emit_op2("movsd", SseReg[1], sized_addr2(Reg8.s, R.rsp, -8));
+    emit_op2(op->xor, SseReg[0], SseReg[1]);
     emit_push_xmm(0);
     return;
   }
 
   if (is_x87_reg_type(expr->val_type)) {
-    emit_op1("fld", sized_addr(X87Size, "rsp"));
+    emit_op1("fld", sized_addr(X87Size, R.rsp));
     emit_op0("fchs");
-    emit_op1("fstp", sized_addr(X87Size, "rsp"));
+    emit_op1("fstp", sized_addr(X87Size, R.rsp));
     return;
   }
 
@@ -1127,7 +1150,7 @@ static void emit_expr_not(Expr *expr) {
 
   const Reg *r = get_int_reg(expr->val_type, expr->range);
   emit_expr(expr->unop.operand);
-  emit_op1("not", sized_addr(r->s, "rsp"));
+  emit_op1("not", sized_addr(r->s, R.rsp));
 }
 
 static void emit_expr_cast(Expr *expr) {
@@ -1149,15 +1172,15 @@ static void emit_expr_cast(Expr *expr) {
     int to_size = to->s.size;
     if (to_size > from_size) {
       if (is_signed_int_type(operand->val_type, operand->range)) {
-        emit_op2("movsx", to->rax, sized_addr(from->s, "rsp"));
+        emit_op2("movsx", to->rax, sized_addr(from->s, R.rsp));
       } else {
         if (from_size < 4) {
-          emit_op2("movzx", to->rax, sized_addr(from->s, "rsp"));
+          emit_op2("movzx", to->rax, sized_addr(from->s, R.rsp));
         } else {
-          emit_op2("mov", from->rax, sized_addr(from->s, "rsp"));
+          emit_op2("mov", from->rax, sized_addr(from->s, R.rsp));
         }
       }
-      emit_op2("mov", addr("rsp"), Reg8.rax);
+      emit_op2("mov", addr(R.rsp), Reg8.rax);
     }
     return;
   }
@@ -1170,7 +1193,7 @@ static void emit_expr_cast(Expr *expr) {
       conv = &Reg4;
     }
     emit_pop_xmm(0);
-    emit_op2(op->cvtt_to_si, conv->rax, "xmm0");
+    emit_op2(op->cvtt_to_si, conv->rax, SseReg[0]);
     emit_push(Reg8.rax);
     return;
   }
@@ -1188,7 +1211,7 @@ static void emit_expr_cast(Expr *expr) {
         emit_op2("movzx", conv->rax, from->rax);
       }
     }
-    emit_op2(op->cvtt_from_si, "xmm0", conv->rax);
+    emit_op2(op->cvtt_from_si, SseReg[0], conv->rax);
     emit_push_xmm(0);
     return;
   }
@@ -1197,9 +1220,9 @@ static void emit_expr_cast(Expr *expr) {
     const SseOp *op = get_sse_op(operand->val_type, expr->range);
     emit_pop_xmm(0);
     if (expr->val_type->ty == TY_FLOAT) {
-      emit_op2(op->cvt_to_ss, "xmm0", "xmm0");
+      emit_op2(op->cvt_to_ss, SseReg[0], SseReg[0]);
     } else if (expr->val_type->ty == TY_DOUBLE) {
-      emit_op2(op->cvt_to_sd, "xmm0", "xmm0");
+      emit_op2(op->cvt_to_sd, SseReg[0], SseReg[0]);
     } else {
       goto CastError;
     }
@@ -1213,39 +1236,39 @@ static void emit_expr_cast(Expr *expr) {
     if (from->s.size < 2) {
       conv = &Reg2;
       if (is_signed_int_type(operand->val_type, operand->range)) {
-        emit_op2("movsx", conv->rax, sized_addr(from->s, "rsp"));
+        emit_op2("movsx", conv->rax, sized_addr(from->s, R.rsp));
       } else {
-        emit_op2("movzx", conv->rax, sized_addr(from->s, "rsp"));
+        emit_op2("movzx", conv->rax, sized_addr(from->s, R.rsp));
       }
-      emit_op2("mov", addr("rsp"), conv->rax);
+      emit_op2("mov", addr(R.rsp), conv->rax);
     }
-    emit_op1("fild", sized_addr(conv->s, "rsp"));
-    emit_op1("fstp", sized_addr2(X87Size, "rsp", -8));
-    emit_op2("mov", sized_addr2(Reg4.s, "rsp", 4), "0");
+    emit_op1("fild", sized_addr(conv->s, R.rsp));
+    emit_op1("fstp", sized_addr2(X87Size, R.rsp, -8));
+    emit_op2("mov", sized_addr2(Reg4.s, R.rsp, 4), "0");
     emit_stack_sub(8);
     return;
   }
 
   if (is_x87_reg_type(operand->val_type) && is_int_reg_type(expr->val_type)) {
-    emit_op1("fld", sized_addr(X87Size, "rsp"));
-    emit_op1("fisttp", sized_addr2(Reg8.s, "rsp", 8));
+    emit_op1("fld", sized_addr(X87Size, R.rsp));
+    emit_op1("fisttp", sized_addr2(Reg8.s, R.rsp, 8));
     emit_stack_add(8);
     return;
   }
 
   if (is_sse_reg_type(operand->val_type) && is_x87_reg_type(expr->val_type)) {
     const SseOp *from_op = get_sse_op(operand->val_type, operand->range);
-    emit_op1("fld", sized_addr(from_op->s, "rsp"));
-    emit_op2("mov", sized_addr(Reg8.s, "rsp"), "0");
-    emit_op1("fstp", sized_addr2(X87Size, "rsp", -8));
+    emit_op1("fld", sized_addr(from_op->s, R.rsp));
+    emit_op2("mov", sized_addr(Reg8.s, R.rsp), "0");
+    emit_op1("fstp", sized_addr2(X87Size, R.rsp, -8));
     emit_stack_sub(8);
     return;
   }
 
   if (is_x87_reg_type(operand->val_type) && is_sse_reg_type(expr->val_type)) {
     const SseOp *to_op = get_sse_op(expr->val_type, expr->range);
-    emit_op1("fld", sized_addr(X87Size, "rsp"));
-    emit_op1("fstp", sized_addr2(to_op->s, "rsp", 8));
+    emit_op1("fld", sized_addr(X87Size, R.rsp));
+    emit_op1("fstp", sized_addr2(to_op->s, R.rsp, 8));
     emit_stack_add(8);
     return;
   }
@@ -1314,9 +1337,9 @@ static void emit_expr_builtin_va_start(Expr *expr) {
   const char *reg_save_area = addr2(Reg8.rax, 16);
   emit_op2("mov", gp_offset, format("%d", reg_gp_offset));
   emit_op2("mov", fp_offset, format("%d", reg_fp_offset));
-  emit_op2("lea", Reg8.rdi, addr2("rbp", overflow_arg_area_offset));
+  emit_op2("lea", Reg8.rdi, addr2(R.rbp, overflow_arg_area_offset));
   emit_op2("mov", overflow_arg_area, Reg8.rdi);
-  emit_op2("lea", Reg8.rdi, addr2("rbp", -reg_save_area_pos));
+  emit_op2("lea", Reg8.rdi, addr2(R.rbp, -reg_save_area_pos));
   emit_op2("mov", reg_save_area, Reg8.rdi);
 }
 
@@ -1382,7 +1405,7 @@ static void emit_expr_builtin_va_arg(Expr *expr) {
   while (size - copy_size > 0) {
     const Reg *r = get_int_reg_for_copy(size - copy_size);
     emit_op2("mov", r->rdx, addr2(Reg8.rax, copy_size));
-    emit_op2("mov", addr2("rsp", copy_size), r->rdx);
+    emit_op2("mov", addr2(R.rsp, copy_size), r->rdx);
     copy_size += r->s.size;
   }
 }
@@ -1436,12 +1459,12 @@ static void emit_expr_binop_int(Expr *expr) {
   case EX_ADD:
     assert(rex->s.size == rop->s.size);
     emit_pop(Reg8.rdi);
-    emit_op2("add", addr("rsp"), rop->rdi);
+    emit_op2("add", addr(R.rsp), rop->rdi);
     break;
   case EX_SUB:
     assert(rex->s.size == rop->s.size);
     emit_pop(Reg8.rdi);
-    emit_op2("sub", addr("rsp"), rop->rdi);
+    emit_op2("sub", addr(R.rsp), rop->rdi);
     break;
   case EX_MUL:
     assert(rex->s.size == rop->s.size);
@@ -1477,90 +1500,90 @@ static void emit_expr_binop_int(Expr *expr) {
     break;
   case EX_EQEQ:
     emit_pop(Reg8.rdi);
-    emit_op2("cmp", addr("rsp"), rop->rdi);
+    emit_op2("cmp", addr(R.rsp), rop->rdi);
     emit_op1("sete", Reg1.rax);
     emit_op2("movzx", rex->rax, Reg1.rax);
-    emit_op2("mov", addr("rsp"), rex->rax);
+    emit_op2("mov", addr(R.rsp), rex->rax);
     break;
   case EX_NOTEQ:
     emit_pop(Reg8.rdi);
-    emit_op2("cmp", addr("rsp"), rop->rdi);
+    emit_op2("cmp", addr(R.rsp), rop->rdi);
     emit_op1("setne", Reg1.rax);
     emit_op2("movzx", rex->rax, Reg1.rax);
-    emit_op2("mov", addr("rsp"), rex->rax);
+    emit_op2("mov", addr(R.rsp), rex->rax);
     break;
   case EX_LT:
     emit_pop(Reg8.rdi);
-    emit_op2("cmp", addr("rsp"), rop->rdi);
+    emit_op2("cmp", addr(R.rsp), rop->rdi);
     if (is_signed_int_type(lhs->val_type, lhs->range)) {
       emit_op1("setl", Reg1.rax);
     } else {
       emit_op1("setb", Reg1.rax);
     }
     emit_op2("movzx", rex->rax, Reg1.rax);
-    emit_op2("mov", addr("rsp"), rex->rax);
+    emit_op2("mov", addr(R.rsp), rex->rax);
     break;
   case EX_GT:
     emit_pop(Reg8.rdi);
-    emit_op2("cmp", addr("rsp"), rop->rdi);
+    emit_op2("cmp", addr(R.rsp), rop->rdi);
     if (is_signed_int_type(lhs->val_type, lhs->range)) {
       emit_op1("setg", Reg1.rax);
     } else {
       emit_op1("seta", Reg1.rax);
     }
     emit_op2("movzx", rex->rax, Reg1.rax);
-    emit_op2("mov", addr("rsp"), rex->rax);
+    emit_op2("mov", addr(R.rsp), rex->rax);
     break;
   case EX_LTEQ:
     emit_pop(Reg8.rdi);
-    emit_op2("cmp", addr("rsp"), rop->rdi);
+    emit_op2("cmp", addr(R.rsp), rop->rdi);
     if (is_signed_int_type(lhs->val_type, lhs->range)) {
       emit_op1("setle", Reg1.rax);
     } else {
       emit_op1("setbe", Reg1.rax);
     }
     emit_op2("movzx", rex->rax, Reg1.rax);
-    emit_op2("mov", addr("rsp"), rex->rax);
+    emit_op2("mov", addr(R.rsp), rex->rax);
     break;
   case EX_GTEQ:
     emit_pop(Reg8.rdi);
-    emit_op2("cmp", addr("rsp"), rop->rdi);
+    emit_op2("cmp", addr(R.rsp), rop->rdi);
     if (is_signed_int_type(lhs->val_type, lhs->range)) {
       emit_op1("setge", Reg1.rax);
     } else {
       emit_op1("setae", Reg1.rax);
     }
     emit_op2("movzx", rex->rax, Reg1.rax);
-    emit_op2("mov", addr("rsp"), rex->rax);
+    emit_op2("mov", addr(R.rsp), rex->rax);
     break;
   case EX_LSHIFT:
     assert(rex->s.size == rop->s.size);
     emit_pop(Reg8.rcx);
-    emit_op2("shl", sized_addr(rop->s, "rsp"), Reg1.rcx);
+    emit_op2("shl", sized_addr(rop->s, R.rsp), Reg1.rcx);
     break;
   case EX_RSHIFT:
     assert(rex->s.size == rop->s.size);
     emit_pop(Reg8.rcx);
     if (is_signed_int_type(lhs->val_type, lhs->range)) {
-      emit_op2("sar", sized_addr(rop->s, "rsp"), Reg1.rcx);
+      emit_op2("sar", sized_addr(rop->s, R.rsp), Reg1.rcx);
     } else {
-      emit_op2("shr", sized_addr(rop->s, "rsp"), Reg1.rcx);
+      emit_op2("shr", sized_addr(rop->s, R.rsp), Reg1.rcx);
     }
     break;
   case EX_AND:
     assert(rex->s.size == rop->s.size);
     emit_pop(Reg8.rdi);
-    emit_op2("and", addr("rsp"), rop->rdi);
+    emit_op2("and", addr(R.rsp), rop->rdi);
     break;
   case EX_XOR:
     assert(rex->s.size == rop->s.size);
     emit_pop(Reg8.rdi);
-    emit_op2("xor", addr("rsp"), rop->rdi);
+    emit_op2("xor", addr(R.rsp), rop->rdi);
     break;
   case EX_OR:
     assert(rex->s.size == rop->s.size);
     emit_pop(Reg8.rdi);
-    emit_op2("or", addr("rsp"), rop->rdi);
+    emit_op2("or", addr(R.rsp), rop->rdi);
     break;
   default:
     range_error(expr->range, "不正な演算子です: %d", expr->ty);
@@ -1583,24 +1606,24 @@ static void emit_expr_binop_sse(Expr *expr) {
 
   switch (expr->ty) {
   case EX_ADD:
-    emit_op2(op->add, "xmm0", "xmm1");
+    emit_op2(op->add, SseReg[0], SseReg[1]);
     emit_push_xmm(0);
     break;
   case EX_SUB:
-    emit_op2(op->sub, "xmm0", "xmm1");
+    emit_op2(op->sub, SseReg[0], SseReg[1]);
     emit_push_xmm(0);
     break;
   case EX_MUL:
-    emit_op2(op->mul, "xmm0", "xmm1");
+    emit_op2(op->mul, SseReg[0], SseReg[1]);
     emit_push_xmm(0);
     break;
   case EX_DIV:
-    emit_op2(op->div, "xmm0", "xmm1");
+    emit_op2(op->div, SseReg[0], SseReg[1]);
     emit_push_xmm(0);
     break;
   case EX_EQEQ: {
     const Reg *r = get_int_reg(expr->val_type, expr->range);
-    emit_op2(op->comi, "xmm0", "xmm1");
+    emit_op2(op->comi, SseReg[0], SseReg[1]);
     emit_op1("sete", Reg1.rax);
     emit_op1("setnp", Reg1.rdi);
     emit_op2("and", Reg1.rax, Reg1.rdi);
@@ -1610,7 +1633,7 @@ static void emit_expr_binop_sse(Expr *expr) {
   }
   case EX_NOTEQ: {
     const Reg *r = get_int_reg(expr->val_type, expr->range);
-    emit_op2(op->comi, "xmm0", "xmm1");
+    emit_op2(op->comi, SseReg[0], SseReg[1]);
     emit_op1("setne", Reg1.rax);
     emit_op1("setp", Reg1.rdi);
     emit_op2("or", Reg1.rax, Reg1.rdi);
@@ -1620,7 +1643,7 @@ static void emit_expr_binop_sse(Expr *expr) {
   }
   case EX_LT: {
     const Reg *r = get_int_reg(expr->val_type, expr->range);
-    emit_op2(op->comi, "xmm1", "xmm0");
+    emit_op2(op->comi, SseReg[1], SseReg[0]);
     emit_op1("seta", Reg1.rax);
     emit_op2("movzx", r->rax, Reg1.rax);
     emit_push(Reg8.rax);
@@ -1628,7 +1651,7 @@ static void emit_expr_binop_sse(Expr *expr) {
   }
   case EX_GT: {
     const Reg *r = get_int_reg(expr->val_type, expr->range);
-    emit_op2(op->comi, "xmm0", "xmm1");
+    emit_op2(op->comi, SseReg[0], SseReg[1]);
     emit_op1("seta", Reg1.rax);
     emit_op2("movzx", r->rax, Reg1.rax);
     emit_push(Reg8.rax);
@@ -1636,7 +1659,7 @@ static void emit_expr_binop_sse(Expr *expr) {
   }
   case EX_LTEQ: {
     const Reg *r = get_int_reg(expr->val_type, expr->range);
-    emit_op2(op->comi, "xmm1", "xmm0");
+    emit_op2(op->comi, SseReg[1], SseReg[0]);
     emit_op1("setnb", Reg1.rax);
     emit_op2("movzx", r->rax, Reg1.rax);
     emit_push(Reg8.rax);
@@ -1644,7 +1667,7 @@ static void emit_expr_binop_sse(Expr *expr) {
   }
   case EX_GTEQ: {
     const Reg *r = get_int_reg(expr->val_type, expr->range);
-    emit_op2(op->comi, "xmm0", "xmm1");
+    emit_op2(op->comi, SseReg[0], SseReg[1]);
     emit_op1("setnb", Reg1.rax);
     emit_op2("movzx", r->rax, Reg1.rax);
     emit_push(Reg8.rax);
@@ -1666,39 +1689,39 @@ static void emit_expr_binop_x87(Expr *expr) {
 
   switch (expr->ty) {
   case EX_ADD:
-    emit_op1("fld", sized_addr2(X87Size, "rsp", 16));
-    emit_op1("fld", sized_addr(X87Size, "rsp"));
-    emit_op2("faddp", "st(1)", "st");
-    emit_op1("fstp", sized_addr2(X87Size, "rsp", 16));
+    emit_op1("fld", sized_addr2(X87Size, R.rsp, 16));
+    emit_op1("fld", sized_addr(X87Size, R.rsp));
+    emit_op2("faddp", X87Reg[1], X87Reg[0]);
+    emit_op1("fstp", sized_addr2(X87Size, R.rsp, 16));
     emit_stack_add(16);
     break;
   case EX_SUB:
-    emit_op1("fld", sized_addr2(X87Size, "rsp", 16));
-    emit_op1("fld", sized_addr(X87Size, "rsp"));
-    emit_op2("fsubp", "st(1)", "st");
-    emit_op1("fstp", sized_addr2(X87Size, "rsp", 16));
+    emit_op1("fld", sized_addr2(X87Size, R.rsp, 16));
+    emit_op1("fld", sized_addr(X87Size, R.rsp));
+    emit_op2("fsubp", X87Reg[1], X87Reg[0]);
+    emit_op1("fstp", sized_addr2(X87Size, R.rsp, 16));
     emit_stack_add(16);
     break;
   case EX_MUL:
-    emit_op1("fld", sized_addr2(X87Size, "rsp", 16));
-    emit_op1("fld", sized_addr(X87Size, "rsp"));
-    emit_op2("fmulp", "st(1)", "st");
-    emit_op1("fstp", sized_addr2(X87Size, "rsp", 16));
+    emit_op1("fld", sized_addr2(X87Size, R.rsp, 16));
+    emit_op1("fld", sized_addr(X87Size, R.rsp));
+    emit_op2("fmulp", X87Reg[1], X87Reg[0]);
+    emit_op1("fstp", sized_addr2(X87Size, R.rsp, 16));
     emit_stack_add(16);
     break;
   case EX_DIV:
-    emit_op1("fld", sized_addr2(X87Size, "rsp", 16));
-    emit_op1("fld", sized_addr(X87Size, "rsp"));
-    emit_op2("fdivp", "st(1)", "st");
-    emit_op1("fstp", sized_addr2(X87Size, "rsp", 16));
+    emit_op1("fld", sized_addr2(X87Size, R.rsp, 16));
+    emit_op1("fld", sized_addr(X87Size, R.rsp));
+    emit_op2("fdivp", X87Reg[1], X87Reg[0]);
+    emit_op1("fstp", sized_addr2(X87Size, R.rsp, 16));
     emit_stack_add(16);
     break;
   case EX_EQEQ: {
     const Reg *r = get_int_reg(expr->val_type, expr->range);
-    emit_op1("fld", sized_addr2(X87Size, "rsp", 16));
-    emit_op1("fld", sized_addr(X87Size, "rsp"));
-    emit_op2("fcomip", "st", "st(1)");
-    emit_op1("fstp", "st(0)");
+    emit_op1("fld", sized_addr2(X87Size, R.rsp, 16));
+    emit_op1("fld", sized_addr(X87Size, R.rsp));
+    emit_op2("fcomip", X87Reg[0], X87Reg[1]);
+    emit_op1("fstp", X87Reg[0]);
     emit_op1("sete", Reg1.rax);
     emit_op1("setnp", Reg1.rdi);
     emit_op2("and", Reg1.rax, Reg1.rdi);
@@ -1709,10 +1732,10 @@ static void emit_expr_binop_x87(Expr *expr) {
   }
   case EX_NOTEQ: {
     const Reg *r = get_int_reg(expr->val_type, expr->range);
-    emit_op1("fld", sized_addr2(X87Size, "rsp", 16));
-    emit_op1("fld", sized_addr(X87Size, "rsp"));
-    emit_op2("fcomip", "st", "st(1)");
-    emit_op1("fstp", "st(0)");
+    emit_op1("fld", sized_addr2(X87Size, R.rsp, 16));
+    emit_op1("fld", sized_addr(X87Size, R.rsp));
+    emit_op2("fcomip", X87Reg[0], X87Reg[1]);
+    emit_op1("fstp", X87Reg[0]);
     emit_op1("setne", Reg1.rax);
     emit_op1("setp", Reg1.rdi);
     emit_op2("or", Reg1.rax, Reg1.rdi);
@@ -1723,10 +1746,10 @@ static void emit_expr_binop_x87(Expr *expr) {
   }
   case EX_LT: {
     const Reg *r = get_int_reg(expr->val_type, expr->range);
-    emit_op1("fld", sized_addr2(X87Size, "rsp", 16));
-    emit_op1("fld", sized_addr(X87Size, "rsp"));
-    emit_op2("fcomip", "st", "st(1)");
-    emit_op1("fstp", "st(0)");
+    emit_op1("fld", sized_addr2(X87Size, R.rsp, 16));
+    emit_op1("fld", sized_addr(X87Size, R.rsp));
+    emit_op2("fcomip", X87Reg[0], X87Reg[1]);
+    emit_op1("fstp", X87Reg[0]);
     emit_op1("seta", Reg1.rax);
     emit_op2("movzx", r->rax, Reg1.rax);
     emit_stack_add(32);
@@ -1735,10 +1758,10 @@ static void emit_expr_binop_x87(Expr *expr) {
   }
   case EX_GT: {
     const Reg *r = get_int_reg(expr->val_type, expr->range);
-    emit_op1("fld", sized_addr(X87Size, "rsp"));
-    emit_op1("fld", sized_addr2(X87Size, "rsp", 16));
-    emit_op2("fcomip", "st", "st(1)");
-    emit_op1("fstp", "st(0)");
+    emit_op1("fld", sized_addr(X87Size, R.rsp));
+    emit_op1("fld", sized_addr2(X87Size, R.rsp, 16));
+    emit_op2("fcomip", X87Reg[0], X87Reg[1]);
+    emit_op1("fstp", X87Reg[0]);
     emit_op1("seta", Reg1.rax);
     emit_op2("movzx", r->rax, Reg1.rax);
     emit_stack_add(32);
@@ -1747,10 +1770,10 @@ static void emit_expr_binop_x87(Expr *expr) {
   }
   case EX_LTEQ: {
     const Reg *r = get_int_reg(expr->val_type, expr->range);
-    emit_op1("fld", sized_addr2(X87Size, "rsp", 16));
-    emit_op1("fld", sized_addr(X87Size, "rsp"));
-    emit_op2("fcomip", "st", "st(1)");
-    emit_op1("fstp", "st(0)");
+    emit_op1("fld", sized_addr2(X87Size, R.rsp, 16));
+    emit_op1("fld", sized_addr(X87Size, R.rsp));
+    emit_op2("fcomip", X87Reg[0], X87Reg[1]);
+    emit_op1("fstp", X87Reg[0]);
     emit_op1("setnb", Reg1.rax);
     emit_op2("movzx", r->rax, Reg1.rax);
     emit_stack_add(32);
@@ -1759,10 +1782,10 @@ static void emit_expr_binop_x87(Expr *expr) {
   }
   case EX_GTEQ: {
     const Reg *r = get_int_reg(expr->val_type, expr->range);
-    emit_op1("fld", sized_addr(X87Size, "rsp"));
-    emit_op1("fld", sized_addr2(X87Size, "rsp", 16));
-    emit_op2("fcomip", "st", "st(1)");
-    emit_op1("fstp", "st(0)");
+    emit_op1("fld", sized_addr(X87Size, R.rsp));
+    emit_op1("fld", sized_addr2(X87Size, R.rsp, 16));
+    emit_op2("fcomip", X87Reg[0], X87Reg[1]);
+    emit_op1("fstp", X87Reg[0]);
     emit_op1("setnb", Reg1.rax);
     emit_op2("movzx", r->rax, Reg1.rax);
     emit_stack_add(32);
@@ -2029,11 +2052,11 @@ static void emit_stmt(Stmt *stmt, bool leave_value) {
       switch (class) {
       case ARG_CLASS_MEMORY:
         // 戻り値を格納するアドレス
-        emit_op2("mov", Reg8.rax, addr2("rbp", -retval_pos));
+        emit_op2("mov", Reg8.rax, addr2(R.rbp, -retval_pos));
         int copy_size = 0;
         while (size - copy_size > 0) {
           const Reg *r = get_int_reg_for_copy(size - copy_size);
-          emit_op2("mov", r->rdi, addr2("rsp", copy_size));
+          emit_op2("mov", r->rdi, addr2(R.rsp, copy_size));
           emit_op2("mov", addr2(Reg8.rax, copy_size), r->rdi);
           copy_size += r->s.size;
         }
@@ -2050,7 +2073,7 @@ static void emit_stmt(Stmt *stmt, bool leave_value) {
         emit_pop_xmm(0);
         break;
       case ARG_CLASS_X87:
-        emit_op1("fld", sized_addr(X87Size, "rsp"));
+        emit_op1("fld", sized_addr(X87Size, R.rsp));
         emit_stack_add(16);
         break;
       }
@@ -2093,8 +2116,8 @@ static void emit_func(Function *func) {
 
   // プロローグ
   // スタックサイズ分の領域を確保する
-  emit_op1("push", "rbp");
-  emit_op2("mov", "rbp", "rsp");
+  emit_op1("push", R.rbp);
+  emit_op2("mov", R.rbp, R.rsp);
 
   // ローカル変数の領域確保
   int stack_size = 0;
@@ -2114,7 +2137,7 @@ static void emit_func(Function *func) {
     range_get_start(svar->range, &filename, &line, &column);
     emit_comment("%s:%d:%d", filename, line, column);
     emit_comment("%s: svar %s (size=%d) (%s:%d:%d)",
-                 addr2("rbp", -svar->offset), svar->name,
+                 addr2(R.rbp, -svar->offset), svar->name,
                  get_val_size(svar->type, svar->range), filename, line, column);
   }
 
@@ -2126,18 +2149,18 @@ static void emit_func(Function *func) {
   emit_stack_sub(align(stack_size, 16) + align(reg_save_area_size, 16));
   if (func->type->func.has_varargs) {
     reg_save_area_pos = stack_pos;
-    emit_comment("%s: reg_save_area", addr2("rbp", -stack_pos));
+    emit_comment("%s: reg_save_area", addr2(R.rbp, -stack_pos));
 
     for (int i = 0; i < NUM_INT_REG; i++) {
-      emit_op2("mov", addr2("rbp", -stack_pos + 8 * i),
+      emit_op2("mov", addr2(R.rbp, -stack_pos + 8 * i),
                get_int_arg_reg(&Reg8, i));
     }
     const char *end_label = make_label("skip_float_reg");
     emit_op2("test", Reg1.rax, Reg1.rax);
     emit_op1("je", end_label);
     for (int i = 0; i < NUM_SSE_REG; i++) {
-      emit_op2("movaps", addr2("rbp", -stack_pos + 8 * NUM_INT_REG + 16 * i),
-               format("xmm%d", i));
+      emit_op2("movaps", addr2(R.rbp, -stack_pos + 8 * NUM_INT_REG + 16 * i),
+               SseReg[i]);
     }
     emit_label(end_label);
   }
@@ -2178,8 +2201,8 @@ static void emit_func(Function *func) {
         int copy_size = 0;
         while (size - copy_size > 0) {
           const Reg *r = get_int_reg_for_copy(size - copy_size);
-          emit_op2("mov", r->rax, addr2("rbp", arg_stack_offset + copy_size));
-          emit_op2("mov", addr2("rbp", -dst_offset + copy_size), r->rax);
+          emit_op2("mov", r->rax, addr2(R.rbp, arg_stack_offset + copy_size));
+          emit_op2("mov", addr2(R.rbp, -dst_offset + copy_size), r->rax);
           copy_size += r->s.size;
         }
         arg_stack_offset += align(size, 8);
@@ -2192,14 +2215,14 @@ static void emit_func(Function *func) {
           int copy_size = 0;
           while (rest_size > 0) {
             if (rest_size >= 8) {
-              emit_op2("mov", addr2("rbp", -dst_offset + j * 8 + copy_size),
+              emit_op2("mov", addr2(R.rbp, -dst_offset + j * 8 + copy_size),
                        get_int_arg_reg(&Reg8, int_reg_idx));
               rest_size -= 8;
               copy_size += 8;
               break;
             }
             if (rest_size >= 4) {
-              emit_op2("mov", addr2("rbp", -dst_offset + j * 8 + copy_size),
+              emit_op2("mov", addr2(R.rbp, -dst_offset + j * 8 + copy_size),
                        get_int_arg_reg(&Reg4, int_reg_idx));
               rest_size -= 4;
               copy_size += 4;
@@ -2209,7 +2232,7 @@ static void emit_func(Function *func) {
               continue;
             }
             if (rest_size >= 2) {
-              emit_op2("mov", addr2("rbp", -dst_offset + j * 8 + copy_size),
+              emit_op2("mov", addr2(R.rbp, -dst_offset + j * 8 + copy_size),
                        get_int_arg_reg(&Reg2, int_reg_idx));
               rest_size -= 2;
               copy_size += 2;
@@ -2220,7 +2243,7 @@ static void emit_func(Function *func) {
             }
 
             assert(rest_size == 1);
-            emit_op2("mov", addr2("rbp", -dst_offset + j * 8 + copy_size),
+            emit_op2("mov", addr2(R.rbp, -dst_offset + j * 8 + copy_size),
                      get_int_arg_reg(&Reg1, int_reg_idx));
             rest_size -= 1;
             copy_size += 1;
@@ -2234,12 +2257,10 @@ static void emit_func(Function *func) {
       case ARG_CLASS_SSE: {
         assert(size <= 8);
         if (size == 8) {
-          emit_op2("movsd", addr2("rbp", -dst_offset),
-                   format("xmm%d", sse_reg_idx));
+          emit_op2("movsd", addr2(R.rbp, -dst_offset), SseReg[sse_reg_idx]);
         } else {
           assert(size == 4);
-          emit_op2("movss", addr2("rbp", -dst_offset),
-                   format("xmm%d", sse_reg_idx));
+          emit_op2("movss", addr2(R.rbp, -dst_offset), SseReg[sse_reg_idx]);
         }
         sse_reg_idx++;
         continue;
@@ -2254,7 +2275,7 @@ static void emit_func(Function *func) {
 
   emit_comment("reg_gp_offset: %d", reg_gp_offset);
   emit_comment("reg_fp_offset: %d", reg_fp_offset);
-  emit_comment("overflow_arg_area: %s", addr2("rbp", overflow_arg_area_offset));
+  emit_comment("overflow_arg_area: %s", addr2(R.rbp, overflow_arg_area_offset));
   emit_comment("%s body", func->name);
 
   emit_stmt(func->body, false);
@@ -2269,8 +2290,8 @@ static void emit_func(Function *func) {
   assert(stack_pos == align(stack_size, 16) + align(reg_save_area_size, 16) +
                           ret_stack_offset);
   emit_label(epilogue_label);
-  emit_op2("mov", "rsp", "rbp");
-  emit_op1("pop", "rbp");
+  emit_op2("mov", R.rsp, R.rbp);
+  emit_op1("pop", R.rbp);
   emit_op0("ret");
   stack_pos = INVALID_STACK_POS;
 }
@@ -2280,7 +2301,7 @@ static void emit_svar_zero(StackVar *svar) {
   int copy_size = 0;
   while (size - copy_size > 0) {
     const Reg *r = get_int_reg_for_copy(size - copy_size);
-    emit_op2("mov", sized_addr2(r->s, "rbp", -svar->offset + copy_size), "0");
+    emit_op2("mov", sized_addr2(r->s, R.rbp, -svar->offset + copy_size), "0");
     copy_size += r->s.size;
   }
 }
@@ -2297,8 +2318,8 @@ static void emit_svar_init(StackVar *svar, int offset, Initializer *init,
     int copy_size = 0;
     while (size - copy_size > 0) {
       const Reg *r = get_int_reg_for_copy(size - copy_size);
-      emit_op2("mov", r->rax, addr2("rsp", copy_size));
-      emit_op2("mov", addr2("rbp", -svar->offset + copy_size + offset), r->rax);
+      emit_op2("mov", r->rax, addr2(R.rsp, copy_size));
+      emit_op2("mov", addr2(R.rbp, -svar->offset + copy_size + offset), r->rax);
       copy_size += r->s.size;
     }
 
@@ -2464,7 +2485,7 @@ static void emit_str(StringLiteral *str) {
 
 void gen(FILE *fp, TranslationUnit *tunit) {
   output_fp = fp;
-  emit(".intel_syntax noprefix");
+  emit(".intel_syntax prefix");
 
   emit(".text");
   for (int i = 0; i < vec_len(tunit->func_list); i++) {
