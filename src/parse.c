@@ -3366,6 +3366,7 @@ static void assign_array_initializer(Scope *scope, Vector *list, bool is_root,
     }
     if (!is_root && is_first) {
       if (consume_str_for_array(elem->pinit, type, init)) {
+        vec_remove(list, 0);
         return;
       }
     }

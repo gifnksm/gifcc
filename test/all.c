@@ -2678,6 +2678,15 @@ static void test86(void) {
   }
 }
 
+static void test87(void) {
+  struct {
+    char s[6];
+    int n;
+  } s = {"hello", 8};
+  CHECK_INT(0, strcmp(s.s, "hello"));
+  CHECK_INT(8, s.n);
+}
+
 int main(int argc, char *argv[]) {
   Test test_list[] = {
       TEST(test01), TEST(test02), TEST(test03), TEST(test04), TEST(test05),
@@ -2697,7 +2706,7 @@ int main(int argc, char *argv[]) {
       TEST(test71), TEST(test72), TEST(test73), TEST(test74), TEST(test75),
       TEST(test76), TEST(test77), TEST(test78), TEST(test79), TEST(test80),
       TEST(test81), TEST(test82), TEST(test83), TEST(test84), TEST(test85),
-      TEST(test86), {NULL, NULL},
+      TEST(test86), TEST(test87), {NULL, NULL},
   };
   RUN_TEST(argc, argv, test_list);
 }
