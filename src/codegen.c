@@ -1205,7 +1205,7 @@ static void emit_expr_minus(Expr *expr) {
       emit_op2("mov", sized_addr2(Reg4.s, R.rsp, -8),
                imm_num(new_number_uint64(0x80000000)));
     }
-    emit_op2("movsd", SseReg[1], sized_addr2(Reg8.s, R.rsp, -8));
+    emit_op2("movsd", SseReg[1], addr2(R.rsp, -8));
     emit_op2(op->xor, SseReg[0], SseReg[1]);
     emit_push_xmm(0);
     return;
