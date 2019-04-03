@@ -1766,28 +1766,28 @@ static void emit_expr_binop_x87(Expr *expr) {
   case EX_ADD:
     emit_op1("fld", sized_addr2(X87Size, R.rsp, 16));
     emit_op1("fld", sized_addr(X87Size, R.rsp));
-    emit_op2("faddp", X87Reg[1], X87Reg[0]);
+    emit_op0("faddp");
     emit_op1("fstp", sized_addr2(X87Size, R.rsp, 16));
     emit_stack_add(16);
     break;
   case EX_SUB:
     emit_op1("fld", sized_addr2(X87Size, R.rsp, 16));
     emit_op1("fld", sized_addr(X87Size, R.rsp));
-    emit_op2("fsubp", X87Reg[1], X87Reg[0]);
+    emit_op0("fsubp");
     emit_op1("fstp", sized_addr2(X87Size, R.rsp, 16));
     emit_stack_add(16);
     break;
   case EX_MUL:
     emit_op1("fld", sized_addr2(X87Size, R.rsp, 16));
     emit_op1("fld", sized_addr(X87Size, R.rsp));
-    emit_op2("fmulp", X87Reg[1], X87Reg[0]);
+    emit_op0("fmulp");
     emit_op1("fstp", sized_addr2(X87Size, R.rsp, 16));
     emit_stack_add(16);
     break;
   case EX_DIV:
     emit_op1("fld", sized_addr2(X87Size, R.rsp, 16));
     emit_op1("fld", sized_addr(X87Size, R.rsp));
-    emit_op2("fdivp", X87Reg[1], X87Reg[0]);
+    emit_op0("fdivp");
     emit_op1("fstp", sized_addr2(X87Size, R.rsp, 16));
     emit_stack_add(16);
     break;
