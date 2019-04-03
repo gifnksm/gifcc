@@ -605,6 +605,7 @@ static void output_ast(FILE *fp, TranslationUnit *tunit) {
 enum {
   OPTVAL_TEST = 256,
   OPTVAL_EMIT,
+  OPTVAL_ASM_SYNTAX,
 };
 
 typedef enum {
@@ -618,12 +619,15 @@ struct option longopts[] = {
     {"test", no_argument, NULL, OPTVAL_TEST},
     {"emit", required_argument, NULL, OPTVAL_EMIT},
     {"output", required_argument, NULL, 'o'},
+    {"asm-syntax", required_argument, NULL, OPTVAL_ASM_SYNTAX},
     {NULL, 0, 0, 0},
 };
 
 int main(int argc, char **argv) {
+  asm_syntax_t asm_syntax = ASM_SYNTAX_INTEL;
   output_t emit_target = 0;
   const char *output = NULL;
+
   while (true) {
     int c = getopt_long(argc, argv, "o:", longopts, NULL);
     if (c == -1) {
@@ -634,6 +638,7 @@ int main(int argc, char **argv) {
     case OPTVAL_TEST:
       runtest();
       return 0;
+
     case OPTVAL_EMIT:
       if (strcmp(optarg, "asm") == 0) {
         emit_target |= EMIT_ASM;
@@ -646,17 +651,29 @@ int main(int argc, char **argv) {
       } else if (strcmp(optarg, "all") == 0) {
         emit_target |= EMIT_ASM | EMIT_TOKEN | EMIT_AST | EMIT_SEMA;
       } else {
-        error("不明なオプションの値です: %s", optarg);
-        return 1;
+        error("unrecognized option argument: %s", optarg);
       }
       break;
+
+    case OPTVAL_ASM_SYNTAX:
+      if (strcmp(optarg, "intel") == 0) {
+        asm_syntax = ASM_SYNTAX_INTEL;
+      } else if (strcmp(optarg, "att") == 0) {
+        asm_syntax = ASM_SYNTAX_ATT;
+      } else {
+        error("unrecognized option argument: %s", optarg);
+      }
+      break;
+
     case 'o':
       output = optarg;
       break;
+
     case '?':
       return 1;
     }
   }
+
   if (emit_target == 0) {
     emit_target = EMIT_ASM;
   }
@@ -677,6 +694,7 @@ int main(int argc, char **argv) {
       error("ファイルが開けませんでした: %s", filename);
     }
   }
+
   if (output == NULL) {
     output = replace_suffix(basename(strdup(filename)), ".c", ".s");
   }
@@ -718,7 +736,7 @@ int main(int argc, char **argv) {
 
   assert(emit_target & EMIT_ASM);
   FILE *fp = open_output_file(output);
-  gen(fp, tunit);
+  gen(fp, tunit, asm_syntax);
 
 End:
   complete_output_file();

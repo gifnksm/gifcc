@@ -20,6 +20,7 @@ typedef enum {
 
 typedef struct {
   int size;
+  char suffix;
 } RegSize;
 
 typedef struct {
@@ -39,6 +40,7 @@ typedef struct {
 
 typedef struct {
   RegSize s;
+  RegSize s_x87;
   Operand rax;
   Operand rdi;
   Operand rsi;
@@ -50,7 +52,7 @@ typedef struct {
   Operand r11;
 } Reg;
 
-static const RegSize RegSizeAuto = {.size = 0};
+static const RegSize RegSizeAuto = {.size = 0, .suffix = '\0'};
 
 const struct {
   Operand rbp;
@@ -72,7 +74,8 @@ const Operand X87Reg[] = {
 };
 
 const Reg Reg8 = {
-    .s.size = 8,
+    .s = {.size = 8, .suffix = 'q'},
+    .s_x87 = {.size = 8, .suffix = 'q'},
     .rax = REG("rax"),
     .rdi = REG("rdi"),
     .rsi = REG("rsi"),
@@ -84,7 +87,8 @@ const Reg Reg8 = {
     .r11 = REG("r11"),
 };
 const Reg Reg4 = {
-    .s.size = 4,
+    .s = {.size = 4, .suffix = 'l'},
+    .s_x87 = {.size = 4, .suffix = 'l'},
     .rax = REG("eax"),
     .rdi = REG("edi"),
     .rsi = REG("esi"),
@@ -96,7 +100,8 @@ const Reg Reg4 = {
     .r11 = REG("r11d"),
 };
 const Reg Reg2 = {
-    .s.size = 2,
+    .s = {.size = 2, .suffix = 'w'},
+    .s_x87 = {.size = 2, .suffix = 's'},
     .rax = REG("ax"),
     .rdi = REG("di"),
     .rsi = REG("si"),
@@ -108,7 +113,8 @@ const Reg Reg2 = {
     .r11 = REG("r11w"),
 };
 const Reg Reg1 = {
-    .s.size = 1,
+    .s = {.size = 1, .suffix = 'b'},
+    .s_x87 = {.size = 1, .suffix = '\0'},
     .rax = REG("al"),
     .rdi = REG("dil"),
     .rsi = REG("sil"),
@@ -135,7 +141,7 @@ typedef struct {
 } SseOp;
 
 const SseOp SseOpSS = {
-    .s.size = 4,
+    .s = {.size = 4, .suffix = 's'},
     .add = "addss",
     .sub = "subss",
     .mul = "mulss",
@@ -148,7 +154,7 @@ const SseOp SseOpSS = {
     .cvtt_from_si = "cvtsi2ss",
 };
 const SseOp SseOpSD = {
-    .s.size = 8,
+    .s = {.size = 8, .suffix = 'l'},
     .add = "addsd",
     .sub = "subsd",
     .mul = "mulsd",
@@ -161,13 +167,12 @@ const SseOp SseOpSD = {
     .cvtt_from_si = "cvtsi2sd",
 };
 
-const RegSize X87Size = {
-    .size = 10,
-};
+const RegSize X87Size = {.size = 10, .suffix = 't'};
 
 const int NUM_INT_REG = 6;
 const int NUM_SSE_REG = 8;
 
+static asm_syntax_t asm_syntax;
 static FILE *output_fp = NULL;
 static char *epilogue_label = NULL;
 static Function *func_ctxt = NULL;
@@ -394,10 +399,10 @@ static __attribute__((format(printf, 1, 2))) void emit(const char *fmt, ...) {
   va_end(ap);
 }
 
-static const char *format_operand(Operand op) {
-  switch (op.type) {
+static const char *format_operand_intel(Operand opr) {
+  switch (opr.type) {
   case OP_ADDR: {
-    Addr addr = op.addr;
+    Addr addr = opr.addr;
     const char *s1 = "", *s2 = "", *s3 = "";
     switch (addr.size.size) {
     case 0:
@@ -433,22 +438,83 @@ static const char *format_operand(Operand op) {
     return format("%s%s%s[%s]", s1, s2, s3, addr.reg);
   }
   case OP_REG:
-    return op.reg;
+    return opr.reg;
   case OP_NUM:
-    return num2str(op.num);
+    return num2str(opr.num);
   case OP_SYMBOL:
-    return op.symbol;
+    return opr.symbol;
   }
   assert(false);
 }
 
+static const char *format_operand_att(Operand opr) {
+  switch (opr.type) {
+  case OP_ADDR: {
+    Addr addr = opr.addr;
+    if (addr.offset > 0) {
+      if (addr.symbol != NULL) {
+        return format("%s+%d(%%%s)", addr.symbol, addr.offset, addr.reg);
+      }
+      return format("%d(%%%s)", addr.offset, addr.reg);
+    }
+    if (addr.offset < 0) {
+      if (addr.symbol != NULL) {
+        return format("%s-%d(%%%s)", addr.symbol, -addr.offset, addr.reg);
+      }
+      return format("-%d(%%%s)", -addr.offset, addr.reg);
+    }
+    if (addr.symbol != NULL) {
+      return format("%s(%%%s)", addr.symbol, addr.reg);
+    }
+    return format("(%%%s)", addr.reg);
+  }
+  case OP_REG:
+    return format("%%%s", opr.reg);
+  case OP_NUM:
+    return format("$%s", num2str(opr.num));
+  case OP_SYMBOL:
+    return opr.symbol;
+  }
+  assert(false);
+}
+
+static const char *format_operand(Operand opr) {
+  if (asm_syntax == ASM_SYNTAX_INTEL) {
+    return format_operand_intel(opr);
+  }
+  return format_operand_att(opr);
+}
+
+static const char *operand2suffix(Operand opr) {
+  if (opr.type != OP_ADDR) {
+    return "";
+  }
+  Addr addr = opr.addr;
+  if (addr.size.suffix == '\0') {
+    return "";
+  }
+  return format("%c", addr.size.suffix);
+}
+
 static void emit_op0(const char *op) { fprintf(output_fp, "  %s\n", op); }
 static void emit_op1(const char *op, Operand opr1) {
-  fprintf(output_fp, "  %s %s\n", op, format_operand(opr1));
+  if (asm_syntax == ASM_SYNTAX_INTEL) {
+    fprintf(output_fp, "  %s %s\n", op, format_operand(opr1));
+  } else {
+    const char *s1 = operand2suffix(opr1);
+    fprintf(output_fp, "  %s%s %s\n", op, s1, format_operand(opr1));
+  }
 }
 static void emit_op2(const char *op, Operand opr1, Operand opr2) {
-  fprintf(output_fp, "  %s %s, %s\n", op, format_operand(opr1),
-          format_operand(opr2));
+  if (asm_syntax == ASM_SYNTAX_INTEL) {
+    fprintf(output_fp, "  %s %s, %s\n", op, format_operand(opr1),
+            format_operand(opr2));
+  } else {
+    const char *s1 = operand2suffix(opr1);
+    const char *s2 = operand2suffix(opr2);
+    fprintf(output_fp, "  %s%s%s %s, %s\n", op, s2, s1, format_operand(opr2),
+            format_operand(opr1));
+  }
 }
 
 static void emit_label(const char *label) {
@@ -991,7 +1057,11 @@ static void emit_expr_call(Expr *expr) {
   if (call_direct) {
     emit_op1("call", imm_symbol(expr->call.callee->global_var.name));
   } else {
-    emit_op1("call", Reg8.r10);
+    if (asm_syntax == ASM_SYNTAX_INTEL) {
+      emit_op1("call", Reg8.r10);
+    } else {
+      emit_op1("call *", Reg8.r10);
+    }
   }
   if (arg_size > 0) {
     emit_stack_add(arg_size);
@@ -1319,7 +1389,7 @@ static void emit_expr_cast(Expr *expr) {
       }
       emit_op2("mov", addr(R.rsp), conv->rax);
     }
-    emit_op1("fild", sized_addr(conv->s, R.rsp));
+    emit_op1("fild", sized_addr(conv->s_x87, R.rsp));
     emit_op1("fstp", sized_addr2(X87Size, R.rsp, -8));
     emit_op2("mov", sized_addr2(Reg4.s, R.rsp, 4), imm_int(0));
     emit_stack_sub(8);
@@ -1787,7 +1857,11 @@ static void emit_expr_binop_x87(Expr *expr) {
   case EX_DIV:
     emit_op1("fld", sized_addr2(X87Size, R.rsp, 16));
     emit_op1("fld", sized_addr(X87Size, R.rsp));
-    emit_op0("fdivp");
+    if (asm_syntax == ASM_SYNTAX_INTEL) {
+      emit_op0("fdivp");
+    } else {
+      emit_op0("fdivrp");
+    }
     emit_op1("fstp", sized_addr2(X87Size, R.rsp, 16));
     emit_stack_add(16);
     break;
@@ -2562,9 +2636,14 @@ static void emit_str(StringLiteral *str) {
   emit("  .string %s", format_string_literal(str->val));
 }
 
-void gen(FILE *fp, TranslationUnit *tunit) {
+void gen(FILE *fp, TranslationUnit *tunit, asm_syntax_t syntax) {
+  asm_syntax = syntax;
   output_fp = fp;
-  emit(".intel_syntax noprefix");
+  if (asm_syntax == ASM_SYNTAX_INTEL) {
+    emit(".intel_syntax noprefix");
+  } else {
+    emit(".att_syntax prefix");
+  }
 
   emit(".text");
   for (int i = 0; i < vec_len(tunit->func_list); i++) {
