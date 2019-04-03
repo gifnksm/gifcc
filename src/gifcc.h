@@ -592,6 +592,11 @@ typedef struct Tokenizer Tokenizer;
 typedef void tokenizer_listener_fun_t(void *, const Token *);
 typedef struct Scope Scope;
 
+typedef enum {
+  ASM_SYNTAX_INTEL,
+  ASM_SYNTAX_ATT,
+} asm_syntax_t;
+
 #define error(fmt, ...) error_raw(__FILE__, __LINE__, (fmt), ##__VA_ARGS__)
 noreturn __attribute__((format(printf, 3, 4))) void
 error_raw(const char *dbg_file, int dbg_line, const char *fmt, ...);
@@ -804,7 +809,7 @@ void sema(TranslationUnit *tunit);
 
 // codegen.c
 char *make_label(const char *s);
-void gen(FILE *fp, TranslationUnit *tunit);
+void gen(FILE *fp, TranslationUnit *tunit, asm_syntax_t syntax);
 
 // inline functions
 static inline char *get_label(Function *func, char *name) {
