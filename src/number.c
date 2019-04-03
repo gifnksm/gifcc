@@ -132,6 +132,7 @@ Number new_number_float(type_t ty, long double val) {
 }
 
 Number new_number_int(int val) { return new_number(TY_S_INT, val); }
+Number new_number_uint64(uint64_t val) { return new_number(TY_U_LLONG, val); }
 Number new_number_size_t(size_t val) { return new_number(TY_SIZE_T, val); }
 Number new_number_ptrdiff_t(ptrdiff_t val) {
   return new_number(TY_PTRDIFF_T, val);
@@ -175,7 +176,7 @@ static bool is_number_has_int_value(Number num, unsigned long long expected) {
 
 bool is_number_zero(Number num) { return is_number_has_int_value(num, 0); }
 
-char *format_number(Number num) {
+const char *format_number(Number num) {
   switch (num.type) {
   case TY_BOOL:
     return format("%d {0x%016lx, 0x%016lx}", num.bool_val, num.bytes[0],

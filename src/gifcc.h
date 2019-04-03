@@ -736,11 +736,12 @@ void range_warn_raw_v(const Range *range, const char *dbg_file, int dbg_line,
 Number new_number(type_t ty, unsigned long long val);
 Number new_number_float(type_t ty, long double val);
 Number new_number_int(int val);
+Number new_number_uint64(uint64_t val);
 Number new_number_size_t(size_t val);
 Number new_number_ptrdiff_t(ptrdiff_t val);
 Number new_number_wchar_t(wchar_t val);
 bool is_number_zero(Number num);
-char *format_number(Number num);
+const char *format_number(Number num);
 
 // tokenize.c
 Tokenizer *new_tokenizer(Reader *reader);
