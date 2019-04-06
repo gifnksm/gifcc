@@ -418,7 +418,7 @@ static Scope *new_scope(GlobalCtxt *gcx, FuncCtxt *fcx, Scope *outer) {
 static Scope *new_global_scope(GlobalCtxt *gcx, const Tokenizer *tokenizer) {
   Scope *scope = new_scope(gcx, NULL, NULL);
 
-  const Reader *reader = token_get_reader(tokenizer);
+  const Reader *reader = tknzr_get_reader(tokenizer);
   const Range *range = range_builtin(reader);
 
   register_typedef(scope, "__builtin_va_list", new_type_builtin_va_list(range));
@@ -749,23 +749,23 @@ static bool consume_storage_class_specifier(Tokenizer *tokenizer,
   bool consumed = false;
   while (true) {
     Token *token;
-    if ((token = token_consume(tokenizer, TK_TYPEDEF)) != NULL) {
+    if ((token = tknzr_consume(tokenizer, TK_TYPEDEF)) != NULL) {
       scs->is_typedef = true;
       consumed = true;
       continue;
     }
-    if ((token = token_consume(tokenizer, TK_EXTERN)) != NULL) {
+    if ((token = tknzr_consume(tokenizer, TK_EXTERN)) != NULL) {
       scs->is_extern = true;
       consumed = true;
       continue;
     }
-    if ((token = token_consume(tokenizer, TK_STATIC)) != NULL) {
+    if ((token = tknzr_consume(tokenizer, TK_STATIC)) != NULL) {
       scs->is_static = true;
       consumed = true;
       continue;
     }
 
-    assert(!token_is_storage_class_specifier(token_peek(tokenizer)));
+    assert(!token_is_storage_class_specifier(tknzr_peek(tokenizer)));
     break;
   }
 
@@ -818,7 +818,7 @@ static bool consume_type_specifier(Scope *scope, Tokenizer *tokenizer,
                                 !size_specified && !concrete_type_specified;
 
     Token *token;
-    if ((token = token_consume(tokenizer, TK_VOID)) != NULL) {
+    if ((token = tknzr_consume(tokenizer, TK_VOID)) != NULL) {
       if (concrete_type_specified) {
         range_error(token->range, "無効な型です");
       }
@@ -827,7 +827,7 @@ static bool consume_type_specifier(Scope *scope, Tokenizer *tokenizer,
       consumed = true;
       continue;
     }
-    if ((token = token_consume(tokenizer, TK_BOOL)) != NULL) {
+    if ((token = tknzr_consume(tokenizer, TK_BOOL)) != NULL) {
       if (concrete_type_specified) {
         range_error(token->range, "無効な型です");
       }
@@ -836,7 +836,7 @@ static bool consume_type_specifier(Scope *scope, Tokenizer *tokenizer,
       consumed = true;
       continue;
     }
-    if ((token = token_consume(tokenizer, TK_FLOAT)) != NULL) {
+    if ((token = tknzr_consume(tokenizer, TK_FLOAT)) != NULL) {
       if (concrete_type_specified) {
         range_error(token->range, "無効な型です");
       }
@@ -845,8 +845,8 @@ static bool consume_type_specifier(Scope *scope, Tokenizer *tokenizer,
       consumed = true;
       continue;
     }
-    if ((token = token_consume(tokenizer, TK_STRUCT)) != NULL ||
-        (token = token_consume(tokenizer, TK_UNION)) != NULL) {
+    if ((token = tknzr_consume(tokenizer, TK_STRUCT)) != NULL ||
+        (token = tknzr_consume(tokenizer, TK_UNION)) != NULL) {
       if (concrete_type_specified) {
         range_error(token->range, "無効な型です");
       }
@@ -855,7 +855,7 @@ static bool consume_type_specifier(Scope *scope, Tokenizer *tokenizer,
       consumed = true;
       continue;
     }
-    if ((token = token_consume(tokenizer, TK_ENUM)) != NULL) {
+    if ((token = tknzr_consume(tokenizer, TK_ENUM)) != NULL) {
       if (concrete_type_specified) {
         range_error(token->range, "無効な型です");
       }
@@ -865,7 +865,7 @@ static bool consume_type_specifier(Scope *scope, Tokenizer *tokenizer,
       continue;
     }
 
-    if ((token = token_consume(tokenizer, TK_INT)) != NULL) {
+    if ((token = tknzr_consume(tokenizer, TK_INT)) != NULL) {
       if (base_type_specified) {
         range_error(token->range, "無効な型です");
       }
@@ -874,7 +874,7 @@ static bool consume_type_specifier(Scope *scope, Tokenizer *tokenizer,
       consumed = true;
       continue;
     }
-    if ((token = token_consume(tokenizer, TK_CHAR)) != NULL) {
+    if ((token = tknzr_consume(tokenizer, TK_CHAR)) != NULL) {
       if (base_type_specified) {
         range_error(token->range, "無効な型です");
       }
@@ -883,7 +883,7 @@ static bool consume_type_specifier(Scope *scope, Tokenizer *tokenizer,
       consumed = true;
       continue;
     }
-    if ((token = token_consume(tokenizer, TK_DOUBLE)) != NULL) {
+    if ((token = tknzr_consume(tokenizer, TK_DOUBLE)) != NULL) {
       if (base_type_specified) {
         range_error(token->range, "無効な型です");
       }
@@ -892,7 +892,7 @@ static bool consume_type_specifier(Scope *scope, Tokenizer *tokenizer,
       consumed = true;
       continue;
     }
-    if ((token = token_consume(tokenizer, TK_SHORT)) != NULL) {
+    if ((token = tknzr_consume(tokenizer, TK_SHORT)) != NULL) {
       if (size_specified) {
         range_error(token->range, "無効な型です");
       }
@@ -901,7 +901,7 @@ static bool consume_type_specifier(Scope *scope, Tokenizer *tokenizer,
       consumed = true;
       continue;
     }
-    if ((token = token_consume(tokenizer, TK_LONG)) != NULL) {
+    if ((token = tknzr_consume(tokenizer, TK_LONG)) != NULL) {
       if (ts->size == SIZE_SHORT || ts->size == SIZE_LLONG) {
         range_error(token->range, "無効な型です");
       }
@@ -916,7 +916,7 @@ static bool consume_type_specifier(Scope *scope, Tokenizer *tokenizer,
       continue;
     }
 
-    if ((token = token_consume(tokenizer, TK_SIGNED)) != NULL) {
+    if ((token = tknzr_consume(tokenizer, TK_SIGNED)) != NULL) {
       if (signedness_specified) {
         range_error(token->range, "無効な型です");
       }
@@ -925,7 +925,7 @@ static bool consume_type_specifier(Scope *scope, Tokenizer *tokenizer,
       consumed = true;
       continue;
     }
-    if ((token = token_consume(tokenizer, TK_UNSIGNED)) != NULL) {
+    if ((token = tknzr_consume(tokenizer, TK_UNSIGNED)) != NULL) {
       if (signedness_specified) {
         range_error(token->range, "無効な型です");
       }
@@ -935,11 +935,11 @@ static bool consume_type_specifier(Scope *scope, Tokenizer *tokenizer,
       continue;
     }
 
-    token = token_peek(tokenizer);
+    token = tknzr_peek(tokenizer);
     if (token->ty == TK_IDENT && can_be_concrete_type) {
       Type *type = get_typedef(scope, token->ident);
       if (type != NULL) {
-        token_succ(tokenizer);
+        tknzr_succ(tokenizer);
         ts->concrete_type = type;
         ts->range = token->range;
         consumed = true;
@@ -948,7 +948,7 @@ static bool consume_type_specifier(Scope *scope, Tokenizer *tokenizer,
     }
 
     assert(!can_be_concrete_type ||
-           !token_is_type_specifier(scope, token_peek(tokenizer)));
+           !token_is_type_specifier(scope, tknzr_peek(tokenizer)));
     break;
   }
 
@@ -1046,7 +1046,7 @@ static bool consume_type_qualifier(Tokenizer *tokenizer, TypeQualifier *tq) {
   bool consumed = false;
   while (true) {
     Token *token;
-    if ((token = token_consume(tokenizer, TK_CONST)) != NULL) {
+    if ((token = tknzr_consume(tokenizer, TK_CONST)) != NULL) {
       if (tq->is_const) {
         range_warn(token->range, "`const` が重複しています");
       }
@@ -1054,7 +1054,7 @@ static bool consume_type_qualifier(Tokenizer *tokenizer, TypeQualifier *tq) {
       consumed = true;
       continue;
     }
-    if ((token = token_consume(tokenizer, TK_RESTRICT)) != NULL) {
+    if ((token = tknzr_consume(tokenizer, TK_RESTRICT)) != NULL) {
       if (tq->is_restrict) {
         range_warn(token->range, "`restrict` が重複しています");
       }
@@ -1062,7 +1062,7 @@ static bool consume_type_qualifier(Tokenizer *tokenizer, TypeQualifier *tq) {
       consumed = true;
       continue;
     }
-    if ((token = token_consume(tokenizer, TK_VOLATILE)) != NULL) {
+    if ((token = tknzr_consume(tokenizer, TK_VOLATILE)) != NULL) {
       if (tq->is_volatile) {
         range_warn(token->range, "`volatile` が重複しています");
       }
@@ -1071,7 +1071,7 @@ static bool consume_type_qualifier(Tokenizer *tokenizer, TypeQualifier *tq) {
       continue;
     }
 
-    assert(!token_is_type_qualifier(token_peek(tokenizer)));
+    assert(!token_is_type_qualifier(tknzr_peek(tokenizer)));
     break;
   }
 
@@ -1093,18 +1093,18 @@ static bool consume_function_specifier(Tokenizer *tokenizer,
   bool consumed = false;
   while (true) {
     Token *token;
-    if ((token = token_consume(tokenizer, TK_INLINE)) != NULL) {
+    if ((token = tknzr_consume(tokenizer, TK_INLINE)) != NULL) {
       fs->is_inline = true;
       consumed = true;
       continue;
     }
-    if ((token = token_consume(tokenizer, TK_NORETURN)) != NULL) {
+    if ((token = tknzr_consume(tokenizer, TK_NORETURN)) != NULL) {
       fs->is_noreturn = true;
       consumed = true;
       continue;
     }
 
-    assert(!token_is_function_specifier(token_peek(tokenizer)));
+    assert(!token_is_function_specifier(tknzr_peek(tokenizer)));
     break;
   }
 
@@ -2323,63 +2323,63 @@ static Number read_number(Token *token) {
 
 static Expr *primary_expression(Tokenizer *tokenizer, Scope *scope) {
   Token *token = NULL;
-  if ((token = token_consume(tokenizer, TK_NUM)) != NULL) {
+  if ((token = tknzr_consume(tokenizer, TK_NUM)) != NULL) {
     return new_expr_num(read_number(token), token->range);
   }
 
-  if ((token = token_consume(tokenizer, TK_CHARCONST)) != NULL) {
+  if ((token = tknzr_consume(tokenizer, TK_CHARCONST)) != NULL) {
     return new_expr_num(token->char_val, token->range);
   }
 
-  if ((token = token_consume(tokenizer, TK_IDENT)) != NULL) {
+  if ((token = tknzr_consume(tokenizer, TK_IDENT)) != NULL) {
     return new_expr_ident(scope, token);
   }
-  if ((token = token_consume(tokenizer, TK_STR)) != NULL) {
+  if ((token = tknzr_consume(tokenizer, TK_STR)) != NULL) {
     return new_expr_str(scope, token->str, token->range);
   }
 
-  if ((token = token_consume(tokenizer, '(')) != NULL) {
+  if ((token = tknzr_consume(tokenizer, '(')) != NULL) {
     // NonStandard/GNU: Statement Exprs
-    if (token_peek(tokenizer)->ty == '{') {
+    if (tknzr_peek(tokenizer)->ty == '{') {
       Scope *inner = new_inner_scope(scope);
       Stmt *stmt = compound_statement(tokenizer, inner);
-      Token *end = token_expect(tokenizer, ')');
+      Token *end = tknzr_expect(tokenizer, ')');
       return new_expr_stmt(stmt, range_join(token->range, end->range));
     }
 
     Expr *expr = expression(tokenizer, scope);
-    Token *end = token_expect(tokenizer, ')');
+    Token *end = tknzr_expect(tokenizer, ')');
     expr->range = range_join(token->range, end->range);
     return expr;
   }
 
-  if ((token = token_consume(tokenizer, TK_GENERIC)) != NULL) {
-    token_expect(tokenizer, '(');
+  if ((token = tknzr_consume(tokenizer, TK_GENERIC)) != NULL) {
+    tknzr_expect(tokenizer, '(');
     Expr *control = assignment_expression(tokenizer, scope);
-    token_expect(tokenizer, ',');
+    tknzr_expect(tokenizer, ',');
     Vector *assoc_list = new_vector();
-    while (token_peek(tokenizer)->ty != ')') {
+    while (tknzr_peek(tokenizer)->ty != ')') {
       GenericAssociation *assoc = NEW(GenericAssociation);
-      if ((token = token_consume(tokenizer, TK_DEFAULT)) != NULL) {
+      if ((token = tknzr_consume(tokenizer, TK_DEFAULT)) != NULL) {
         assoc->type = NULL;
         assoc->range = token->range;
       } else {
-        assoc->range = token_peek(tokenizer)->range;
+        assoc->range = tknzr_peek(tokenizer)->range;
         assoc->type = type_name(scope, tokenizer);
       }
-      Token *colon = token_expect(tokenizer, ':');
+      Token *colon = tknzr_expect(tokenizer, ':');
       assoc->range = range_join(assoc->range, colon->range);
       assoc->expr = assignment_expression(tokenizer, scope);
       vec_push(assoc_list, assoc);
-      if (!token_consume(tokenizer, ',')) {
+      if (!tknzr_consume(tokenizer, ',')) {
         break;
       }
     }
-    token_expect(tokenizer, ')');
+    tknzr_expect(tokenizer, ')');
     return new_expr_generic(scope, control, assoc_list);
   }
 
-  range_error(token_peek(tokenizer)->range,
+  range_error(tknzr_peek(tokenizer)->range,
               "数値でも開きカッコでもないトークンです");
 }
 
@@ -2387,46 +2387,46 @@ static Expr *postfix_expression(Tokenizer *tokenizer, Scope *scope) {
   Token *token;
   Expr *expr = primary_expression(tokenizer, scope);
   while (true) {
-    if (token_consume(tokenizer, '[')) {
+    if (tknzr_consume(tokenizer, '[')) {
       Expr *operand = expression(tokenizer, scope);
-      Token *end = token_expect(tokenizer, ']');
+      Token *end = tknzr_expect(tokenizer, ']');
       expr = new_expr_index(scope, expr, operand,
                             range_join(expr->range, end->range));
       continue;
     }
 
-    if (token_consume(tokenizer, '(')) {
+    if (tknzr_consume(tokenizer, '(')) {
       Vector *argument = NULL;
-      if (token_peek(tokenizer)->ty != ')') {
+      if (tknzr_peek(tokenizer)->ty != ')') {
         argument = argument_expression_list(tokenizer, scope);
       }
-      Token *end = token_expect(tokenizer, ')');
+      Token *end = tknzr_expect(tokenizer, ')');
       expr = new_expr_call(scope, expr, argument,
                            range_join(expr->range, end->range));
       continue;
     }
 
-    if (token_consume(tokenizer, '.')) {
-      Token *member = token_expect(tokenizer, TK_IDENT);
+    if (tknzr_consume(tokenizer, '.')) {
+      Token *member = tknzr_expect(tokenizer, TK_IDENT);
       expr = new_expr_dot(scope, expr, member->ident,
                           range_join(expr->range, member->range));
       continue;
     }
 
-    if (token_consume(tokenizer, TK_ARROW)) {
-      Token *member = token_expect(tokenizer, TK_IDENT);
+    if (tknzr_consume(tokenizer, TK_ARROW)) {
+      Token *member = tknzr_expect(tokenizer, TK_IDENT);
       expr = new_expr_arrow(scope, expr, member->ident,
                             range_join(expr->range, member->range));
       continue;
     }
 
-    if ((token = token_consume(tokenizer, TK_INC)) != NULL) {
+    if ((token = tknzr_consume(tokenizer, TK_INC)) != NULL) {
       expr = new_expr_postfix(scope, EX_POST_INC, expr,
                               range_join(expr->range, token->range));
       continue;
     }
 
-    if ((token = token_consume(tokenizer, TK_DEC)) != NULL) {
+    if ((token = tknzr_consume(tokenizer, TK_DEC)) != NULL) {
       expr = new_expr_postfix(scope, EX_POST_DEC, expr,
                               range_join(expr->range, token->range));
       continue;
@@ -2440,7 +2440,7 @@ static Vector *argument_expression_list(Tokenizer *tokenizer, Scope *scope) {
   Vector *argument = new_vector();
   while (true) {
     vec_push(argument, assignment_expression(tokenizer, scope));
-    if (!token_consume(tokenizer, ',')) {
+    if (!tknzr_consume(tokenizer, ',')) {
       break;
     }
   }
@@ -2455,7 +2455,7 @@ static Expr *unary_expression(Tokenizer *tokenizer, Scope *scope) {
     int tk = TKS[i];
     int ex = EXS[i];
     Token *token;
-    if ((token = token_consume(tokenizer, tk)) != NULL) {
+    if ((token = tknzr_consume(tokenizer, tk)) != NULL) {
       Expr *operand = cast_expression(tokenizer, scope);
       return new_expr_unary(scope, ex, operand,
                             range_join(token->range, operand->range));
@@ -2463,24 +2463,24 @@ static Expr *unary_expression(Tokenizer *tokenizer, Scope *scope) {
   }
 
   Token *token;
-  if ((token = token_consume(tokenizer, TK_SIZEOF)) != NULL) {
-    if (token_peek(tokenizer)->ty != '(' ||
-        !token_is_type_name(scope, token_peek_ahead(tokenizer, 1))) {
+  if ((token = tknzr_consume(tokenizer, TK_SIZEOF)) != NULL) {
+    if (tknzr_peek(tokenizer)->ty != '(' ||
+        !token_is_type_name(scope, tknzr_peek_ahead(tokenizer, 1))) {
       Expr *expr = unary_expression(tokenizer, scope);
       return new_expr_num(
           new_number_size_t(get_val_size(expr->val_type, expr->range)),
           range_join(token->range, expr->range));
     }
-    token_expect(tokenizer, '(');
+    tknzr_expect(tokenizer, '(');
     Type *type = type_name(scope, tokenizer);
-    Token *end = token_expect(tokenizer, ')');
+    Token *end = tknzr_expect(tokenizer, ')');
     const Range *range = range_join(token->range, end->range);
     return new_expr_num(new_number_size_t(get_val_size(type, range)), range);
   }
-  if ((token = token_consume(tokenizer, TK_ALIGNOF)) != NULL) {
-    token_expect(tokenizer, '(');
+  if ((token = tknzr_consume(tokenizer, TK_ALIGNOF)) != NULL) {
+    tknzr_expect(tokenizer, '(');
     Type *type = type_name(scope, tokenizer);
-    Token *end = token_expect(tokenizer, ')');
+    Token *end = tknzr_expect(tokenizer, ')');
     const Range *range = range_join(token->range, end->range);
     return new_expr_num(new_number_size_t(get_val_align(type, range)), range);
   }
@@ -2488,14 +2488,14 @@ static Expr *unary_expression(Tokenizer *tokenizer, Scope *scope) {
 }
 
 static Expr *cast_expression(Tokenizer *tokenizer, Scope *scope) {
-  Token *token = token_peek(tokenizer);
+  Token *token = tknzr_peek(tokenizer);
   if (token->ty == '(' &&
-      token_is_type_name(scope, token_peek_ahead(tokenizer, 1))) {
+      token_is_type_name(scope, tknzr_peek_ahead(tokenizer, 1))) {
     const Range *start = token->range;
-    token_succ(tokenizer);
+    tknzr_succ(tokenizer);
     Type *val_type = type_name(scope, tokenizer);
-    token_expect(tokenizer, ')');
-    if (token_peek(tokenizer)->ty == '{') {
+    tknzr_expect(tokenizer, ')');
+    if (tknzr_peek(tokenizer)->ty == '{') {
       Initializer *init = NULL;
       const Range *range = NULL;
       initializer(tokenizer, scope, val_type, &init, &range);
@@ -2519,7 +2519,7 @@ static Expr *binary_expression(Tokenizer *tokenizer, Scope *scope,
       int tk = tks[i];
       int ex = exs[i];
       Token *token;
-      if ((token = token_consume(tokenizer, tk)) != NULL) {
+      if ((token = tknzr_consume(tokenizer, tk)) != NULL) {
         Expr *operand = op_parser(tokenizer, scope);
         expr = new_expr_binop(scope, ex, expr, operand,
                               range_join(expr->range, operand->range));
@@ -2584,9 +2584,9 @@ static Expr *logical_or_expression(Tokenizer *tokenizer, Scope *scope) {
 }
 static Expr *conditional_expression(Tokenizer *tokenizer, Scope *scope) {
   Expr *cond = logical_or_expression(tokenizer, scope);
-  if (token_consume(tokenizer, '?')) {
+  if (tknzr_consume(tokenizer, '?')) {
     Expr *then_expr = expression(tokenizer, scope);
-    token_expect(tokenizer, ':');
+    tknzr_expect(tokenizer, ':');
     Expr *else_expr = conditional_expression(tokenizer, scope);
     return new_expr_cond(scope, cond, then_expr, else_expr,
                          range_join(cond->range, else_expr->range));
@@ -2610,7 +2610,7 @@ static Expr *assignment_expression(Tokenizer *tokenizer, Scope *scope) {
   for (int i = 0; TKS[i] != '\0'; i++) {
     int tk = TKS[i];
     int ex = EXS[i];
-    if (token_consume(tokenizer, tk)) {
+    if (tknzr_consume(tokenizer, tk)) {
       Expr *rhs = assignment_expression(tokenizer, scope);
       const Range *range = range_join(lhs->range, rhs->range);
       return new_expr_binop(scope, ex, lhs, rhs, range);
@@ -2654,7 +2654,7 @@ static Vector *declaration(Tokenizer *tokenizer, Scope *scope) {
 
   declaration_specifiers(tokenizer, scope, &base_type, &scs, &fs);
 
-  if (token_consume(tokenizer, ';')) {
+  if (tknzr_consume(tokenizer, ';')) {
     return def_list;
   }
 
@@ -2670,7 +2670,7 @@ static Vector *declaration(Tokenizer *tokenizer, Scope *scope) {
   } else {
     if (is_func_type(type)) {
       VarDef *def = register_func(scope, name, type);
-      if (token_peek(tokenizer)->ty == '{') {
+      if (tknzr_peek(tokenizer)->ty == '{') {
         def->func = function_definition(tokenizer, scope, type, name->ident,
                                         scs, fs, range);
         vec_push(def_list, def);
@@ -2678,14 +2678,14 @@ static Vector *declaration(Tokenizer *tokenizer, Scope *scope) {
       }
     } else {
       VarDef *def = register_var(scope, name, type, range, scs);
-      if (token_consume(tokenizer, '=')) {
+      if (tknzr_consume(tokenizer, '=')) {
         initializer(tokenizer, scope, type, &def->init, NULL);
       }
       vec_push(def_list, def);
     }
   }
 
-  while (token_consume(tokenizer, ',')) {
+  while (tknzr_consume(tokenizer, ',')) {
     declarator(scope, tokenizer, base_type, &name, &type, &range);
     if (scs.is_typedef) {
       register_typedef(scope, name->ident, type);
@@ -2696,14 +2696,14 @@ static Vector *declaration(Tokenizer *tokenizer, Scope *scope) {
         (void)register_func(scope, name, type);
       } else {
         VarDef *def = register_var(scope, name, type, range, scs);
-        if (token_consume(tokenizer, '=')) {
+        if (tknzr_consume(tokenizer, '=')) {
           initializer(tokenizer, scope, type, &def->init, NULL);
         }
         vec_push(def_list, def);
       }
     }
   }
-  token_expect(tokenizer, ';');
+  tknzr_expect(tokenizer, ';');
 
   return def_list;
 }
@@ -2730,18 +2730,18 @@ static void declaration_specifiers(Tokenizer *tokenizer, Scope *scope,
   }
   *type = construct_type_specifier(ts, tq);
   if (*type == NULL) {
-    range_error(token_peek(tokenizer)->range, "型名がありません");
+    range_error(tknzr_peek(tokenizer)->range, "型名がありません");
   }
 }
 
 static Type *struct_or_union_specifier(Scope *scope, Tokenizer *tokenizer,
                                        Token *token) {
   assert(token->ty == TK_STRUCT || token->ty == TK_UNION);
-  Token *tag = token_consume(tokenizer, TK_IDENT);
+  Token *tag = tknzr_consume(tokenizer, TK_IDENT);
 
   type_t ty = token->ty == TK_STRUCT ? TY_STRUCT : TY_UNION;
 
-  if (token_consume(tokenizer, '{')) {
+  if (tknzr_consume(tokenizer, '{')) {
     Type *type;
     if (tag != NULL) {
       type = new_type_struct(ty, tag ? tag->ident : NULL, EMPTY_TYPE_QUALIFIER);
@@ -2763,10 +2763,10 @@ static Type *struct_or_union_specifier(Scope *scope, Tokenizer *tokenizer,
     } else {
       type = new_type_struct(ty, tag ? tag->ident : NULL, EMPTY_TYPE_QUALIFIER);
     }
-    while (token_peek(tokenizer)->ty != '}') {
+    while (tknzr_peek(tokenizer)->ty != '}') {
       struct_declaration(scope, tokenizer, type);
     }
-    token_expect(tokenizer, '}');
+    tknzr_expect(tokenizer, '}');
     return type;
   }
 
@@ -2791,32 +2791,32 @@ static void struct_declaration(Scope *scope, Tokenizer *tokenizer, Type *type) {
 
   Token *member_name = NULL;
   Type *member_type = base_type;
-  const Range *range = token_peek(tokenizer)->range;
-  if (token_peek(tokenizer)->ty != ';') {
+  const Range *range = tknzr_peek(tokenizer)->range;
+  if (tknzr_peek(tokenizer)->ty != ';') {
     struct_declarator(scope, tokenizer, base_type, &member_name, &member_type,
                       &range);
   }
   register_struct_member(type, member_name != NULL ? member_name->ident : NULL,
                          member_type, range);
 
-  while (token_consume(tokenizer, ',')) {
+  while (tknzr_consume(tokenizer, ',')) {
     struct_declarator(scope, tokenizer, base_type, &member_name, &member_type,
                       &range);
     register_struct_member(type,
                            member_name != NULL ? member_name->ident : NULL,
                            member_type, range);
   }
-  token_expect(tokenizer, ';');
+  tknzr_expect(tokenizer, ';');
 }
 
 static void struct_declarator(Scope *scope, Tokenizer *tokenizer,
                               Type *base_type, Token **name, Type **type,
                               const Range **range) {
-  if (token_peek(tokenizer)->ty != ':') {
+  if (tknzr_peek(tokenizer)->ty != ':') {
     declarator(scope, tokenizer, base_type, name, type, range);
   }
 
-  if (token_consume(tokenizer, ':')) {
+  if (tknzr_consume(tokenizer, ':')) {
     if (!is_integer_type(*type)) {
       range_error(*range, "bit-field has non-integral type '%s'",
                   format_type(*type, false));
@@ -2858,20 +2858,20 @@ static Type *specifier_qualifier_list(Scope *scope, Tokenizer *tokenizer) {
   }
   Type *type = construct_type_specifier(ts, tq);
   if (type == NULL) {
-    range_error(token_peek(tokenizer)->range, "型名がありません");
+    range_error(tknzr_peek(tokenizer)->range, "型名がありません");
   }
   return type;
 }
 
 static Type *enum_specifier(Scope *scope, Tokenizer *tokenizer, Token *token) {
-  Token *tag_ident = token_consume(tokenizer, TK_IDENT);
-  if (tag_ident == NULL && token_peek(tokenizer)->ty != '{') {
+  Token *tag_ident = tknzr_consume(tokenizer, TK_IDENT);
+  if (tag_ident == NULL && tknzr_peek(tokenizer)->ty != '{') {
     range_error(token->range, "列挙型のタグまたは `{` がありません");
   }
 
   char *tag = tag_ident != NULL ? tag_ident->ident : NULL;
 
-  if (token_consume(tokenizer, '{')) {
+  if (tknzr_consume(tokenizer, '{')) {
     Type *type = new_type_enum(tag != NULL ? tag : NULL, EMPTY_TYPE_QUALIFIER);
     if (tag != NULL) {
       if (!register_tag(scope, tag, type)) {
@@ -2880,10 +2880,10 @@ static Type *enum_specifier(Scope *scope, Tokenizer *tokenizer, Token *token) {
       }
     }
     int val = 0;
-    while (token_peek(tokenizer)->ty != '}') {
+    while (tknzr_peek(tokenizer)->ty != '}') {
       enumerator(scope, tokenizer, type, &val);
     }
-    token_expect(tokenizer, '}');
+    tknzr_expect(tokenizer, '}');
     return type;
   }
   if (tag != NULL) {
@@ -2897,12 +2897,12 @@ static Type *enum_specifier(Scope *scope, Tokenizer *tokenizer, Token *token) {
 
 static void enumerator(Scope *scope, Tokenizer *tokenizer, Type *type,
                        int *val) {
-  Token *ident = token_expect(tokenizer, TK_IDENT);
-  if (token_consume(tokenizer, '=')) {
+  Token *ident = tknzr_expect(tokenizer, TK_IDENT);
+  if (tknzr_consume(tokenizer, '=')) {
     Number num = integer_constant_expression(tokenizer, scope);
     SET_NUMBER_VAL(*val, &num);
   }
-  token_consume(tokenizer, ',');
+  tknzr_consume(tokenizer, ',');
 
   Number *number = NEW(Number);
   number->type = TY_ENUM;
@@ -2915,8 +2915,8 @@ static void enumerator(Scope *scope, Tokenizer *tokenizer, Type *type,
 static void declarator_common(Scope *scope, Tokenizer *tokenizer,
                               declarator_type_t dec_type, Type *base_type,
                               Token **name, Type **type, const Range **range) {
-  const Range *start = token_peek(tokenizer)->range;
-  while (token_consume(tokenizer, '*')) {
+  const Range *start = tknzr_peek(tokenizer)->range;
+  while (tknzr_consume(tokenizer, '*')) {
     TypeQualifier tq = EMPTY_TYPE_QUALIFIER;
     consume_type_qualifier(tokenizer, &tq);
     base_type = new_type_ptr(base_type, tq);
@@ -2932,20 +2932,20 @@ static void direct_declarator_common(Scope *scope, Tokenizer *tokenizer,
                                      Type *base_type, Token **name, Type **type,
                                      const Range **range) {
   Type *placeholder = NEW(Type);
-  *range = token_peek(tokenizer)->range;
+  *range = tknzr_peek(tokenizer)->range;
 
   while (true) {
     Token *token;
     if (dec_type != ABSTRACT_DECLARATOR &&
-        (token = token_consume(tokenizer, TK_IDENT)) != NULL) {
+        (token = tknzr_consume(tokenizer, TK_IDENT)) != NULL) {
       *name = token;
       *type = placeholder;
       *range = range_join(*range, token->range);
       break;
     }
 
-    if (token_peek(tokenizer)->ty == '(') {
-      Token *next = token_peek_ahead(tokenizer, 1);
+    if (tknzr_peek(tokenizer)->ty == '(') {
+      Token *next = tknzr_peek_ahead(tokenizer, 1);
       bool is_declarator = next->ty == '*';
       if (dec_type != CONCRETE_DECLARATOR && next->ty == '[') {
         is_declarator = true;
@@ -2954,18 +2954,18 @@ static void direct_declarator_common(Scope *scope, Tokenizer *tokenizer,
         is_declarator = true;
       }
       if (is_declarator) {
-        token_succ(tokenizer);
+        tknzr_succ(tokenizer);
         const Range *mid;
         declarator_common(scope, tokenizer, dec_type, placeholder, name, type,
                           &mid);
-        Token *token = token_expect(tokenizer, ')');
+        Token *token = tknzr_expect(tokenizer, ')');
         *range = range_join(*range, token->range);
         break;
       }
     }
 
     if (dec_type == CONCRETE_DECLARATOR) {
-      range_error(token_peek(tokenizer)->range, "識別子がありません");
+      range_error(tknzr_peek(tokenizer)->range, "識別子がありません");
     }
     *name = NULL;
     *type = placeholder;
@@ -2974,39 +2974,39 @@ static void direct_declarator_common(Scope *scope, Tokenizer *tokenizer,
   }
 
   while (true) {
-    if (token_consume(tokenizer, '[')) {
+    if (tknzr_consume(tokenizer, '[')) {
       Type *inner = NEW(Type);
       TypeQualifier tq = EMPTY_TYPE_QUALIFIER;
       while (true) {
         if (consume_type_qualifier(tokenizer, &tq)) {
           continue;
         }
-        if (token_consume(tokenizer, TK_STATIC)) {
+        if (tknzr_consume(tokenizer, TK_STATIC)) {
           continue;
         }
         break;
       }
-      if (token_consume(tokenizer, '*')) {
+      if (tknzr_consume(tokenizer, '*')) {
         *placeholder = *new_type_unsized_array(inner, tq);
-      } else if (token_peek(tokenizer)->ty == ']') {
+      } else if (tknzr_peek(tokenizer)->ty == ']') {
         *placeholder = *new_type_unsized_array(inner, tq);
       } else {
         Number num = integer_constant_expression(tokenizer, scope);
         *placeholder = *new_type_array(inner, num, tq);
       }
       placeholder = inner;
-      Token *end = token_expect(tokenizer, ']');
+      Token *end = tknzr_expect(tokenizer, ']');
       *range = range_join(*range, end->range);
       continue;
     }
 
-    if (token_consume(tokenizer, '(')) {
+    if (tknzr_consume(tokenizer, '(')) {
       Vector *params;
       bool has_varargs = false;
       Token *end;
-      if ((end = token_consume(tokenizer, ')'))) {
+      if ((end = tknzr_consume(tokenizer, ')'))) {
         params = NULL;
-      } else if ((end = token_consume2(tokenizer, TK_VOID, ')'))) {
+      } else if ((end = tknzr_consume2(tokenizer, TK_VOID, ')'))) {
         params = new_vector();
       } else {
         params = new_vector();
@@ -3019,16 +3019,16 @@ static void direct_declarator_common(Scope *scope, Tokenizer *tokenizer,
             param->type = type;
           }
           vec_push(params, param);
-          if (token_peek(tokenizer)->ty == ')') {
+          if (tknzr_peek(tokenizer)->ty == ')') {
             break;
           }
-          token_expect(tokenizer, ',');
-          if (token_consume(tokenizer, TK_ELIPSIS)) {
+          tknzr_expect(tokenizer, ',');
+          if (tknzr_consume(tokenizer, TK_ELIPSIS)) {
             has_varargs = true;
             break;
           }
         }
-        end = token_expect(tokenizer, ')');
+        end = tknzr_expect(tokenizer, ')');
       }
 
       *range = range_join(*range, end->range);
@@ -3090,15 +3090,15 @@ static void abstract_declarator(Scope *scope, Tokenizer *tokenizer,
 
 static Designator *designator(Tokenizer *tokenizer, Scope *scope) {
   Token *token;
-  if ((token = token_consume(tokenizer, '[')) != NULL) {
+  if ((token = tknzr_consume(tokenizer, '[')) != NULL) {
     Number first = integer_constant_expression(tokenizer, scope);
     Number last = first;
-    if (token_consume(tokenizer, TK_ELIPSIS)) {
+    if (tknzr_consume(tokenizer, TK_ELIPSIS)) {
       // NonStandard/GNU: designated initializers for initializing a range of
       // elements
       last = integer_constant_expression(tokenizer, scope);
     }
-    Token *end = token_expect(tokenizer, ']');
+    Token *end = tknzr_expect(tokenizer, ']');
     const Range *range = range_join(token->range, end->range);
 
     Designator *desig = NEW(Designator);
@@ -3109,8 +3109,8 @@ static Designator *designator(Tokenizer *tokenizer, Scope *scope) {
     return desig;
   }
 
-  if ((token = token_consume(tokenizer, '.')) != NULL) {
-    Token *ident = token_expect(tokenizer, TK_IDENT);
+  if ((token = tknzr_consume(tokenizer, '.')) != NULL) {
+    Token *ident = tknzr_expect(tokenizer, TK_IDENT);
     Designator *desig = NEW(Designator);
     desig->type = DESIG_MEMBER;
     desig->member = ident->ident;
@@ -3123,25 +3123,25 @@ static Designator *designator(Tokenizer *tokenizer, Scope *scope) {
 
 static Vector *designation(Tokenizer *tokenizer, Scope *scope) {
   Vector *list = new_vector();
-  while (token_peek(tokenizer)->ty == '[' || token_peek(tokenizer)->ty == '.') {
+  while (tknzr_peek(tokenizer)->ty == '[' || tknzr_peek(tokenizer)->ty == '.') {
     vec_push(list, designator(tokenizer, scope));
   }
-  token_expect(tokenizer, '=');
+  tknzr_expect(tokenizer, '=');
   return list;
 }
 
 static Vector *initializer_list(Tokenizer *tokenizer, Scope *scope) {
   Vector *list = new_vector();
-  while (token_peek(tokenizer)->ty != '}') {
+  while (tknzr_peek(tokenizer)->ty != '}') {
     InitElem *elem = NEW(InitElem);
-    Token *start = token_peek(tokenizer);
-    if (token_peek(tokenizer)->ty == '[' || token_peek(tokenizer)->ty == '.') {
+    Token *start = tknzr_peek(tokenizer);
+    if (tknzr_peek(tokenizer)->ty == '[' || tknzr_peek(tokenizer)->ty == '.') {
       elem->designation = designation(tokenizer, scope);
     }
     elem->pinit = parse_initializer(tokenizer, scope);
     elem->range = range_join(start->range, elem->pinit->range);
     vec_push(list, elem);
-    if (token_consume(tokenizer, ',') == NULL) {
+    if (tknzr_consume(tokenizer, ',') == NULL) {
       break;
     }
   }
@@ -3150,9 +3150,9 @@ static Vector *initializer_list(Tokenizer *tokenizer, Scope *scope) {
 
 static ParseInit *parse_initializer(Tokenizer *tokenizer, Scope *scope) {
   Token *token;
-  if ((token = token_consume(tokenizer, '{')) != NULL) {
+  if ((token = tknzr_consume(tokenizer, '{')) != NULL) {
     Vector *list = initializer_list(tokenizer, scope);
-    Token *end = token_expect(tokenizer, '}');
+    Token *end = tknzr_expect(tokenizer, '}');
     const Range *range = range_join(token->range, end->range);
     return new_parse_init_list(range, list);
   }
@@ -3477,17 +3477,17 @@ static void initializer(Tokenizer *tokenizer, Scope *scope, Type *type,
 }
 
 static Stmt *statement(Tokenizer *tokenizer, Scope *scope) {
-  Token *start = token_peek(tokenizer);
+  Token *start = tknzr_peek(tokenizer);
   switch (start->ty) {
   case TK_IF: {
-    token_succ(tokenizer);
-    token_expect(tokenizer, '(');
+    tknzr_succ(tokenizer);
+    tknzr_expect(tokenizer, '(');
     Expr *cond = expression(tokenizer, scope);
-    token_expect(tokenizer, ')');
+    tknzr_expect(tokenizer, ')');
     Stmt *then_stmt = statement(tokenizer, scope);
     Stmt *else_stmt = new_stmt_null(then_stmt->range);
     const Range *range;
-    if (token_consume(tokenizer, TK_ELSE)) {
+    if (tknzr_consume(tokenizer, TK_ELSE)) {
       else_stmt = statement(tokenizer, scope);
       range = range_join(start->range, else_stmt->range);
     } else {
@@ -3496,10 +3496,10 @@ static Stmt *statement(Tokenizer *tokenizer, Scope *scope) {
     return new_stmt_if(cond, then_stmt, else_stmt, range);
   }
   case TK_SWITCH: {
-    token_succ(tokenizer);
-    token_expect(tokenizer, '(');
+    tknzr_succ(tokenizer);
+    tknzr_expect(tokenizer, '(');
     Expr *cond = expression(tokenizer, scope);
-    token_expect(tokenizer, ')');
+    tknzr_expect(tokenizer, ')');
     Stmt *stmt = new_stmt_switch(cond, NULL, start->range);
     vec_push(scope->func_ctxt->switches, stmt);
     stmt->body = statement(tokenizer, scope);
@@ -3508,9 +3508,9 @@ static Stmt *statement(Tokenizer *tokenizer, Scope *scope) {
     return stmt;
   }
   case TK_CASE: {
-    token_succ(tokenizer);
+    tknzr_succ(tokenizer);
     Number num = integer_constant_expression(tokenizer, scope);
-    token_expect(tokenizer, ':');
+    tknzr_expect(tokenizer, ':');
     Stmt *body = statement(tokenizer, scope);
     Stmt *stmt =
         new_stmt_case(num, body, range_join(start->range, body->range));
@@ -3522,8 +3522,8 @@ static Stmt *statement(Tokenizer *tokenizer, Scope *scope) {
     return stmt;
   }
   case TK_DEFAULT: {
-    token_succ(tokenizer);
-    token_expect(tokenizer, ':');
+    tknzr_succ(tokenizer);
+    tknzr_expect(tokenizer, ':');
     Stmt *body = statement(tokenizer, scope);
     Stmt *stmt = new_stmt_default(body, range_join(start->range, body->range));
     if (vec_len(scope->func_ctxt->switches) <= 0) {
@@ -3534,32 +3534,32 @@ static Stmt *statement(Tokenizer *tokenizer, Scope *scope) {
     return stmt;
   }
   case TK_WHILE: {
-    token_succ(tokenizer);
-    token_expect(tokenizer, '(');
+    tknzr_succ(tokenizer);
+    tknzr_expect(tokenizer, '(');
     Expr *cond = expression(tokenizer, scope);
-    token_expect(tokenizer, ')');
+    tknzr_expect(tokenizer, ')');
     Stmt *body = statement(tokenizer, scope);
     return new_stmt_while(cond, body, range_join(start->range, body->range));
   }
   case TK_DO: {
-    token_succ(tokenizer);
+    tknzr_succ(tokenizer);
     Stmt *body = statement(tokenizer, scope);
-    token_expect(tokenizer, TK_WHILE);
-    token_expect(tokenizer, '(');
+    tknzr_expect(tokenizer, TK_WHILE);
+    tknzr_expect(tokenizer, '(');
     Expr *cond = expression(tokenizer, scope);
-    token_expect(tokenizer, ')');
-    Token *end = token_expect(tokenizer, ';');
+    tknzr_expect(tokenizer, ')');
+    Token *end = tknzr_expect(tokenizer, ';');
     return new_stmt_do_while(cond, body, range_join(start->range, end->range));
   }
   case TK_FOR: {
     Scope *inner = new_inner_scope(scope);
-    token_succ(tokenizer);
+    tknzr_succ(tokenizer);
     Stmt *init = NULL;
     Expr *cond = NULL;
     Expr *inc = NULL;
-    token_expect(tokenizer, '(');
-    if (!token_consume(tokenizer, ';')) {
-      if (token_is_declaration_specifiers(inner, token_peek(tokenizer))) {
+    tknzr_expect(tokenizer, '(');
+    if (!tknzr_consume(tokenizer, ';')) {
+      if (token_is_declaration_specifiers(inner, tknzr_peek(tokenizer))) {
         Vector *svar_decl = NULL;
         const Range *svar_range = NULL;
         Vector *def_list = declaration(tokenizer, inner);
@@ -3590,44 +3590,44 @@ static Stmt *statement(Tokenizer *tokenizer, Scope *scope) {
       } else {
         Expr *expr = expression(tokenizer, inner);
         init = new_stmt_expr(expr, expr->range);
-        token_expect(tokenizer, ';');
+        tknzr_expect(tokenizer, ';');
       }
     }
-    if (!token_consume(tokenizer, ';')) {
+    if (!tknzr_consume(tokenizer, ';')) {
       cond = expression(tokenizer, inner);
-      token_expect(tokenizer, ';');
+      tknzr_expect(tokenizer, ';');
     }
-    if (!token_consume(tokenizer, ')')) {
+    if (!tknzr_consume(tokenizer, ')')) {
       inc = expression(tokenizer, inner);
-      token_expect(tokenizer, ')');
+      tknzr_expect(tokenizer, ')');
     }
     Stmt *body = statement(tokenizer, inner);
     return new_stmt_for(init, cond, inc, body,
                         range_join(start->range, body->range));
   }
   case TK_GOTO: {
-    token_succ(tokenizer);
-    char *name = token_expect(tokenizer, TK_IDENT)->ident;
-    Token *end = token_expect(tokenizer, ';');
+    tknzr_succ(tokenizer);
+    char *name = tknzr_expect(tokenizer, TK_IDENT)->ident;
+    Token *end = tknzr_expect(tokenizer, ';');
     return new_stmt_goto(name, range_join(start->range, end->range));
   }
   case TK_BREAK: {
-    token_succ(tokenizer);
-    Token *end = token_expect(tokenizer, ';');
+    tknzr_succ(tokenizer);
+    Token *end = tknzr_expect(tokenizer, ';');
     return new_stmt_break(range_join(start->range, end->range));
   }
   case TK_CONTINUE: {
-    token_succ(tokenizer);
-    Token *end = token_expect(tokenizer, ';');
+    tknzr_succ(tokenizer);
+    Token *end = tknzr_expect(tokenizer, ';');
     return new_stmt_continue(range_join(start->range, end->range));
   }
   case TK_RETURN: {
-    token_succ(tokenizer);
+    tknzr_succ(tokenizer);
     Expr *expr = NULL;
-    if (token_peek(tokenizer)->ty != ';') {
+    if (tknzr_peek(tokenizer)->ty != ';') {
       expr = expression(tokenizer, scope);
     }
-    Token *end = token_expect(tokenizer, ';');
+    Token *end = tknzr_expect(tokenizer, ';');
     return new_stmt_return(scope, expr, range_join(start->range, end->range));
   }
   case '{': {
@@ -3635,13 +3635,13 @@ static Stmt *statement(Tokenizer *tokenizer, Scope *scope) {
     return compound_statement(tokenizer, inner);
   }
   case ';': {
-    Token *end = token_pop(tokenizer);
+    Token *end = tknzr_pop(tokenizer);
     return new_stmt_null(end->range);
   }
   case TK_IDENT: {
-    if (token_peek_ahead(tokenizer, 1)->ty == ':') {
-      Token *ident = token_pop(tokenizer);
-      token_expect(tokenizer, ':');
+    if (tknzr_peek_ahead(tokenizer, 1)->ty == ':') {
+      Token *ident = tknzr_pop(tokenizer);
+      tknzr_expect(tokenizer, ':');
       Stmt *body = statement(tokenizer, scope);
       Stmt *stmt = new_stmt_label(scope->func_ctxt, ident->ident, body,
                                   range_join(start->range, body->range));
@@ -3651,20 +3651,20 @@ static Stmt *statement(Tokenizer *tokenizer, Scope *scope) {
   // fall through
   default: {
     Expr *expr = expression(tokenizer, scope);
-    Token *end = token_expect(tokenizer, ';');
+    Token *end = tknzr_expect(tokenizer, ';');
     return new_stmt_expr(expr, range_join(expr->range, end->range));
   }
   }
 }
 
 static Stmt *compound_statement(Tokenizer *tokenizer, Scope *scope) {
-  Token *start = token_expect(tokenizer, '{');
+  Token *start = tknzr_expect(tokenizer, '{');
 
   const Range *range = start->range;
   Vector *stmts = new_vector();
-  while (!token_consume(tokenizer, '}')) {
-    Token *token = token_peek(tokenizer);
-    if ((token->ty != TK_IDENT || token_peek_ahead(tokenizer, 1)->ty != ':') &&
+  while (!tknzr_consume(tokenizer, '}')) {
+    Token *token = tknzr_peek(tokenizer);
+    if ((token->ty != TK_IDENT || tknzr_peek_ahead(tokenizer, 1)->ty != ':') &&
         (token_is_declaration_specifiers(scope, token))) {
 
       Vector *svar_decl = NULL;
@@ -3756,7 +3756,7 @@ static TranslationUnit *translation_unit(Tokenizer *tokenizer) {
 
   Map *gvar_map = new_map();
 
-  while (token_peek(tokenizer)->ty != TK_EOF) {
+  while (tknzr_peek(tokenizer)->ty != TK_EOF) {
     Vector *def_list = declaration(tokenizer, scope);
     for (int i = 0; i < vec_len(def_list); i++) {
       VarDef *def = vec_get(def_list, i);
