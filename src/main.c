@@ -609,10 +609,12 @@ enum {
 };
 
 typedef enum {
-  EMIT_TOKEN = 1,
-  EMIT_AST = 2,
-  EMIT_SEMA = 4,
-  EMIT_ASM = 8,
+  EMIT_PP_TOKEN = 0x01,
+  EMIT_TOKEN = 0x02,
+  EMIT_AST = 0x04,
+  EMIT_SEMA = 0x08,
+  EMIT_ASM = 0x10,
+  EMIT_ALL = 0x1f,
 } output_t;
 
 struct option longopts[] = {
@@ -642,6 +644,8 @@ int main(int argc, char **argv) {
     case OPTVAL_EMIT:
       if (strcmp(optarg, "asm") == 0) {
         emit_target |= EMIT_ASM;
+      } else if (strcmp(optarg, "pp_token") == 0) {
+        emit_target |= EMIT_PP_TOKEN;
       } else if (strcmp(optarg, "token") == 0) {
         emit_target |= EMIT_TOKEN;
       } else if (strcmp(optarg, "ast") == 0) {
@@ -649,7 +653,7 @@ int main(int argc, char **argv) {
       } else if (strcmp(optarg, "sema") == 0) {
         emit_target |= EMIT_SEMA;
       } else if (strcmp(optarg, "all") == 0) {
-        emit_target |= EMIT_ASM | EMIT_TOKEN | EMIT_AST | EMIT_SEMA;
+        emit_target |= EMIT_ALL;
       } else {
         error("unrecognized option argument: %s", optarg);
       }
@@ -702,11 +706,23 @@ int main(int argc, char **argv) {
   Reader *reader = new_reader();
   reader_add_file(reader, file, filename);
 
-  Tokenizer *tokenizer = new_tokenizer(reader);
+  PpTokenizer *pp_tokenizer = new_pp_tokenizer(reader);
+  if (emit_target & EMIT_PP_TOKEN) {
+    emit_target ^= EMIT_PP_TOKEN;
+    FILE *fp = open_output_file(replace_suffix(output, ".s", ".pp_token"));
+    pp_tknzr_add_listener(pp_tokenizer, token_listener, fp);
+    if (emit_target == 0) {
+      // consume all tokens to trigger event listener
+      consume_all_pp_tokens(pp_tokenizer);
+      goto End;
+    }
+  }
+
+  Tokenizer *tokenizer = new_tokenizer(pp_tokenizer);
   if (emit_target & EMIT_TOKEN) {
     emit_target ^= EMIT_TOKEN;
     FILE *fp = open_output_file(replace_suffix(output, ".s", ".token"));
-    token_add_listener(tokenizer, token_listener, fp);
+    tknzr_add_listener(tokenizer, token_listener, fp);
     if (emit_target == 0) {
       // consume all tokens to trigger event listener
       consume_all_tokens(tokenizer);

@@ -207,7 +207,11 @@ typedef struct Number {
   };
 } Number;
 
-// トークンの型
+typedef struct {
+  char *str;
+  int kind;
+} LongToken;
+
 typedef struct {
   int ty;
   const Range *range;
@@ -588,9 +592,11 @@ typedef struct TranslationUnit {
 } TranslationUnit;
 
 typedef struct Reader Reader;
+typedef struct PpTokenizer PpTokenizer;
 typedef struct Tokenizer Tokenizer;
-typedef void tokenizer_listener_fun_t(void *, const Token *);
 typedef struct Scope Scope;
+
+typedef void tokenizer_listener_fun_t(void *, const Token *);
 
 typedef enum {
   ASM_SYNTAX_INTEL,
@@ -748,20 +754,46 @@ Number new_number_wchar_t(wchar_t val);
 bool is_number_zero(Number num);
 const char *format_number(Number num);
 
-// tokenize.c
-Tokenizer *new_tokenizer(Reader *reader);
-void consume_all_tokens(Tokenizer *tokenizer);
-void token_add_listener(Tokenizer *tokenizer, tokenizer_listener_fun_t *fun,
-                        void *arg);
-void token_succ(Tokenizer *tokenizer);
-Token *token_peek(Tokenizer *tokenizer);
-Token *token_peek_ahead(Tokenizer *tokenizer, int n);
-Token *token_pop(Tokenizer *tokenizer);
-Token *token_consume(Tokenizer *tokenizer, int ty);
-Token *token_consume2(Tokenizer *tokenizer, int ty1, int ty2);
-Token *token_expect(Tokenizer *tokenizer, int ty);
+// token.c
+extern const LongToken LONG_IDENT_TOKENS[];
+extern const LongToken LONG_PUNCT_TOKENS[];
+extern const char SHORT_PUNCT_TOKENS[];
+Token *new_token(int ty, const Range *range);
+Token *token_clone(Token *token, const Range *expanded_from);
+Token *new_token_num(const char *num, const Range *range);
+Token *new_token_char(Number val, const Range *range);
+Token *new_token_ident(char *ident, const Range *range);
+Token *new_token_str(const char *str, const Range *range);
 const char *token_kind_to_str(int kind);
-const Reader *token_get_reader(const Tokenizer *tokenizer);
+const char *token_to_str(const Token *token);
+
+// pp_tokenize.c
+PpTokenizer *new_pp_tokenizer(Reader *reader);
+void consume_all_pp_tokens(PpTokenizer *tokenizer);
+void pp_tknzr_add_listener(PpTokenizer *tokenizer,
+                           tokenizer_listener_fun_t *fun, void *arg);
+void pp_tknzr_succ(PpTokenizer *tokenizer);
+Token *pp_tknzr_peek(PpTokenizer *tokenizer);
+Token *pp_tknzr_peek_ahead(PpTokenizer *tokenizer, int n);
+Token *pp_tknzr_pop(PpTokenizer *tokenizer);
+Token *pp_tknzr_consume(PpTokenizer *tokenizer, int ty);
+Token *pp_tknzr_consume2(PpTokenizer *tokenizer, int ty1, int ty2);
+Token *pp_tknzr_expect(PpTokenizer *tokenizer, int ty);
+const Reader *pp_tknzr_get_reader(const PpTokenizer *tokenizer);
+
+// tokenizer.c
+Tokenizer *new_tokenizer(PpTokenizer *pp_tokenizer);
+void consume_all_tokens(Tokenizer *tokenizer);
+void tknzr_add_listener(Tokenizer *tokenizer, tokenizer_listener_fun_t *fun,
+                        void *arg);
+void tknzr_succ(Tokenizer *tokenizer);
+Token *tknzr_peek(Tokenizer *tokenizer);
+Token *tknzr_peek_ahead(Tokenizer *tokenizer, int n);
+Token *tknzr_pop(Tokenizer *tokenizer);
+Token *tknzr_consume(Tokenizer *tokenizer, int ty);
+Token *tknzr_consume2(Tokenizer *tokenizer, int ty1, int ty2);
+Token *tknzr_expect(Tokenizer *tokenizer, int ty);
+const Reader *tknzr_get_reader(const Tokenizer *tokenizer);
 
 // type.c
 extern const TypeQualifier EMPTY_TYPE_QUALIFIER;
