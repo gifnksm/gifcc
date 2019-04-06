@@ -31,8 +31,7 @@ static const char *trim_filename(const char *filename) {
   return filename;
 }
 
-static void token_listener(void *arg, const Token *token) {
-  FILE *fp = arg;
+static void dump_token(FILE *fp, const Token *token) {
   const char *filename;
   int line, column;
   range_get_start(token->range, &filename, &line, &column);
@@ -61,6 +60,18 @@ static void token_listener(void *arg, const Token *token) {
     break;
   }
   fprintf(fp, "\n");
+}
+
+static void token_listener(void *arg, const Token *token) {
+  FILE *fp = arg;
+  dump_token(fp, token);
+}
+
+static void token_filter(void *arg, Tokenizer *tokenizer, Vector *output) {
+  FILE *fp = arg;
+  Token *token = tknzr_pop(tokenizer);
+  dump_token(fp, token);
+  vec_push(output, token);
 }
 
 static void dump_range_start(FILE *fp, const Range *range) {
@@ -729,7 +740,7 @@ int main(int argc, char **argv) {
   if (emit_target & EMIT_TOKEN) {
     emit_target ^= EMIT_TOKEN;
     FILE *fp = open_output_file(replace_suffix(output, ".s", ".token"));
-    tknzr_add_listener(tokenizer, token_listener, fp);
+    tokenizer = new_filtered_tokenizer(tokenizer, token_filter, fp);
     if (emit_target == 0) {
       // consume all tokens to trigger event listener
       consume_all_tokens(tokenizer);

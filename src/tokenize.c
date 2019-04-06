@@ -3,10 +3,34 @@
 #include <string.h>
 #include <strings.h>
 
-struct Tokenizer {
+#define DISPATCH_BASE(tokenizer, func, ...)                                    \
+  ((tokenizer)->type == TKNZR_BASE)                                            \
+      ? func##_base(&(tokenizer)->base, ##__VA_ARGS__)                         \
+      : func((tokenizer)->adapter.inner, ##__VA_ARGS__)
+
+#define DISPATCH(tokenizer, func, ...)                                         \
+  ((tokenizer)->type == TKNZR_BASE)                                            \
+      ? func##_base(&(tokenizer)->base, ##__VA_ARGS__)                         \
+      : func##_adapter(&(tokenizer)->adapter, ##__VA_ARGS__)
+
+typedef struct Base {
   PpTokenizer *pp_tokenizer;
   Vector *tokens;
-  Vector *listeners;
+} Base;
+
+typedef struct Adapter {
+  Tokenizer *inner;
+  tknzr_filter_fun_t *filter;
+  void *arg;
+  Vector *tokens;
+} Adapter;
+
+struct Tokenizer {
+  enum { TKNZR_BASE, TKNZR_ADAPTER } type;
+  union {
+    Base base;
+    Adapter adapter;
+  };
 };
 
 typedef struct {
@@ -21,8 +45,24 @@ static Number read_integer(Token *token);
 
 Tokenizer *new_tokenizer(PpTokenizer *pp_tokenizer) {
   Tokenizer *tokenizer = NEW(Tokenizer);
-  tokenizer->pp_tokenizer = pp_tokenizer;
-  tokenizer->tokens = new_vector();
+  tokenizer->type = TKNZR_BASE;
+  tokenizer->base = (Base){
+      .pp_tokenizer = pp_tokenizer,
+      .tokens = new_vector(),
+  };
+  return tokenizer;
+}
+
+Tokenizer *new_filtered_tokenizer(Tokenizer *base, tknzr_filter_fun_t *filter,
+                                  void *arg) {
+  Tokenizer *tokenizer = NEW(Tokenizer);
+  tokenizer->type = TKNZR_ADAPTER;
+  tokenizer->adapter = (Adapter){
+      .inner = base,
+      .filter = filter,
+      .arg = arg,
+      .tokens = new_vector(),
+  };
   return tokenizer;
 }
 
@@ -33,27 +73,30 @@ void consume_all_tokens(Tokenizer *tokenizer) {
   } while (token->ty != TK_EOF);
 }
 
-void tknzr_add_listener(Tokenizer *tokenizer, tokenizer_listener_fun_t *fun,
-                        void *arg) {
-  if (tokenizer->listeners == NULL) {
-    tokenizer->listeners = new_vector();
+static void tknzr_succ_base(Base *tokenizer) {
+  if (vec_len(tokenizer->tokens) > 0) {
+    vec_remove(tokenizer->tokens, 0);
+  } else {
+    pp_tknzr_succ(tokenizer->pp_tokenizer);
   }
-  Listener *listener = NEW(Listener);
-  listener->fun = fun;
-  listener->arg = arg;
-  vec_push(tokenizer->listeners, listener);
 }
-
-void tknzr_succ(Tokenizer *tokenizer) {
-  assert(vec_len(tokenizer->tokens) > 0);
-  vec_remove(tokenizer->tokens, 0);
+static void tknzr_succ_adapter(Adapter *tokenizer) {
+  if (vec_len(tokenizer->tokens) > 0) {
+    vec_remove(tokenizer->tokens, 0);
+  } else {
+    tokenizer->filter(tokenizer->arg, tokenizer->inner, tokenizer->tokens);
+    if (vec_len(tokenizer->tokens) > 0) {
+      vec_remove(tokenizer->tokens, 0);
+    }
+  }
 }
+void tknzr_succ(Tokenizer *tokenizer) { DISPATCH(tokenizer, tknzr_succ); }
 
 Token *tknzr_peek(Tokenizer *tokenizer) {
   return tknzr_peek_ahead(tokenizer, 0);
 }
 
-Token *tknzr_peek_ahead(Tokenizer *tokenizer, int n) {
+static Token *tknzr_peek_ahead_base(Base *tokenizer, int n) {
   while (vec_len(tokenizer->tokens) <= n) {
     Token *token = pp_tknzr_pop(tokenizer->pp_tokenizer);
     if (token == NULL) {
@@ -80,17 +123,23 @@ Token *tknzr_peek_ahead(Tokenizer *tokenizer, int n) {
       convert_ident(token);
     }
 
-    if (tokenizer->listeners != NULL) {
-      for (int i = 0; i < vec_len(tokenizer->listeners); i++) {
-        Listener *listener = vec_get(tokenizer->listeners, i);
-        listener->fun(listener->arg, token);
-      }
-    }
     vec_push(tokenizer->tokens, token);
   }
   return vec_get(tokenizer->tokens, n);
 }
-
+static Token *tknzr_peek_ahead_adapter(Adapter *tokenizer, int n) {
+  while (vec_len(tokenizer->tokens) <= n) {
+    int len = vec_len(tokenizer->tokens);
+    tokenizer->filter(tokenizer->arg, tokenizer->inner, tokenizer->tokens);
+    if (vec_len(tokenizer->tokens) == len) {
+      return NULL;
+    }
+  }
+  return vec_get(tokenizer->tokens, n);
+}
+Token *tknzr_peek_ahead(Tokenizer *tokenizer, int n) {
+  return DISPATCH(tokenizer, tknzr_peek_ahead, n);
+}
 Token *tknzr_pop(Tokenizer *tokenizer) {
   Token *token = tknzr_peek(tokenizer);
   tknzr_succ(tokenizer);
@@ -122,8 +171,11 @@ Token *tknzr_expect(Tokenizer *tokenizer, int ty) {
   return token;
 }
 
-const Reader *tknzr_get_reader(const Tokenizer *tokenizer) {
+const Reader *tknzr_get_reader_base(const Base *tokenizer) {
   return pp_tknzr_get_reader(tokenizer->pp_tokenizer);
+}
+const Reader *tknzr_get_reader(const Tokenizer *tokenizer) {
+  return DISPATCH_BASE(tokenizer, tknzr_get_reader);
 }
 
 static void convert_number(Token *token) {

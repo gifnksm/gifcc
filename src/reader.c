@@ -7,11 +7,12 @@
 #include <string.h>
 
 #define DISPATCH_BASE(reader, func, ...)                                       \
-  (reader->type == READER_BASE) ? func##_base(&(reader)->base, ##__VA_ARGS__)  \
-                                : func((reader)->adapter.inner, ##__VA_ARGS__)
+  ((reader)->type == READER_BASE)                                              \
+      ? func##_base(&(reader)->base, ##__VA_ARGS__)                            \
+      : func((reader)->adapter.inner, ##__VA_ARGS__)
 
 #define DISPATCH(reader, func, ...)                                            \
-  (reader->type == READER_BASE)                                                \
+  ((reader)->type == READER_BASE)                                              \
       ? func##_base(&(reader)->base, ##__VA_ARGS__)                            \
       : func##_adapter(&(reader)->adapter, ##__VA_ARGS__)
 
