@@ -76,23 +76,16 @@ Token *new_token_pp_num(const char *num, const Range *range) {
   return token;
 }
 
-Token *new_token_char(Number val, const Range *range) {
-  Token *token = new_token(TK_CHARCONST, range);
-  token->char_val = val;
+Token *new_token_pp_ident(const char *ident, const Range *range) {
+  Token *token = new_token(TK_PP_IDENT, range);
+
+  token->pp_ident = ident;
   return token;
 }
 
-Token *new_token_ident(char *ident, const Range *range) {
-  Token *token = new_token(TK_IDENT, range);
-
-  for (int i = 0; LONG_IDENT_TOKENS[i].str != NULL; i++) {
-    const LongToken *tk = &LONG_IDENT_TOKENS[i];
-    if (strcmp(ident, tk->str) == 0) {
-      token->ty = tk->kind;
-      break;
-    }
-  }
-  token->ident = ident;
+Token *new_token_char(Number val, const Range *range) {
+  Token *token = new_token(TK_CHARCONST, range);
+  token->char_val = val;
   return token;
 }
 
@@ -112,12 +105,14 @@ const char *token_kind_to_str(int kind) {
   }
 
   switch (kind) {
-  case TK_IDENT:
-    return "IDENT";
+  case TK_PP_IDENT:
+    return "PP_IDENT";
   case TK_PP_NUM:
     return "PP_NUM";
   case TK_NUM:
     return "NUM";
+  case TK_IDENT:
+    return "IDENT";
   case TK_CHARCONST:
     return "CHARCONST";
   case TK_STR:
@@ -143,8 +138,8 @@ const char *token_to_str(const Token *token) {
   if (token->ty <= 255) {
     return format("%c", token->ty);
   }
-  if (token->ident != NULL) {
-    return token->ident;
+  if (token->ty == TK_PP_IDENT) {
+    return token->pp_ident;
   }
   if (token->ty == TK_PP_NUM) {
     return token->pp_num;

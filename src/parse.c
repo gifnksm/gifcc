@@ -16,7 +16,7 @@ typedef struct GlobalCtxt {
 } GlobalCtxt;
 
 typedef struct FuncCtxt {
-  char *name;
+  const char *name;
   Type *type;
   Vector *var_list;
   Vector *switches;
@@ -124,7 +124,7 @@ static MemberInitializer *new_member_initializer(Member *member);
 static ParseInit *new_parse_init_list(const Range *range, Vector *list);
 static ParseInit *new_parse_init_expr(Expr *expr);
 static GlobalCtxt *new_global_ctxt(void);
-static FuncCtxt *new_func_ctxt(char *name, Type *type);
+static FuncCtxt *new_func_ctxt(const char *name, Type *type);
 static Scope *new_scope(GlobalCtxt *gcx, FuncCtxt *fcx, Scope *outer);
 static Scope *new_global_scope(GlobalCtxt *gcx, const Tokenizer *tokenizer);
 static Scope *new_func_scope(Scope *global, FuncCtxt *fcx);
@@ -146,10 +146,10 @@ static bool register_decl(Scope *scope, decl_t kind, const char *name,
                           Type *type, StackVar *svar, GlobalVar *gvar,
                           Number *num_val, builtin_func_handler_t *handler);
 static Decl *get_decl(Scope *scope, const char *name);
-static bool register_tag(Scope *scope, char *tag, Type *type);
-static Type *get_tag(Scope *scope, char *tag);
-static bool register_typedef(Scope *scope, char *name, Type *type);
-static Type *get_typedef(Scope *scope, char *name);
+static bool register_tag(Scope *scope, const char *tag, Type *type);
+static Type *get_tag(Scope *scope, const char *tag);
+static bool register_typedef(Scope *scope, const char *name, Type *type);
+static Type *get_typedef(Scope *scope, const char *name);
 static Type *integer_promoted(Scope *scope, Expr **e);
 static Type *arith_converted(Scope *scope, Expr **e1, Expr **e2);
 static bool token_is_storage_class_specifier(Token *token);
@@ -211,13 +211,13 @@ static Stmt *new_stmt_if(Expr *cond, Stmt *then_stmt, Stmt *else_stmt,
 static Stmt *new_stmt_switch(Expr *cond, Stmt *body, const Range *range);
 static Stmt *new_stmt_case(Number val, Stmt *body, const Range *range);
 static Stmt *new_stmt_default(Stmt *body, const Range *range);
-static Stmt *new_stmt_label(FuncCtxt *fcx, char *name, Stmt *body,
+static Stmt *new_stmt_label(FuncCtxt *fcx, const char *name, Stmt *body,
                             const Range *range);
 static Stmt *new_stmt_while(Expr *cond, Stmt *body, const Range *range);
 static Stmt *new_stmt_do_while(Expr *cond, Stmt *body, const Range *range);
 static Stmt *new_stmt_for(Stmt *init, Expr *cond, Expr *inc, Stmt *body,
                           const Range *range);
-static Stmt *new_stmt_goto(char *name, const Range *range);
+static Stmt *new_stmt_goto(const char *name, const Range *range);
 static Stmt *new_stmt_break(const Range *range);
 static Stmt *new_stmt_continue(const Range *range);
 static Stmt *new_stmt_return(Scope *scope, Expr *expr, const Range *range);
@@ -312,7 +312,7 @@ static Stmt *compound_statement(Tokenizer *tokenizer, Scope *scope);
 
 // top-level
 static Function *function_definition(Tokenizer *tokenizer, Scope *global_scope,
-                                     Type *type, char *name,
+                                     Type *type, const char *name,
                                      StorageClassSpecifier scs,
                                      FunctionSpecifier fs, const Range *start);
 static GlobalVar *new_global_variable(Type *type, const char *name,
@@ -388,7 +388,7 @@ static GlobalCtxt *new_global_ctxt(void) {
   return gcx;
 }
 
-static FuncCtxt *new_func_ctxt(char *name, Type *type) {
+static FuncCtxt *new_func_ctxt(const char *name, Type *type) {
   FuncCtxt *fcx = NEW(FuncCtxt);
 
   fcx->name = name;
@@ -574,7 +574,7 @@ static Decl *get_decl(Scope *scope, const char *name) {
   return NULL;
 }
 
-static bool register_tag(Scope *scope, char *tag, Type *type) {
+static bool register_tag(Scope *scope, const char *tag, Type *type) {
   if (map_get(scope->tag_map, tag)) {
     return false;
   }
@@ -582,7 +582,7 @@ static bool register_tag(Scope *scope, char *tag, Type *type) {
   return true;
 }
 
-static Type *get_tag(Scope *scope, char *tag) {
+static Type *get_tag(Scope *scope, const char *tag) {
   while (scope != NULL) {
     Type *type = map_get(scope->tag_map, tag);
     if (type) {
@@ -593,7 +593,7 @@ static Type *get_tag(Scope *scope, char *tag) {
   return NULL;
 }
 
-static bool register_typedef(Scope *scope, char *name, Type *type) {
+static bool register_typedef(Scope *scope, const char *name, Type *type) {
   if (map_get(scope->typedef_map, name)) {
     return false;
   }
@@ -601,7 +601,7 @@ static bool register_typedef(Scope *scope, char *name, Type *type) {
   return true;
 }
 
-static Type *get_typedef(Scope *scope, char *name) {
+static Type *get_typedef(Scope *scope, const char *name) {
   while (scope != NULL) {
     Type *type = map_get(scope->typedef_map, name);
     if (type != NULL) {
@@ -2107,7 +2107,7 @@ static Stmt *new_stmt_default(Stmt *body, const Range *range) {
   return stmt;
 }
 
-static Stmt *new_stmt_label(FuncCtxt *fcx, char *name, Stmt *body,
+static Stmt *new_stmt_label(FuncCtxt *fcx, const char *name, Stmt *body,
                             const Range *range) {
   Stmt *stmt = new_stmt(ST_LABEL, body->val_type, range);
   stmt->name = name;
@@ -2143,7 +2143,7 @@ static Stmt *new_stmt_for(Stmt *init, Expr *cond, Expr *inc, Stmt *body,
   return stmt;
 }
 
-static Stmt *new_stmt_goto(char *name, const Range *range) {
+static Stmt *new_stmt_goto(const char *name, const Range *range) {
   Stmt *stmt =
       new_stmt(ST_GOTO, new_type(TY_VOID, EMPTY_TYPE_QUALIFIER), range);
   stmt->name = name;
@@ -2756,7 +2756,7 @@ static Type *enum_specifier(Scope *scope, Tokenizer *tokenizer, Token *token) {
     range_error(token->range, "列挙型のタグまたは `{` がありません");
   }
 
-  char *tag = tag_ident != NULL ? tag_ident->ident : NULL;
+  const char *tag = tag_ident != NULL ? tag_ident->ident : NULL;
 
   if (tknzr_consume(tokenizer, '{')) {
     Type *type = new_type_enum(tag != NULL ? tag : NULL, EMPTY_TYPE_QUALIFIER);
@@ -3494,7 +3494,7 @@ static Stmt *statement(Tokenizer *tokenizer, Scope *scope) {
   }
   case TK_GOTO: {
     tknzr_succ(tokenizer);
-    char *name = tknzr_expect(tokenizer, TK_IDENT)->ident;
+    const char *name = tknzr_expect(tokenizer, TK_IDENT)->ident;
     Token *end = tknzr_expect(tokenizer, ';');
     return new_stmt_goto(name, range_join(start->range, end->range));
   }
@@ -3597,7 +3597,7 @@ static Stmt *compound_statement(Tokenizer *tokenizer, Scope *scope) {
 }
 
 static Function *function_definition(Tokenizer *tokenizer, Scope *global_scope,
-                                     Type *type, char *name,
+                                     Type *type, const char *name,
                                      StorageClassSpecifier scs,
                                      FunctionSpecifier fs, const Range *start) {
   FuncCtxt *fcx = new_func_ctxt(name, type);

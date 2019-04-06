@@ -793,9 +793,8 @@ static bool pp_read_if_cond(PpTokenizer *tokenizer) {
   for (int i = 0; i < vec_len(tokens); i++) {
     // replace all ident tokens (including keyword ident) into '0'
     Token *tk = vec_get(tokens, i);
-    if (tk->ident != NULL) {
-      // Assume Only idents and keywords have non-null `ident`
-      tk->ident = NULL;
+    if (tk->ty == TK_PP_IDENT) {
+      tk->pp_ident = NULL;
       tk->ty = TK_PP_NUM;
       tk->pp_num = strdup("0");
     }
@@ -818,7 +817,7 @@ static Vector *pp_convert_defined(Map *define_map, Vector *tokens) {
   Vector *converted = new_vector();
   while (vec_len(tokens) > 0) {
     Token *token = vec_remove(tokens, 0);
-    if (token->ty != TK_IDENT || strcmp(token->ident, "defined") != 0) {
+    if (token->ty != TK_PP_IDENT || strcmp(token->pp_ident, "defined") != 0) {
       vec_push(converted, token);
       continue;
     }
@@ -831,11 +830,10 @@ static Vector *pp_convert_defined(Map *define_map, Vector *tokens) {
       token = vec_remove(tokens, 0);
     }
 
-    // Assume Only idents and keywords have non-null `ident`
-    if (token->ident == NULL) {
+    if (token->ty != TK_PP_IDENT) {
       range_error(token->range, "識別子がありません");
     }
-    bool defined = map_get(define_map, token->ident) != NULL;
+    bool defined = map_get(define_map, token->pp_ident) != NULL;
     char *num = format("%d", defined);
     Token *num_token =
         new_token_pp_num(num, range_join(def_start, token->range));
@@ -851,13 +849,11 @@ static Vector *pp_convert_defined(Map *define_map, Vector *tokens) {
 }
 
 static bool pp_is_token_in_hideset(Token *token) {
-  if (token->ident == NULL) {
-    return false;
-  }
+  assert(token->ty == TK_PP_IDENT);
   if (token->pp_hideset == NULL) {
     return false;
   }
-  return set_contains(token->pp_hideset, token->ident);
+  return set_contains(token->pp_hideset, token->pp_ident);
 }
 
 static Set *pp_hideset_intersection(Token *a, Token *b) {
@@ -959,13 +955,13 @@ static Vector *pp_hsadd(const Range *expanded_from, Set *hideset,
 
 static Vector *pp_get_func_arg(Vector *params, Vector *arguments,
                                Token *token) {
-  if (token->ident == NULL || params == NULL) {
+  if (token->ty != TK_PP_IDENT || params == NULL) {
     return NULL;
   }
   int i;
   for (i = 0; i < vec_len(params); i++) {
     char *key = vec_get(params, i);
-    if (strcmp(key, token->ident) == 0) {
+    if (strcmp(key, token->pp_ident) == 0) {
       Vector *arg = vec_get(arguments, i);
       assert(arg != NULL);
       return arg;
@@ -992,18 +988,14 @@ static Token *pp_stringize(Vector *arg, const Range *range) {
     case TK_PP_NUM:
       str_append(str, token->pp_num);
       break;
-    case TK_IDENT:
-      str_append(str, token->ident);
+    case TK_PP_IDENT:
+      str_append(str, token->pp_ident);
       break;
     case TK_STR:
     case TK_CHARCONST:
       str_append(str, reader_get_source(token->range));
       break;
     default:
-      if (token->ident != NULL) {
-        str_append(str, token->ident);
-        break;
-      }
       for (int i = 0; LONG_PUNCT_TOKENS[i].str != NULL; i++) {
         if (LONG_PUNCT_TOKENS[i].kind == token->ty) {
           str_append(str, LONG_PUNCT_TOKENS[i].str);
@@ -1032,7 +1024,7 @@ static void pp_glue(Vector *ls, Vector *rs) {
   if (isdigit(str_raw[0])) {
     token = new_token_pp_num(str_raw, range);
   } else if (is_ident_head(str_raw[0])) {
-    token = new_token_ident(str_raw, range);
+    token = new_token_pp_ident(str_raw, range);
   } else {
     for (int i = 0; LONG_PUNCT_TOKENS[i].str != NULL; i++) {
       if (strcmp(LONG_PUNCT_TOKENS[i].str, str_raw) == 0) {
@@ -1071,8 +1063,9 @@ static Vector *pp_subst_macros(PpTokenizer *tokenizer,
       Vector *arg = pp_get_func_arg(params, arguments, ident);
       if (arg != NULL) {
         // NonStandard/GNU: , ## __VA_ARGS__
-        if (strcmp(ident->ident, "__VA_ARGS__") == 0 && vec_len(output) > 0 &&
-            ((Token *)vec_last(output))->ty == ',') {
+        if (ident->ty == TK_PP_IDENT &&
+            strcmp(ident->pp_ident, "__VA_ARGS__") == 0 &&
+            vec_len(output) > 0 && ((Token *)vec_last(output))->ty == ',') {
           if (vec_len(arg) == 0) {
             vec_pop(output);
           } else {
@@ -1126,11 +1119,16 @@ static Vector *pp_expand_macros(PpTokenizer *tokenizer, Vector *tokens,
   Vector *expanded = new_vector();
   while (vec_len(tokens) > 0) {
     Token *ident = vec_remove(tokens, 0);
-    if (ident->ident == NULL || pp_is_token_in_hideset(ident)) {
+    if (ident->ty != TK_PP_IDENT) {
       vec_push(expanded, ident);
       continue;
     }
-    Macro *macro = map_get(tokenizer->define_map, ident->ident);
+    if (pp_is_token_in_hideset(ident)) {
+      vec_push(expanded, ident);
+      continue;
+    }
+
+    Macro *macro = map_get(tokenizer->define_map, ident->pp_ident);
     if (macro == NULL) {
       vec_push(expanded, ident);
       continue;
@@ -1139,7 +1137,7 @@ static Vector *pp_expand_macros(PpTokenizer *tokenizer, Vector *tokens,
     if (macro->kind == MACRO_OBJ || macro->kind == MACRO_OBJ_SPECIAL) {
       const Range *expanded_from = ident->range;
       Set *hideset = new_set();
-      set_insert(hideset, ident->ident);
+      set_insert(hideset, ident->pp_ident);
       Vector *replacement = macro->kind == MACRO_OBJ
                                 ? vec_clone(macro->replacement)
                                 : macro->replacement_func(tokenizer);
@@ -1167,7 +1165,7 @@ static Vector *pp_expand_macros(PpTokenizer *tokenizer, Vector *tokens,
     Vector *arguments =
         pp_read_macro_func_arg(tokenizer, macro, tokens, &rparen, reader);
     Set *hideset = pp_hideset_intersection(ident, rparen);
-    set_insert(hideset, ident->ident);
+    set_insert(hideset, ident->pp_ident);
     const Range *expanded_from = range_join(ident->range, rparen->range);
     Vector *exp_tokens = pp_expand_macros(
         tokenizer,
@@ -1303,7 +1301,7 @@ static Token *identifier_or_keyword(Reader *reader) {
   }
   int end = reader_get_offset(reader);
   const Range *range = range_from_reader(reader, start, end);
-  return new_token_ident(str_get_raw(str), range);
+  return new_token_pp_ident(str_get_raw(str), range);
 }
 
 static Token *constant(Reader *reader) {
