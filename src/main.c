@@ -737,6 +737,8 @@ int main(int argc, char **argv) {
   }
 
   Tokenizer *tokenizer = new_tokenizer(pp_tokenizer);
+  tokenizer = phase6_filter(tokenizer);
+  tokenizer = phase7_filter(tokenizer);
   if (emit_target & EMIT_TOKEN) {
     emit_target ^= EMIT_TOKEN;
     FILE *fp = open_output_file(replace_suffix(output, ".s", ".token"));

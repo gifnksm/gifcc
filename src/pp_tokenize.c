@@ -788,6 +788,8 @@ static bool pp_read_if_cond(PpTokenizer *tokenizer) {
 
   PpTokenizer *sub_pp_tokenizer = tokenizer_from_tokens(NULL, tokens);
   Tokenizer *sub_tokenizer = new_tokenizer(sub_pp_tokenizer);
+  sub_tokenizer = phase6_filter(sub_tokenizer);
+  sub_tokenizer = phase7_filter(sub_tokenizer);
   Scope *scope = new_pp_scope(sub_tokenizer);
   Number num = integer_constant_expression(sub_tokenizer, scope);
   if (tknzr_peek(sub_tokenizer)->ty != TK_EOF) {

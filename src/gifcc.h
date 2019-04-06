@@ -753,6 +753,8 @@ void range_warn_raw_v(const Range *range, const char *dbg_file, int dbg_line,
 
 // filter.c
 Reader *phase2_filter(Reader *reader);
+Tokenizer *phase6_filter(Tokenizer *tokenizer);
+Tokenizer *phase7_filter(Tokenizer *tokenizer);
 
 // number.c
 Number new_number(type_t ty, unsigned long long val);
