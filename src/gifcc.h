@@ -602,6 +602,7 @@ typedef struct Tokenizer Tokenizer;
 typedef struct Scope Scope;
 
 typedef char reader_pop_fun_t(void *, Reader *);
+typedef void tknzr_filter_fun_t(void *, Tokenizer *, Vector *);
 typedef void tokenizer_listener_fun_t(void *, const Token *);
 
 typedef enum {
@@ -793,9 +794,9 @@ const Reader *pp_tknzr_get_reader(const PpTokenizer *tokenizer);
 
 // tokenizer.c
 Tokenizer *new_tokenizer(PpTokenizer *pp_tokenizer);
+Tokenizer *new_filtered_tokenizer(Tokenizer *base, tknzr_filter_fun_t *filter,
+                                  void *arg);
 void consume_all_tokens(Tokenizer *tokenizer);
-void tknzr_add_listener(Tokenizer *tokenizer, tokenizer_listener_fun_t *fun,
-                        void *arg);
 void tknzr_succ(Tokenizer *tokenizer);
 Token *tknzr_peek(Tokenizer *tokenizer);
 Token *tknzr_peek_ahead(Tokenizer *tokenizer, int n);
