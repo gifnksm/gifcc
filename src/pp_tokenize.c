@@ -72,7 +72,7 @@ static char c_char(Reader *reader);
 static void set_predefined_num_macro(const Reader *reader, Map *map, char *name,
                                      const char *num) {
   Vector *replacement = new_vector();
-  vec_push(replacement, new_token_num(num, range_builtin(reader)));
+  vec_push(replacement, new_token_pp_num(num, range_builtin(reader)));
   map_put(map, name, new_obj_macro(replacement));
 }
 
@@ -138,8 +138,8 @@ static Vector *macro_line(PpTokenizer *tokenizer) {
   reader_get_position(tokenizer->reader, offset, NULL, &line, NULL);
 
   Vector *rep = new_vector();
-  vec_push(rep,
-           new_token_num(format("%d", line), range_builtin(tokenizer->reader)));
+  vec_push(rep, new_token_pp_num(format("%d", line),
+                                 range_builtin(tokenizer->reader)));
   return rep;
 }
 
@@ -718,14 +718,14 @@ static bool pp_directive(PpTokenizer *tokenizer) {
                         "#line directive requires a positive integer argument");
     }
     Token *num = vec_get(tokens, 0);
-    if (num->ty != TK_NUM) {
+    if (num->ty != TK_PP_NUM) {
       range_error(num->range,
                   "#line directive requires a positive integer argument");
     }
     char *endptr;
     unsigned long long val;
     errno = 0;
-    val = strtoull(num->num, &endptr, 10);
+    val = strtoull(num->pp_num, &endptr, 10);
     if ((val == ULLONG_MAX && errno == ERANGE) || val > INT_MAX ||
         strcmp(endptr, "") != 0) {
       range_error(num->range,
@@ -796,8 +796,8 @@ static bool pp_read_if_cond(PpTokenizer *tokenizer) {
     if (tk->ident != NULL) {
       // Assume Only idents and keywords have non-null `ident`
       tk->ident = NULL;
-      tk->ty = TK_NUM;
-      tk->num = strdup("0");
+      tk->ty = TK_PP_NUM;
+      tk->pp_num = strdup("0");
     }
   }
 
@@ -837,7 +837,8 @@ static Vector *pp_convert_defined(Map *define_map, Vector *tokens) {
     }
     bool defined = map_get(define_map, token->ident) != NULL;
     char *num = format("%d", defined);
-    Token *num_token = new_token_num(num, range_join(def_start, token->range));
+    Token *num_token =
+        new_token_pp_num(num, range_join(def_start, token->range));
     if (has_paren) {
       token = vec_remove(tokens, 0);
       if (token->ty != ')') {
@@ -988,8 +989,8 @@ static Token *pp_stringize(Vector *arg, const Range *range) {
       continue;
     }
     switch (token->ty) {
-    case TK_NUM:
-      str_append(str, token->num);
+    case TK_PP_NUM:
+      str_append(str, token->pp_num);
       break;
     case TK_IDENT:
       str_append(str, token->ident);
@@ -1029,7 +1030,7 @@ static void pp_glue(Vector *ls, Vector *rs) {
   Token *token = NULL;
   char *str_raw = str_get_raw(str);
   if (isdigit(str_raw[0])) {
-    token = new_token_num(str_raw, range);
+    token = new_token_pp_num(str_raw, range);
   } else if (is_ident_head(str_raw[0])) {
     token = new_token_ident(str_raw, range);
   } else {
@@ -1340,7 +1341,8 @@ static Token *number_constant(Reader *reader) {
   int end = reader_get_offset(reader);
 
   str_push(str, '\0');
-  return new_token_num(str_get_raw(str), range_from_reader(reader, start, end));
+  return new_token_pp_num(str_get_raw(str),
+                          range_from_reader(reader, start, end));
 }
 
 static Token *character_constant(Reader *reader) {

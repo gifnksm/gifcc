@@ -39,8 +39,11 @@ static void token_listener(void *arg, const Token *token) {
   fprintf(fp, "%32s:%4d:%3d:\t%-8s", trim_filename(filename), line, column,
           token_kind_to_str(token->ty));
   switch (token->ty) {
+  case TK_PP_NUM:
+    fprintf(fp, "%s", token->pp_num);
+    break;
   case TK_NUM:
-    fprintf(fp, "%s", token->num);
+    fprintf(fp, "%s", format_number(token->num));
     break;
   case TK_CHARCONST:
     fprintf(fp, "%s", format_number(token->char_val));

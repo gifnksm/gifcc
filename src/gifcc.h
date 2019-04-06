@@ -21,7 +21,8 @@ typedef struct IntVector IntVector;
 
 // トークンの型を表す値
 enum {
-  TK_NUM = 256,     // 整数トークン
+  TK_PP_NUM = 256,  // Preprocessor number
+  TK_NUM = 257,     // Number
   TK_CHARCONST,     // 文字定数
   TK_IDENT,         // 識別子
   TK_STR,           // 文字列リテラル
@@ -216,7 +217,8 @@ typedef struct {
   int ty;
   const Range *range;
   Set *pp_hideset;
-  const char *num;
+  const char *pp_num;
+  Number num;
   char *ident;
   const char *str;
   Number char_val;
@@ -760,7 +762,7 @@ extern const LongToken LONG_PUNCT_TOKENS[];
 extern const char SHORT_PUNCT_TOKENS[];
 Token *new_token(int ty, const Range *range);
 Token *token_clone(Token *token, const Range *expanded_from);
-Token *new_token_num(const char *num, const Range *range);
+Token *new_token_pp_num(const char *num, const Range *range);
 Token *new_token_char(Number val, const Range *range);
 Token *new_token_ident(char *ident, const Range *range);
 Token *new_token_str(const char *str, const Range *range);
