@@ -70,9 +70,9 @@ Token *token_clone(Token *token, const Range *expanded_from) {
   return cloned;
 }
 
-Token *new_token_num(const char *num, const Range *range) {
-  Token *token = new_token(TK_NUM, range);
-  token->num = num;
+Token *new_token_pp_num(const char *num, const Range *range) {
+  Token *token = new_token(TK_PP_NUM, range);
+  token->pp_num = num;
   return token;
 }
 
@@ -114,6 +114,8 @@ const char *token_kind_to_str(int kind) {
   switch (kind) {
   case TK_IDENT:
     return "IDENT";
+  case TK_PP_NUM:
+    return "PP_NUM";
   case TK_NUM:
     return "NUM";
   case TK_CHARCONST:
@@ -144,8 +146,11 @@ const char *token_to_str(const Token *token) {
   if (token->ident != NULL) {
     return token->ident;
   }
+  if (token->ty == TK_PP_NUM) {
+    return token->pp_num;
+  }
   if (token->ty == TK_NUM) {
-    return token->str;
+    return format_number(token->num);
   }
   for (int i = 0; LONG_PUNCT_TOKENS[i].str != NULL; i++) {
     if (LONG_PUNCT_TOKENS[i].kind == token->ty) {

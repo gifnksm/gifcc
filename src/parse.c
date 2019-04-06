@@ -234,9 +234,6 @@ static Expr *builtin_va_copy_handler(Scope *scope, Expr *callee,
                                      Vector *argument, const Range *range);
 
 // expression
-static Number read_integer(Token *token);
-static Number read_float(Token *token);
-static Number read_number(Token *token);
 static Expr *primary_expression(Tokenizer *tokenizer, Scope *scope);
 static Expr *postfix_expression(Tokenizer *tokenizer, Scope *scope);
 static Vector *argument_expression_list(Tokenizer *tokenizer, Scope *scope);
@@ -2211,120 +2208,10 @@ static Expr *builtin_va_copy_handler(Scope *scope, Expr *callee,
   return new_expr_builtin_va_copy(scope, callee, argument, range);
 }
 
-static Number read_float(Token *token) {
-  assert(token->ty == TK_NUM);
-  char *suffix = NULL;
-  long double val = strtold(token->num, &suffix);
-  type_t type = TY_VOID;
-  if (strcmp(suffix, "") == 0) {
-    type = TY_DOUBLE;
-  } else if (strcasecmp(suffix, "l") == 0) {
-    type = TY_LDOUBLE;
-  } else if (strcasecmp(suffix, "f") == 0) {
-    type = TY_FLOAT;
-  } else {
-    range_error(token->range, "不正なサフィックスです");
-  }
-  return new_number_float(type, val);
-}
-
-static Number read_integer(Token *token) {
-  typedef struct Suffix {
-    const char *suffix;
-    type_t type;
-  } Suffix;
-  Suffix SUFFIX[] = {
-      // unsigned long long int
-      {"ull", TY_U_LLONG},
-      {"llu", TY_U_LLONG},
-      {"uLL", TY_U_LLONG},
-      {"LLu", TY_U_LLONG},
-      {"Ull", TY_U_LLONG},
-      {"llU", TY_U_LLONG},
-      {"ULL", TY_U_LLONG},
-      {"LLU", TY_U_LLONG},
-      // unsigned long int
-      {"ul", TY_U_LONG},
-      {"lu", TY_U_LONG},
-      {"uL", TY_U_LONG},
-      {"Lu", TY_U_LONG},
-      {"Ul", TY_U_LONG},
-      {"lU", TY_U_LONG},
-      {"UL", TY_U_LONG},
-      {"LU", TY_U_LONG},
-      // unsigned int
-      {"u", TY_U_INT},
-      {"U", TY_U_INT},
-      // signed long long int
-      {"ll", TY_S_LLONG},
-      {"LL", TY_S_LLONG},
-      // signed long int
-      {"l", TY_S_LONG},
-      {"L", TY_S_LONG},
-      // stub
-      {NULL, TY_VOID},
-  };
-
-  assert(token->ty == TK_NUM);
-  char *suffix = NULL;
-  unsigned long long val;
-  if (strncasecmp("0b", token->num, 2) == 0) {
-    // NonStandard/GNU: binary prefix integer literal
-    val = strtoull(&token->num[2], &suffix, 2);
-  } else {
-    val = strtoull(token->num, &suffix, 0);
-  }
-
-  bool isbase10 = token->num[0] != '0';
-
-  type_t ty = TY_VOID;
-  if (strcmp(suffix, "") == 0) {
-    // no suffix
-    if (val <= INT_MAX) {
-      ty = TY_S_INT;
-    } else if (!isbase10 && val <= UINT_MAX) {
-      ty = TY_U_INT;
-    } else if (val <= LONG_MAX) {
-      ty = TY_S_LONG;
-    } else if (!isbase10 && val <= ULONG_MAX) {
-      ty = TY_U_LONG;
-    } else if (val <= LLONG_MAX) {
-      ty = TY_S_LLONG;
-    } else {
-      assert(val <= ULLONG_MAX);
-      ty = TY_U_LLONG;
-    }
-  } else {
-    for (int i = 0; SUFFIX[i].suffix != NULL; i++) {
-      if (strcmp(SUFFIX[i].suffix, suffix) == 0) {
-        ty = SUFFIX[i].type;
-        break;
-      }
-    }
-    if (ty == TY_VOID) {
-      range_error(token->range, "不正な整数のサフィックスです");
-    }
-  }
-
-  return new_number(ty, val);
-}
-
-static Number read_number(Token *token) {
-  assert(token->ty == TK_NUM);
-
-  bool is_float =
-      strpbrk(token->num, ".pP") ||
-      (strncasecmp(token->num, "0x", 2) && strpbrk(token->num, "eE"));
-  if (is_float) {
-    return read_float(token);
-  }
-  return read_integer(token);
-}
-
 static Expr *primary_expression(Tokenizer *tokenizer, Scope *scope) {
   Token *token = NULL;
   if ((token = tknzr_consume(tokenizer, TK_NUM)) != NULL) {
-    return new_expr_num(read_number(token), token->range);
+    return new_expr_num(token->num, token->range);
   }
 
   if ((token = tknzr_consume(tokenizer, TK_CHARCONST)) != NULL) {
