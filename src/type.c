@@ -119,7 +119,7 @@ void init_struct_body(StructBody *body) {
   body->member_align = 0;
 }
 
-static Member *new_member(char *name, Type *type, int offset, int index,
+static Member *new_member(const char *name, Type *type, int offset, int index,
                           const Range *range) {
   if (type->ty == TY_VOID) {
     range_error(range, "void型のメンバーです: %s", name);
@@ -132,8 +132,8 @@ static Member *new_member(char *name, Type *type, int offset, int index,
   return member;
 }
 
-void register_struct_member(Type *type, char *member_name, Type *member_type,
-                            const Range *range) {
+void register_struct_member(Type *type, const char *member_name,
+                            Type *member_type, const Range *range) {
   assert(type->ty == TY_STRUCT || type->ty == TY_UNION);
 
   StructBody *body = type->struct_body;
@@ -511,6 +511,7 @@ char *format_type(const Type *type, bool detail) {
         Param *param = vec_get(type->func.param, i);
         type_str = format("%s%s", type_str, format_type(param->type, false));
         if (param->name != NULL) {
+          assert(param->name->ty == TK_IDENT);
           type_str = format("%s %s", type_str, param->name->ident);
         }
       }

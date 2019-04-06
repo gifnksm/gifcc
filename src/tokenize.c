@@ -15,6 +15,7 @@ typedef struct {
 } Listener;
 
 static void convert_number(Token *token);
+static void convert_ident(Token *token);
 static Number read_float(Token *token);
 static Number read_integer(Token *token);
 
@@ -61,6 +62,9 @@ Token *tknzr_peek_ahead(Tokenizer *tokenizer, int n) {
 
     if (token->ty == TK_PP_NUM) {
       convert_number(token);
+    }
+    if (token->ty == TK_PP_IDENT) {
+      convert_ident(token);
     }
 
     if (tokenizer->listeners != NULL) {
@@ -124,6 +128,23 @@ static void convert_number(Token *token) {
 
   token->ty = TK_NUM;
   token->num = num;
+}
+
+static void convert_ident(Token *token) {
+  assert(token->ty == TK_PP_IDENT);
+  const char *ident = token->pp_ident;
+  token->pp_ident = NULL;
+
+  for (int i = 0; LONG_IDENT_TOKENS[i].str != NULL; i++) {
+    const LongToken *tk = &LONG_IDENT_TOKENS[i];
+    if (strcmp(ident, tk->str) == 0) {
+      token->ty = tk->kind;
+      return;
+    }
+  }
+
+  token->ty = TK_IDENT;
+  token->ident = ident;
 }
 
 static Number read_float(Token *token) {

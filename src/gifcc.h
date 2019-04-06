@@ -22,10 +22,11 @@ typedef struct IntVector IntVector;
 // トークンの型を表す値
 enum {
   TK_PP_NUM = 256,  // Preprocessor number
-  TK_NUM = 257,     // Number
-  TK_CHARCONST,     // 文字定数
-  TK_IDENT,         // 識別子
-  TK_STR,           // 文字列リテラル
+  TK_PP_IDENT,      // Preprocessor identifiers
+  TK_NUM,           // Number
+  TK_IDENT,         // identifiers
+  TK_CHARCONST,     // char constant
+  TK_STR,           // string literal
   TK_EQEQ,          // `==`
   TK_NOTEQ,         // `!=`
   TK_LTEQ,          // `<=`
@@ -85,7 +86,7 @@ enum {
   TK_INLINE,        // `inline`
   TK_NORETURN,      // `_Noreturn`
   TK_GENERIC,       // `_Generic`
-  TK_EOF,           // 入力の終わりを表すトークン
+  TK_EOF,           // End of File
 };
 
 typedef struct Range Range;
@@ -218,8 +219,9 @@ typedef struct {
   const Range *range;
   Set *pp_hideset;
   const char *pp_num;
+  const char *pp_ident;
+  const char *ident;
   Number num;
-  char *ident;
   const char *str;
   Number char_val;
 } Token;
@@ -533,7 +535,7 @@ typedef struct Stmt {
   const Range *range;
 
   // ST_LABEL, ST_GOTO
-  char *name;
+  const char *name;
 
   // ST_IF:       if (<cond>) <then_stmt> else <else_stmt>
   // ST_SWITCH:   switch (<cond>) <body>
@@ -570,14 +572,14 @@ typedef struct Stmt {
 } Stmt;
 
 typedef struct Member {
-  char *name;
+  const char *name;
   Type *type;
   int offset;
   int index;
 } Member;
 
 typedef struct Function {
-  char *name;
+  const char *name;
   Type *type;
   const Range *range;
   StorageClassSpecifier storage_class;
@@ -763,8 +765,8 @@ extern const char SHORT_PUNCT_TOKENS[];
 Token *new_token(int ty, const Range *range);
 Token *token_clone(Token *token, const Range *expanded_from);
 Token *new_token_pp_num(const char *num, const Range *range);
+Token *new_token_pp_ident(const char *ident, const Range *range);
 Token *new_token_char(Number val, const Range *range);
-Token *new_token_ident(char *ident, const Range *range);
 Token *new_token_str(const char *str, const Range *range);
 const char *token_kind_to_str(int kind);
 const char *token_to_str(const Token *token);
@@ -813,8 +815,8 @@ Type *new_type_opaque_struct(type_t ty, const char *tag, TypeQualifier tq);
 Type *new_type_enum(const char *tag, TypeQualifier tq);
 Type *new_type_builtin_va_list(const Range *range);
 void init_struct_body(StructBody *body);
-void register_struct_member(Type *type, char *member_name, Type *member_type,
-                            const Range *range);
+void register_struct_member(Type *type, const char *member_name,
+                            Type *member_type, const Range *range);
 const Member *lookup_struct_member(Type *type, const char *name);
 bool is_unqualified_type(const Type *type);
 bool is_same_type_qualifier(const TypeQualifier *tq1, const TypeQualifier *tq2);
@@ -846,7 +848,7 @@ char *make_label(const char *s);
 void gen(FILE *fp, TranslationUnit *tunit, asm_syntax_t syntax);
 
 // inline functions
-static inline char *get_label(Function *func, char *name) {
+static inline char *get_label(Function *func, const char *name) {
   return map_get(func->label_map, name);
 }
 
