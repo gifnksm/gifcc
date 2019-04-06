@@ -222,32 +222,18 @@ Token *pp_tknzr_peek_ahead(PpTokenizer *tokenizer, int n) {
       vec_push(tokens, token);
       tokens = pp_expand_macros(tokenizer, tokens, read_token);
 
-      // concatenate adjacent string literal
-      Token *last = NULL;
-      while (vec_len(tokens) > 0) {
-        Token *next = vec_remove(tokens, 0);
-        if (vec_len(tokenizer->tokens) > 0) {
-          last = vec_last(tokenizer->tokens);
-        }
-        if (last == NULL || last->ty != TK_STR || next->ty != TK_STR) {
-          vec_push(tokenizer->tokens, next);
-          if (tokenizer->listeners != NULL) {
-            for (int i = 0; i < vec_len(tokenizer->listeners); i++) {
-              Listener *listener = vec_get(tokenizer->listeners, i);
-              listener->fun(listener->arg, next);
-            }
+      if (tokenizer->listeners != NULL) {
+        for (int i = 0; i < vec_len(tokenizer->listeners); i++) {
+          Listener *listener = vec_get(tokenizer->listeners, i);
+          for (int i = 0; i < vec_len(tokens); i++) {
+            Token *token = vec_get(tokens, i);
+            listener->fun(listener->arg, token);
           }
-          last = next;
-          continue;
         }
-
-        last->str = format("%s%s", last->str, next->str);
-        last->range = range_join(last->range, next->range);
       }
 
-      if (last == NULL || last->ty != TK_STR) {
-        break;
-      }
+      vec_append(tokenizer->tokens, tokens);
+      break;
     }
   }
   return vec_get(tokenizer->tokens, n);

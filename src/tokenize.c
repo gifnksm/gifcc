@@ -60,6 +60,19 @@ Token *tknzr_peek_ahead(Tokenizer *tokenizer, int n) {
       return NULL;
     }
 
+    // Translation phase #6:
+    // * concatenate adjacent string literal tokens
+    if (token->ty == TK_STR) {
+      Token *next;
+      while ((next = pp_tknzr_consume(tokenizer->pp_tokenizer, TK_STR)) !=
+             NULL) {
+        token->str = format("%s%s", token->str, next->str);
+        token->range = range_join(token->range, next->range);
+      }
+    }
+
+    // Translation phase #7:
+    // * convert pp tokens into tokens
     if (token->ty == TK_PP_NUM) {
       convert_number(token);
     }
