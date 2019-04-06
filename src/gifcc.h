@@ -12,6 +12,7 @@
 #include <stdnoreturn.h>
 
 #define NEW(type) ((type *)calloc(1, sizeof(type)))
+#define UNUSED __attribute__((unused))
 
 typedef struct Vector Vector;
 typedef struct Set Set;
@@ -600,6 +601,7 @@ typedef struct PpTokenizer PpTokenizer;
 typedef struct Tokenizer Tokenizer;
 typedef struct Scope Scope;
 
+typedef char reader_pop_fun_t(void *, Reader *);
 typedef void tokenizer_listener_fun_t(void *, const Token *);
 
 typedef enum {
@@ -639,6 +641,7 @@ IntVector *new_int_vector(void);
 int int_vec_len(const IntVector *vec);
 int int_vec_get(const IntVector *vec, int n);
 void int_vec_push(IntVector *vec, int elem);
+int int_vec_remove(IntVector *vec, int n);
 
 // string.c
 String *new_string(void);
@@ -687,11 +690,11 @@ void range_get_start(const Range *range, const char **filename, int *line,
 void range_get_end(const Range *range, const char **filename, int *line,
                    int *column);
 Reader *new_reader(void);
+Reader *new_filtered_reader(Reader *base, reader_pop_fun_t *pop, void *arg);
 void reader_add_file(Reader *reader, FILE *fp, const char *filename);
 void reader_set_position(Reader *reader, const int *line, const char *filename);
-char reader_peek(const Reader *reader);
+char reader_peek(Reader *reader);
 void reader_succ(Reader *reader);
-void reader_succ_n(Reader *reader, int n);
 char reader_pop(Reader *Reader);
 bool reader_consume(Reader *reader, char ch);
 bool reader_consume_str(Reader *reader, const char *str);
@@ -746,6 +749,9 @@ void range_warn_raw_v(const Range *range, const char *dbg_file, int dbg_line,
       range_internal_error((range), "`%s` " fmt, #cond, ##__VA_ARGS__);        \
     }                                                                          \
   } while (0)
+
+// filter.c
+Reader *phase2_filter(Reader *reader);
 
 // number.c
 Number new_number(type_t ty, unsigned long long val);

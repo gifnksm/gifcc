@@ -1,4 +1,5 @@
 #include "gifcc.h"
+#include <string.h>
 
 typedef struct IntVector {
   int *data;
@@ -24,4 +25,17 @@ void int_vec_push(IntVector *vec, int elem) {
     vec->data = realloc(vec->data, sizeof(int) * vec->capacity);
   }
   vec->data[vec->len++] = elem;
+}
+int int_vec_remove(IntVector *vec, int n) {
+  assert(n < vec->len);
+  int ret = vec->data[n];
+
+  if (vec->len == 1) {
+    vec->len = 0;
+    return ret;
+  }
+
+  memmove(&vec->data[n], &vec->data[n + 1], (vec->len - n - 1) * sizeof(int));
+  vec->len--;
+  return ret;
 }

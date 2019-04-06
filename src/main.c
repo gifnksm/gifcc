@@ -710,6 +710,7 @@ int main(int argc, char **argv) {
   }
 
   Reader *reader = new_reader();
+  reader = phase2_filter(reader);
   reader_add_file(reader, file, filename);
 
   PpTokenizer *pp_tokenizer = new_pp_tokenizer(reader);

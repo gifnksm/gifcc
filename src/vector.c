@@ -67,6 +67,11 @@ void vec_insert(Vector *vec, int n, void *elem) {
 void *vec_remove(Vector *vec, int n) {
   assert(n < vec->len);
   void *ret = vec->data[n];
+  if (vec->len == 1) {
+    vec->len--;
+    return ret;
+  }
+
   memmove(&vec->data[n], &vec->data[n + 1],
           (vec->len - n - 1) * sizeof(void *));
   vec->len--;
