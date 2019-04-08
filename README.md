@@ -4,11 +4,12 @@
 
 ## Features
 
+* emit x86_64 assembly (AT&T syntax or Intel syntax)
 * self-hosted
 * Many C11 features
 * Some GNU syntax extension
 
-## Compiler stages
+## Compiler Stages
 
 gifcc build process has 3 stages.
 
