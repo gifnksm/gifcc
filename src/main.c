@@ -62,16 +62,20 @@ static void dump_token(FILE *fp, const Token *token) {
   fprintf(fp, "\n");
 }
 
-static void token_listener(void *arg, const Token *token) {
-  FILE *fp = arg;
-  dump_token(fp, token);
-}
+typedef struct {
+  FILE *fp;
+  TokenStream *ts;
+} TokenFilterArg;
 
-static void token_filter(void *arg, Tokenizer *tokenizer, Vector *output) {
-  FILE *fp = arg;
-  Token *token = tknzr_pop(tokenizer);
-  dump_token(fp, token);
+static bool token_filter(void *arg, Vector *output) {
+  TokenFilterArg *tfa = arg;
+  Token *token = ts_pop(tfa->ts);
+  if (token == NULL) {
+    return false;
+  }
+  dump_token(tfa->fp, token);
   vec_push(output, token);
+  return true;
 }
 
 static void dump_range_start(FILE *fp, const Range *range) {
@@ -724,33 +728,36 @@ int main(int argc, char **argv) {
   reader = phase2_filter(reader);
   reader_add_file(reader, file, filename);
 
-  PpTokenizer *pp_tokenizer = new_pp_tokenizer(reader);
+  TokenStream *ts = new_pp_tokenizer(reader);
   if (emit_target & EMIT_PP_TOKEN) {
     emit_target ^= EMIT_PP_TOKEN;
     FILE *fp = open_output_file(replace_suffix(output, ".s", ".pp_token"));
-    pp_tknzr_add_listener(pp_tokenizer, token_listener, fp);
+    TokenFilterArg *arg = NEW(TokenFilterArg);
+    *arg = (TokenFilterArg){.fp = fp, .ts = ts};
+    ts = new_token_stream(token_filter, arg);
     if (emit_target == 0) {
       // consume all tokens to trigger event listener
-      consume_all_pp_tokens(pp_tokenizer);
+      consume_all_token_stream(ts);
       goto End;
     }
   }
 
-  Tokenizer *tokenizer = new_tokenizer(pp_tokenizer);
-  tokenizer = phase6_filter(tokenizer);
-  tokenizer = phase7_filter(tokenizer);
+  ts = phase6_filter(ts);
+  ts = phase7_filter(ts);
   if (emit_target & EMIT_TOKEN) {
     emit_target ^= EMIT_TOKEN;
     FILE *fp = open_output_file(replace_suffix(output, ".s", ".token"));
-    tokenizer = new_filtered_tokenizer(tokenizer, token_filter, fp);
+    TokenFilterArg *arg = NEW(TokenFilterArg);
+    *arg = (TokenFilterArg){.fp = fp, .ts = ts};
+    ts = new_token_stream(token_filter, arg);
     if (emit_target == 0) {
       // consume all tokens to trigger event listener
-      consume_all_tokens(tokenizer);
+      consume_all_token_stream(ts);
       goto End;
     }
   }
 
-  TranslationUnit *tunit = parse(tokenizer);
+  TranslationUnit *tunit = parse(reader, ts);
   if (emit_target & EMIT_AST) {
     emit_target ^= EMIT_AST;
     FILE *fp = open_output_file(replace_suffix(output, ".s", ".ast"));

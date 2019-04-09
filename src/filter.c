@@ -20,31 +20,41 @@ Reader *phase2_filter(Reader *reader) {
   return new_filtered_reader(reader, phase2_pop_fun, NULL);
 }
 
-static void phase6_filter_fun(void *arg UNUSED, Tokenizer *tokenizer,
-                              Vector *output) {
+static bool phase6_next(void *arg, Vector *output) {
+  TokenStream *ts = arg;
+
   // Translation phase #6:
   // * concatenate adjacent string literal tokens
-  Token *token = tknzr_pop(tokenizer);
+  Token *token = ts_pop(ts);
+  if (token == NULL) {
+    return false;
+  }
+
   if (token->ty == TK_STR) {
     Token *next;
-    while ((next = tknzr_consume(tokenizer, TK_STR)) != NULL) {
+    while ((next = ts_consume(ts, TK_STR)) != NULL) {
       token->str = format("%s%s", token->str, next->str);
       token->range = range_join(token->range, next->range);
     }
   }
 
   vec_push(output, token);
+  return true;
 }
 
-Tokenizer *phase6_filter(Tokenizer *tokenizer) {
-  return new_filtered_tokenizer(tokenizer, phase6_filter_fun, NULL);
+TokenStream *phase6_filter(TokenStream *ts) {
+  return new_token_stream(phase6_next, ts);
 }
 
-static void phase7_filter_fun(void *arg UNUSED, Tokenizer *tokenizer,
-                              Vector *output) {
+static bool phase7_next(void *arg, Vector *output) {
+  TokenStream *ts = arg;
+
   // Translation phase #7:
   // * convert pp tokens into tokens
-  Token *token = tknzr_pop(tokenizer);
+  Token *token = ts_pop(ts);
+  if (token == NULL) {
+    return false;
+  }
   if (token->ty == TK_PP_NUM) {
     convert_number(token);
   }
@@ -53,10 +63,11 @@ static void phase7_filter_fun(void *arg UNUSED, Tokenizer *tokenizer,
   }
 
   vec_push(output, token);
+  return true;
 }
 
-Tokenizer *phase7_filter(Tokenizer *tokenizer) {
-  return new_filtered_tokenizer(tokenizer, phase7_filter_fun, NULL);
+TokenStream *phase7_filter(TokenStream *ts) {
+  return new_token_stream(phase7_next, ts);
 }
 
 static void convert_number(Token *token) {

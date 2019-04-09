@@ -597,13 +597,12 @@ typedef struct TranslationUnit {
 } TranslationUnit;
 
 typedef struct Reader Reader;
+typedef struct TokenStream TokenStream;
 typedef struct PpTokenizer PpTokenizer;
-typedef struct Tokenizer Tokenizer;
 typedef struct Scope Scope;
 
-typedef char reader_pop_fun_t(void *, Reader *);
-typedef void tknzr_filter_fun_t(void *, Tokenizer *, Vector *);
-typedef void tokenizer_listener_fun_t(void *, const Token *);
+typedef char reader_pop_fn_t(void *, Reader *);
+typedef bool ts_next_fn_t(void *, Vector *);
 
 typedef enum {
   ASM_SYNTAX_INTEL,
@@ -636,6 +635,7 @@ void *vec_remove(Vector *vec, int n);
 void vec_append(Vector *dst, Vector *src);
 void vec_extend(Vector *vec, int len);
 void vec_reserve(Vector *vec, int len);
+void vec_clear(Vector *vec);
 
 // int_vector.c
 IntVector *new_int_vector(void);
@@ -691,7 +691,7 @@ void range_get_start(const Range *range, const char **filename, int *line,
 void range_get_end(const Range *range, const char **filename, int *line,
                    int *column);
 Reader *new_reader(void);
-Reader *new_filtered_reader(Reader *base, reader_pop_fun_t *pop, void *arg);
+Reader *new_filtered_reader(Reader *base, reader_pop_fn_t *pop, void *arg);
 void reader_add_file(Reader *reader, FILE *fp, const char *filename);
 void reader_set_position(Reader *reader, const int *line, const char *filename);
 char reader_peek(Reader *reader);
@@ -753,8 +753,8 @@ void range_warn_raw_v(const Range *range, const char *dbg_file, int dbg_line,
 
 // filter.c
 Reader *phase2_filter(Reader *reader);
-Tokenizer *phase6_filter(Tokenizer *tokenizer);
-Tokenizer *phase7_filter(Tokenizer *tokenizer);
+TokenStream *phase6_filter(TokenStream *ts);
+TokenStream *phase7_filter(TokenStream *ts);
 
 // number.c
 Number new_number(type_t ty, unsigned long long val);
@@ -780,33 +780,20 @@ Token *new_token_str(const char *str, const Range *range);
 const char *token_kind_to_str(int kind);
 const char *token_to_str(const Token *token);
 
-// pp_tokenize.c
-PpTokenizer *new_pp_tokenizer(Reader *reader);
-void consume_all_pp_tokens(PpTokenizer *tokenizer);
-void pp_tknzr_add_listener(PpTokenizer *tokenizer,
-                           tokenizer_listener_fun_t *fun, void *arg);
-void pp_tknzr_succ(PpTokenizer *tokenizer);
-Token *pp_tknzr_peek(PpTokenizer *tokenizer);
-Token *pp_tknzr_peek_ahead(PpTokenizer *tokenizer, int n);
-Token *pp_tknzr_pop(PpTokenizer *tokenizer);
-Token *pp_tknzr_consume(PpTokenizer *tokenizer, int ty);
-Token *pp_tknzr_consume2(PpTokenizer *tokenizer, int ty1, int ty2);
-Token *pp_tknzr_expect(PpTokenizer *tokenizer, int ty);
-const Reader *pp_tknzr_get_reader(const PpTokenizer *tokenizer);
+// token_stream.c
+TokenStream *new_token_stream(ts_next_fn_t *next, void *arg);
+TokenStream *token_stream_from_vec(Vector *tokens);
+void consume_all_token_stream(TokenStream *ts);
+void ts_succ(TokenStream *ts);
+Token *ts_peek(TokenStream *ts);
+Token *ts_peek_ahead(TokenStream *ts, int n);
+Token *ts_pop(TokenStream *ts);
+Token *ts_consume(TokenStream *ts, int ty);
+Token *ts_consume2(TokenStream *ts, int ty1, int ty2);
+Token *ts_expect(TokenStream *ts, int ty);
 
-// tokenizer.c
-Tokenizer *new_tokenizer(PpTokenizer *pp_tokenizer);
-Tokenizer *new_filtered_tokenizer(Tokenizer *base, tknzr_filter_fun_t *filter,
-                                  void *arg);
-void consume_all_tokens(Tokenizer *tokenizer);
-void tknzr_succ(Tokenizer *tokenizer);
-Token *tknzr_peek(Tokenizer *tokenizer);
-Token *tknzr_peek_ahead(Tokenizer *tokenizer, int n);
-Token *tknzr_pop(Tokenizer *tokenizer);
-Token *tknzr_consume(Tokenizer *tokenizer, int ty);
-Token *tknzr_consume2(Tokenizer *tokenizer, int ty1, int ty2);
-Token *tknzr_expect(Tokenizer *tokenizer, int ty);
-const Reader *tknzr_get_reader(const Tokenizer *tokenizer);
+// pp_tokenize.c
+TokenStream *new_pp_tokenizer(Reader *reader);
 
 // type.c
 extern const TypeQualifier EMPTY_TYPE_QUALIFIER;
@@ -841,12 +828,12 @@ bool is_func_type(Type *ty);
 char *format_type(const Type *type, bool detail);
 
 // parse.c
-Scope *new_pp_scope(const Tokenizer *tokenizer);
+Scope *new_pp_scope(const Reader *reader);
 int get_val_size(const Type *ty, const Range *range);
 int get_val_align(const Type *ty, const Range *range);
-Expr *constant_expression(Tokenizer *tokenizer, Scope *scope);
-Number integer_constant_expression(Tokenizer *tokenizer, Scope *scope);
-TranslationUnit *parse(Tokenizer *tokenizer);
+Expr *constant_expression(TokenStream *ts, Scope *scope);
+Number integer_constant_expression(TokenStream *ts, Scope *scope);
+TranslationUnit *parse(const Reader *reader, TokenStream *ts);
 
 // sema.c
 void sema_expr(Expr *expr);

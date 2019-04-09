@@ -9,16 +9,9 @@
 
 struct PpTokenizer {
   Reader *reader;
-  Vector *tokens;
   Map *define_map;
   Vector *pp_cond_stack;
-  Vector *listeners;
 };
-
-typedef struct {
-  tokenizer_listener_fun_t *fun;
-  void *arg;
-} Listener;
 
 typedef struct Cond {
   bool once_fullfilled;
@@ -39,6 +32,7 @@ typedef struct Macro {
   Vector *(*replacement_func)(PpTokenizer *);
 } Macro;
 
+static bool read_token(PpTokenizer *tokenizer, Token **token);
 static bool do_read_token(PpTokenizer *tokenizer, Token **token, bool skip_eol,
                           bool check_pp_cond);
 static Macro *new_obj_macro(Vector *replacement);
@@ -156,118 +150,43 @@ static void initialize_predefined_macro(const Reader *reader, Map *map) {
   set_predefined_num_macro(reader, map, "__x86_64__", "1");
 }
 
-PpTokenizer *new_pp_tokenizer(Reader *reader) {
+static bool next(void *arg, Vector *output) {
+  PpTokenizer *tokenizer = arg;
+
+  while (true) {
+    Token *token = NULL;
+    if (!read_token(tokenizer, &token)) {
+      return false;
+    }
+    if (token == NULL) {
+      continue;
+    }
+
+    // expand macros
+    Vector *tokens = new_vector();
+    vec_push(tokens, token);
+    tokens = pp_expand_macros(tokenizer, tokens, read_token);
+
+    vec_append(output, tokens);
+    return true;
+  }
+}
+
+TokenStream *new_pp_tokenizer(Reader *reader) {
   PpTokenizer *tokenizer = NEW(PpTokenizer);
   tokenizer->reader = reader;
   tokenizer->define_map = new_map();
-  tokenizer->tokens = new_vector();
   tokenizer->pp_cond_stack = new_vector();
 
   initialize_predefined_macro(reader, tokenizer->define_map);
 
-  return tokenizer;
-}
+  TokenStream *ts = new_token_stream(next, tokenizer);
 
-void consume_all_pp_tokens(PpTokenizer *tokenizer) {
-  Token *token = NULL;
-  do {
-    token = pp_tknzr_pop(tokenizer);
-  } while (token->ty != TK_EOF);
-}
-
-void pp_tknzr_add_listener(PpTokenizer *tokenizer,
-                           tokenizer_listener_fun_t *fun, void *arg) {
-  if (tokenizer->listeners == NULL) {
-    tokenizer->listeners = new_vector();
-  }
-  Listener *listener = NEW(Listener);
-  listener->fun = fun;
-  listener->arg = arg;
-  vec_push(tokenizer->listeners, listener);
-}
-
-static PpTokenizer *tokenizer_from_tokens(Map *define_map, Vector *tokens) {
-  PpTokenizer *tokenizer = NEW(PpTokenizer);
-  tokenizer->define_map = define_map;
-  tokenizer->tokens = tokens;
-  return tokenizer;
-}
-
-void pp_tknzr_succ(PpTokenizer *tokenizer) {
-  assert(vec_len(tokenizer->tokens) > 0);
-  vec_remove(tokenizer->tokens, 0);
-}
-
-Token *pp_tknzr_peek(PpTokenizer *tokenizer) {
-  return pp_tknzr_peek_ahead(tokenizer, 0);
+  return ts;
 }
 
 static bool read_token(PpTokenizer *tokenizer, Token **token) {
   return do_read_token(tokenizer, token, true, true);
-}
-
-Token *pp_tknzr_peek_ahead(PpTokenizer *tokenizer, int n) {
-  while (vec_len(tokenizer->tokens) <= n) {
-    while (true) {
-      Token *token = NULL;
-      if (!read_token(tokenizer, &token)) {
-        return NULL;
-      }
-      if (token == NULL) {
-        continue;
-      }
-
-      // expand macros
-      Vector *tokens = new_vector();
-      vec_push(tokens, token);
-      tokens = pp_expand_macros(tokenizer, tokens, read_token);
-
-      if (tokenizer->listeners != NULL) {
-        for (int i = 0; i < vec_len(tokenizer->listeners); i++) {
-          Listener *listener = vec_get(tokenizer->listeners, i);
-          for (int i = 0; i < vec_len(tokens); i++) {
-            Token *token = vec_get(tokens, i);
-            listener->fun(listener->arg, token);
-          }
-        }
-      }
-
-      vec_append(tokenizer->tokens, tokens);
-      break;
-    }
-  }
-  return vec_get(tokenizer->tokens, n);
-}
-
-Token *pp_tknzr_pop(PpTokenizer *tokenizer) {
-  Token *token = pp_tknzr_peek(tokenizer);
-  pp_tknzr_succ(tokenizer);
-  return token;
-}
-
-Token *pp_tknzr_consume(PpTokenizer *tokenizer, int ty) {
-  if (pp_tknzr_peek(tokenizer)->ty != ty) {
-    return NULL;
-  }
-  return pp_tknzr_pop(tokenizer);
-}
-
-Token *pp_tknzr_consume2(PpTokenizer *tokenizer, int ty1, int ty2) {
-  if (pp_tknzr_peek(tokenizer)->ty == ty1 &&
-      pp_tknzr_peek_ahead(tokenizer, 1)->ty == ty2) {
-    (void)pp_tknzr_pop(tokenizer);
-    return pp_tknzr_pop(tokenizer);
-  }
-  return false;
-}
-
-Token *pp_tknzr_expect(PpTokenizer *tokenizer, int ty) {
-  Token *token = pp_tknzr_pop(tokenizer);
-  if (token->ty != ty) {
-    range_error(token->range, "%s expected, but found %s",
-                token_kind_to_str(ty), token_kind_to_str(token->ty));
-  }
-  return token;
 }
 
 const Reader *pp_tknzr_get_reader(const PpTokenizer *tokenizer) {
@@ -786,14 +705,13 @@ static bool pp_read_if_cond(PpTokenizer *tokenizer) {
     }
   }
 
-  PpTokenizer *sub_pp_tokenizer = tokenizer_from_tokens(NULL, tokens);
-  Tokenizer *sub_tokenizer = new_tokenizer(sub_pp_tokenizer);
-  sub_tokenizer = phase6_filter(sub_tokenizer);
-  sub_tokenizer = phase7_filter(sub_tokenizer);
-  Scope *scope = new_pp_scope(sub_tokenizer);
-  Number num = integer_constant_expression(sub_tokenizer, scope);
-  if (tknzr_peek(sub_tokenizer)->ty != TK_EOF) {
-    range_error(tknzr_peek(sub_tokenizer)->range, "改行がありません");
+  TokenStream *sub_ts = token_stream_from_vec(tokens);
+  sub_ts = phase6_filter(sub_ts);
+  sub_ts = phase7_filter(sub_ts);
+  Scope *scope = new_pp_scope(tokenizer->reader);
+  Number num = integer_constant_expression(sub_ts, scope);
+  if (ts_peek(sub_ts)->ty != TK_EOF) {
+    range_error(ts_peek(sub_ts)->range, "改行がありません");
   }
 
   int val;
