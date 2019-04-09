@@ -582,6 +582,14 @@ static void eval_binop_comp(Expr *expr) {
     return;
   }
 
+  case TY_PTR: {
+    uintptr_t a, b;
+    SET_NUMBER_VAL(a, &lnum);
+    SET_NUMBER_VAL(b, &rnum);
+    BINOP_COMP(op, r, a, b, expr->range);
+    return;
+  }
+
   case TY_VOID:
   case TY_BOOL:
   case TY_CHAR:
@@ -589,7 +597,6 @@ static void eval_binop_comp(Expr *expr) {
   case TY_S_SHORT:
   case TY_U_CHAR:
   case TY_U_SHORT:
-  case TY_PTR:
   case TY_ENUM:
   case TY_ARRAY:
   case TY_FUNC:
