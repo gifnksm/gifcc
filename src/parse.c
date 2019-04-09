@@ -1603,9 +1603,11 @@ static Expr *new_expr_cast(Scope *scope, Type *val_type, Expr *operand,
 
   Expr *expr = new_expr(EX_CAST, val_type, range);
   if (val_type->ty == TY_BOOL) {
-    expr->unop.operand =
-        new_expr_binop(scope, EX_NOTEQ, operand,
-                       new_expr_num(new_number_int(0), range), range);
+    expr->unop.operand = new_expr_binop(
+        scope, EX_NOTEQ, operand,
+        new_expr_cast(scope, operand->val_type,
+                      new_expr_num(new_number_int(0), range), range),
+        range);
   } else {
     expr->unop.operand = operand;
   }
