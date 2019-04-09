@@ -100,3 +100,5 @@ void vec_extend(Vector *vec, int len) {
     vec_push(vec, NULL);
   }
 }
+
+void vec_clear(Vector *vec) { vec->len = 0; }

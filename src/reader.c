@@ -45,7 +45,7 @@ typedef struct Adapter {
   int offset;
   bool is_sol;
   Reader *inner;
-  reader_pop_fun_t *pop;
+  reader_pop_fn_t *pop;
   void *arg;
   IntVector *chars;
   IntVector *offsets;
@@ -220,7 +220,7 @@ Reader *new_reader(void) {
   return reader;
 }
 
-Reader *new_filtered_reader(Reader *base, reader_pop_fun_t *pop, void *arg) {
+Reader *new_filtered_reader(Reader *base, reader_pop_fn_t *pop, void *arg) {
   Reader *reader = NEW(Reader);
   reader->type = READER_ADAPTER;
   reader->adapter = (Adapter){
