@@ -597,7 +597,7 @@ typedef struct TranslationUnit {
 } TranslationUnit;
 
 typedef struct Reader Reader;
-typedef struct TokenStream TokenStream;
+typedef struct TokenIterator TokenIterator;
 typedef struct PpTokenizer PpTokenizer;
 typedef struct Scope Scope;
 
@@ -751,11 +751,6 @@ void range_warn_raw_v(const Range *range, const char *dbg_file, int dbg_line,
     }                                                                          \
   } while (0)
 
-// filter.c
-Reader *phase2_filter(Reader *reader);
-TokenStream *phase6_filter(TokenStream *ts);
-TokenStream *phase7_filter(TokenStream *ts);
-
 // number.c
 Number new_number(type_t ty, unsigned long long val);
 Number new_number_float(type_t ty, long double val);
@@ -780,21 +775,25 @@ Token *new_token_str(const char *str, const Range *range);
 const char *token_kind_to_str(int kind);
 const char *token_to_str(const Token *token);
 
-// token_stream.c
-TokenStream *new_token_stream(ts_next_fn_t *next, void *arg);
-TokenStream *token_stream_from_vec(Vector *tokens);
-void consume_all_token_stream(TokenStream *ts);
-void ts_succ(TokenStream *ts);
-Token *ts_peek(TokenStream *ts);
-Token *ts_peek_ahead(TokenStream *ts, int n);
-Token *ts_pop(TokenStream *ts);
-Token *ts_consume(TokenStream *ts, int ty);
-Token *ts_consume2(TokenStream *ts, int ty1, int ty2);
-Token *ts_expect(TokenStream *ts, int ty);
+// token_iter.c
+TokenIterator *new_token_iterator(ts_next_fn_t *next, void *arg);
+TokenIterator *token_iterator_from_vec(Vector *tokens);
+void consume_all_token_iterator(TokenIterator *ts);
+void ts_succ(TokenIterator *ts);
+Token *ts_peek(TokenIterator *ts);
+Token *ts_peek_ahead(TokenIterator *ts, int n);
+Token *ts_pop(TokenIterator *ts);
+Token *ts_consume(TokenIterator *ts, int ty);
+Token *ts_consume2(TokenIterator *ts, int ty1, int ty2);
+Token *ts_expect(TokenIterator *ts, int ty);
 
 // pp_tokenize.c
-TokenStream *new_pp_tokenizer(Reader *reader);
+TokenIterator *new_pp_tokenizer(Reader *reader);
 
+// filter.c
+Reader *phase2_filter(Reader *reader);
+TokenIterator *phase6_filter(TokenIterator *ts);
+TokenIterator *phase7_filter(TokenIterator *ts);
 // type.c
 extern const TypeQualifier EMPTY_TYPE_QUALIFIER;
 extern const TypeQualifier CONST_TYPE_QUALIFIER;
@@ -831,9 +830,9 @@ char *format_type(const Type *type, bool detail);
 Scope *new_pp_scope(const Reader *reader);
 int get_val_size(const Type *ty, const Range *range);
 int get_val_align(const Type *ty, const Range *range);
-Expr *constant_expression(TokenStream *ts, Scope *scope);
-Number integer_constant_expression(TokenStream *ts, Scope *scope);
-TranslationUnit *parse(const Reader *reader, TokenStream *ts);
+Expr *constant_expression(TokenIterator *ts, Scope *scope);
+Number integer_constant_expression(TokenIterator *ts, Scope *scope);
+TranslationUnit *parse(const Reader *reader, TokenIterator *ts);
 
 // sema.c
 void sema_expr(Expr *expr);

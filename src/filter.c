@@ -21,7 +21,7 @@ Reader *phase2_filter(Reader *reader) {
 }
 
 static bool phase6_next(void *arg, Vector *output) {
-  TokenStream *ts = arg;
+  TokenIterator *ts = arg;
 
   // Translation phase #6:
   // * concatenate adjacent string literal tokens
@@ -42,12 +42,12 @@ static bool phase6_next(void *arg, Vector *output) {
   return true;
 }
 
-TokenStream *phase6_filter(TokenStream *ts) {
-  return new_token_stream(phase6_next, ts);
+TokenIterator *phase6_filter(TokenIterator *ts) {
+  return new_token_iterator(phase6_next, ts);
 }
 
 static bool phase7_next(void *arg, Vector *output) {
-  TokenStream *ts = arg;
+  TokenIterator *ts = arg;
 
   // Translation phase #7:
   // * convert pp tokens into tokens
@@ -66,8 +66,8 @@ static bool phase7_next(void *arg, Vector *output) {
   return true;
 }
 
-TokenStream *phase7_filter(TokenStream *ts) {
-  return new_token_stream(phase7_next, ts);
+TokenIterator *phase7_filter(TokenIterator *ts) {
+  return new_token_iterator(phase7_next, ts);
 }
 
 static void convert_number(Token *token) {

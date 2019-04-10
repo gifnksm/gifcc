@@ -172,7 +172,7 @@ static bool next(void *arg, Vector *output) {
   }
 }
 
-TokenStream *new_pp_tokenizer(Reader *reader) {
+TokenIterator *new_pp_tokenizer(Reader *reader) {
   PpTokenizer *tokenizer = NEW(PpTokenizer);
   tokenizer->reader = reader;
   tokenizer->define_map = new_map();
@@ -180,7 +180,7 @@ TokenStream *new_pp_tokenizer(Reader *reader) {
 
   initialize_predefined_macro(reader, tokenizer->define_map);
 
-  TokenStream *ts = new_token_stream(next, tokenizer);
+  TokenIterator *ts = new_token_iterator(next, tokenizer);
 
   return ts;
 }
@@ -705,7 +705,7 @@ static bool pp_read_if_cond(PpTokenizer *tokenizer) {
     }
   }
 
-  TokenStream *sub_ts = token_stream_from_vec(tokens);
+  TokenIterator *sub_ts = token_iterator_from_vec(tokens);
   sub_ts = phase6_filter(sub_ts);
   sub_ts = phase7_filter(sub_ts);
   Scope *scope = new_pp_scope(tokenizer->reader);
