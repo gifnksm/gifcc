@@ -153,16 +153,17 @@ static Type *get_typedef(Scope *scope, const char *name);
 static Type *integer_promoted(Scope *scope, Expr **e);
 static Type *arith_converted(Scope *scope, Expr **e1, Expr **e2);
 static bool token_is_storage_class_specifier(Token *token);
-static bool consume_storage_class_specifier(TokenStream *ts,
+static bool consume_storage_class_specifier(TokenIterator *ts,
                                             StorageClassSpecifier *scs);
 static bool token_is_type_name(Scope *scope, Token *token);
 static bool token_is_declaration_specifiers(Scope *scope, Token *token);
 static bool token_is_type_specifier(Scope *scope, Token *token);
 static Type *construct_type_specifier(TypeSpecifier ts, TypeQualifier tq);
 static bool token_is_type_qualifier(Token *token);
-static bool consume_type_qualifier(TokenStream *ts, TypeQualifier *tq);
+static bool consume_type_qualifier(TokenIterator *ts, TypeQualifier *tq);
 static bool token_is_function_specifier(Token *token);
-static bool consume_function_specifier(TokenStream *ts, FunctionSpecifier *fs);
+static bool consume_function_specifier(TokenIterator *ts,
+                                       FunctionSpecifier *fs);
 static noreturn void binop_type_error_raw(int ty, Expr *lhs, Expr *rhs,
                                           const char *dbg_file, int dbg_line);
 static Expr *coerce_array2ptr(Scope *scope, Expr *expr);
@@ -233,57 +234,58 @@ static Expr *builtin_va_copy_handler(Scope *scope, Expr *callee,
                                      Vector *argument, const Range *range);
 
 // expression
-static Expr *primary_expression(TokenStream *ts, Scope *scope);
-static Expr *postfix_expression(TokenStream *ts, Scope *scope);
-static Vector *argument_expression_list(TokenStream *ts, Scope *scope);
-static Expr *unary_expression(TokenStream *ts, Scope *scope);
-static Expr *cast_expression(TokenStream *ts, Scope *scope);
-static Expr *binary_expression(TokenStream *ts, Scope *scope, const int *tks,
+static Expr *primary_expression(TokenIterator *ts, Scope *scope);
+static Expr *postfix_expression(TokenIterator *ts, Scope *scope);
+static Vector *argument_expression_list(TokenIterator *ts, Scope *scope);
+static Expr *unary_expression(TokenIterator *ts, Scope *scope);
+static Expr *cast_expression(TokenIterator *ts, Scope *scope);
+static Expr *binary_expression(TokenIterator *ts, Scope *scope, const int *tks,
                                const int *exs,
-                               Expr *(*op_parser)(TokenStream *, Scope *));
-static Expr *multiplicative_expression(TokenStream *ts, Scope *scope);
-static Expr *additive_expression(TokenStream *ts, Scope *scope);
-static Expr *shift_expression(TokenStream *ts, Scope *scope);
-static Expr *relational_expression(TokenStream *ts, Scope *scope);
-static Expr *equality_expression(TokenStream *ts, Scope *scope);
-static Expr *and_expression(TokenStream *ts, Scope *scope);
-static Expr *exclusive_or_expression(TokenStream *ts, Scope *scope);
-static Expr *inclusive_or_expression(TokenStream *ts, Scope *scope);
-static Expr *logical_and_expression(TokenStream *ts, Scope *scope);
-static Expr *logical_or_expression(TokenStream *ts, Scope *scope);
-static Expr *conditional_expression(TokenStream *ts, Scope *scope);
-static Expr *assignment_expression(TokenStream *ts, Scope *scope);
-static Expr *expression(TokenStream *ts, Scope *scope);
+                               Expr *(*op_parser)(TokenIterator *, Scope *));
+static Expr *multiplicative_expression(TokenIterator *ts, Scope *scope);
+static Expr *additive_expression(TokenIterator *ts, Scope *scope);
+static Expr *shift_expression(TokenIterator *ts, Scope *scope);
+static Expr *relational_expression(TokenIterator *ts, Scope *scope);
+static Expr *equality_expression(TokenIterator *ts, Scope *scope);
+static Expr *and_expression(TokenIterator *ts, Scope *scope);
+static Expr *exclusive_or_expression(TokenIterator *ts, Scope *scope);
+static Expr *inclusive_or_expression(TokenIterator *ts, Scope *scope);
+static Expr *logical_and_expression(TokenIterator *ts, Scope *scope);
+static Expr *logical_or_expression(TokenIterator *ts, Scope *scope);
+static Expr *conditional_expression(TokenIterator *ts, Scope *scope);
+static Expr *assignment_expression(TokenIterator *ts, Scope *scope);
+static Expr *expression(TokenIterator *ts, Scope *scope);
 
 // declaration
-static Vector *declaration(TokenStream *ts, Scope *scope);
-static void declaration_specifiers(TokenStream *ts, Scope *scope, Type **type,
+static Vector *declaration(TokenIterator *ts, Scope *scope);
+static void declaration_specifiers(TokenIterator *ts, Scope *scope, Type **type,
                                    StorageClassSpecifier *scs,
                                    FunctionSpecifier *fs);
-static Type *struct_or_union_specifier(Scope *scope, TokenStream *ts,
+static Type *struct_or_union_specifier(Scope *scope, TokenIterator *ts,
                                        Token *token);
-static void struct_declaration(Scope *scope, TokenStream *ts, Type *type);
-static void struct_declarator(Scope *scope, TokenStream *ts, Type *base_type,
+static void struct_declaration(Scope *scope, TokenIterator *ts, Type *type);
+static void struct_declarator(Scope *scope, TokenIterator *ts, Type *base_type,
                               Token **name, Type **type, const Range **range);
-static Type *specifier_qualifier_list(Scope *scope, TokenStream *ts);
-static Type *enum_specifier(Scope *scope, TokenStream *ts, Token *token);
-static void enumerator(Scope *scope, TokenStream *ts, Type *type, int *val);
-static void declarator_common(Scope *scope, TokenStream *ts,
+static Type *specifier_qualifier_list(Scope *scope, TokenIterator *ts);
+static Type *enum_specifier(Scope *scope, TokenIterator *ts, Token *token);
+static void enumerator(Scope *scope, TokenIterator *ts, Type *type, int *val);
+static void declarator_common(Scope *scope, TokenIterator *ts,
                               declarator_type_t dec_type, Type *base_type,
                               Token **name, Type **type, const Range **range);
-static void direct_declarator_common(Scope *scope, TokenStream *ts,
+static void direct_declarator_common(Scope *scope, TokenIterator *ts,
                                      declarator_type_t dec_type,
                                      Type *base_type, Token **name, Type **type,
                                      const Range **range);
-static void declarator(Scope *scope, TokenStream *ts, Type *base_type,
+static void declarator(Scope *scope, TokenIterator *ts, Type *base_type,
                        Token **name, Type **type, const Range **range);
-static Param *parameter_declaration(Scope *scope, TokenStream *ts);
-static Param *parameter_declarator(Scope *scope, TokenStream *ts,
+static Param *parameter_declaration(Scope *scope, TokenIterator *ts);
+static Param *parameter_declarator(Scope *scope, TokenIterator *ts,
                                    Type *base_type);
-static Type *type_name(Scope *scope, TokenStream *ts);
-static void abstract_declarator(Scope *scope, TokenStream *ts, Type *base_type,
-                                Type **type, const Range **range);
-static ParseInit *parse_initializer(TokenStream *ts, Scope *scope);
+static Type *type_name(Scope *scope, TokenIterator *ts);
+static void abstract_declarator(Scope *scope, TokenIterator *ts,
+                                Type *base_type, Type **type,
+                                const Range **range);
+static ParseInit *parse_initializer(TokenIterator *ts, Scope *scope);
 static const Member *consume_member_designator(Type *type, InitElem *elem);
 static void assign_struct_initializer(Scope *scope, Vector *list, bool is_root,
                                       Type *type, const Range *range,
@@ -299,24 +301,25 @@ static void assign_initializer(Scope *scope, ParseInit *pinit, Type *type,
 static void assign_initializer_list(Scope *scope, Vector *list, bool is_root,
                                     Type *type, const Range *range,
                                     Initializer **init);
-static void initializer(TokenStream *ts, Scope *scope, Type *type,
+static void initializer(TokenIterator *ts, Scope *scope, Type *type,
                         Initializer **init, const Range **range);
 
 // statement
-static Stmt *statement(TokenStream *ts, Scope *scope);
-static Stmt *compound_statement(TokenStream *ts, Scope *scope);
+static Stmt *statement(TokenIterator *ts, Scope *scope);
+static Stmt *compound_statement(TokenIterator *ts, Scope *scope);
 
 // top-level
-static Function *function_definition(TokenStream *ts, Scope *global_scope,
+static Function *function_definition(TokenIterator *ts, Scope *global_scope,
                                      Type *type, const char *name,
                                      StorageClassSpecifier scs,
                                      FunctionSpecifier fs, const Range *start);
 static GlobalVar *new_global_variable(Type *type, const char *name,
                                       const Range *range,
                                       StorageClassSpecifier scs);
-static TranslationUnit *translation_unit(const Reader *reader, TokenStream *ts);
+static TranslationUnit *translation_unit(const Reader *reader,
+                                         TokenIterator *ts);
 
-TranslationUnit *parse(const Reader *reader, TokenStream *ts) {
+TranslationUnit *parse(const Reader *reader, TokenIterator *ts) {
   return translation_unit(reader, ts);
 }
 
@@ -736,7 +739,7 @@ static bool token_is_storage_class_specifier(Token *token) {
   }
 }
 
-static bool consume_storage_class_specifier(TokenStream *ts,
+static bool consume_storage_class_specifier(TokenIterator *ts,
                                             StorageClassSpecifier *scs) {
   bool consumed = false;
   while (true) {
@@ -798,7 +801,7 @@ static bool token_is_type_specifier(Scope *scope, Token *token) {
   }
 }
 
-static bool consume_type_specifier(Scope *scope, TokenStream *ts,
+static bool consume_type_specifier(Scope *scope, TokenIterator *ts,
                                    TypeSpecifier *tspec) {
   bool consumed = false;
   while (true) {
@@ -1034,7 +1037,7 @@ static bool token_is_type_qualifier(Token *token) {
     return false;
   }
 }
-static bool consume_type_qualifier(TokenStream *ts, TypeQualifier *tq) {
+static bool consume_type_qualifier(TokenIterator *ts, TypeQualifier *tq) {
   bool consumed = false;
   while (true) {
     Token *token;
@@ -1080,7 +1083,8 @@ static bool token_is_function_specifier(Token *token) {
   }
 }
 
-static bool consume_function_specifier(TokenStream *ts, FunctionSpecifier *fs) {
+static bool consume_function_specifier(TokenIterator *ts,
+                                       FunctionSpecifier *fs) {
   bool consumed = false;
   while (true) {
     Token *token;
@@ -2204,7 +2208,7 @@ static Expr *builtin_va_copy_handler(Scope *scope, Expr *callee,
   return new_expr_builtin_va_copy(scope, callee, argument, range);
 }
 
-static Expr *primary_expression(TokenStream *ts, Scope *scope) {
+static Expr *primary_expression(TokenIterator *ts, Scope *scope) {
   Token *token = NULL;
   if ((token = ts_consume(ts, TK_NUM)) != NULL) {
     return new_expr_num(token->num, token->range);
@@ -2265,7 +2269,7 @@ static Expr *primary_expression(TokenStream *ts, Scope *scope) {
   range_error(ts_peek(ts)->range, "数値でも開きカッコでもないトークンです");
 }
 
-static Expr *postfix_expression(TokenStream *ts, Scope *scope) {
+static Expr *postfix_expression(TokenIterator *ts, Scope *scope) {
   Token *token;
   Expr *expr = primary_expression(ts, scope);
   while (true) {
@@ -2318,7 +2322,7 @@ static Expr *postfix_expression(TokenStream *ts, Scope *scope) {
   }
 }
 
-static Vector *argument_expression_list(TokenStream *ts, Scope *scope) {
+static Vector *argument_expression_list(TokenIterator *ts, Scope *scope) {
   Vector *argument = new_vector();
   while (true) {
     vec_push(argument, assignment_expression(ts, scope));
@@ -2329,7 +2333,7 @@ static Vector *argument_expression_list(TokenStream *ts, Scope *scope) {
   return argument;
 }
 
-static Expr *unary_expression(TokenStream *ts, Scope *scope) {
+static Expr *unary_expression(TokenIterator *ts, Scope *scope) {
   const int TKS[] = {'&', '*', '+', '-', '~', '!', TK_INC, TK_DEC, '\0'};
   const int EXS[] = {EX_ADDRESS, EX_INDIRECT, EX_PLUS,    EX_MINUS, EX_NOT,
                      EX_LOG_NOT, EX_PRE_INC,  EX_PRE_DEC, '\0'};
@@ -2369,7 +2373,7 @@ static Expr *unary_expression(TokenStream *ts, Scope *scope) {
   return postfix_expression(ts, scope);
 }
 
-static Expr *cast_expression(TokenStream *ts, Scope *scope) {
+static Expr *cast_expression(TokenIterator *ts, Scope *scope) {
   Token *token = ts_peek(ts);
   if (token->ty == '(' && token_is_type_name(scope, ts_peek_ahead(ts, 1))) {
     const Range *start = token->range;
@@ -2389,9 +2393,9 @@ static Expr *cast_expression(TokenStream *ts, Scope *scope) {
   return unary_expression(ts, scope);
 }
 
-static Expr *binary_expression(TokenStream *ts, Scope *scope, const int *tks,
+static Expr *binary_expression(TokenIterator *ts, Scope *scope, const int *tks,
                                const int *exs,
-                               Expr *(*op_parser)(TokenStream *, Scope *)) {
+                               Expr *(*op_parser)(TokenIterator *, Scope *)) {
   Expr *expr = op_parser(ts, scope);
   bool found;
   do {
@@ -2412,57 +2416,57 @@ static Expr *binary_expression(TokenStream *ts, Scope *scope, const int *tks,
   return expr;
 }
 
-static Expr *multiplicative_expression(TokenStream *ts, Scope *scope) {
+static Expr *multiplicative_expression(TokenIterator *ts, Scope *scope) {
   const int TKS[] = {'*', '/', '%', '\0'};
   const int EXS[] = {EX_MUL, EX_DIV, EX_MOD, '\0'};
   return binary_expression(ts, scope, TKS, EXS, cast_expression);
 }
-static Expr *additive_expression(TokenStream *ts, Scope *scope) {
+static Expr *additive_expression(TokenIterator *ts, Scope *scope) {
   const int TKS[] = {'+', '-', '\0'};
   const int EXS[] = {EX_ADD, EX_SUB, '\0'};
   return binary_expression(ts, scope, TKS, EXS, multiplicative_expression);
 }
-static Expr *shift_expression(TokenStream *ts, Scope *scope) {
+static Expr *shift_expression(TokenIterator *ts, Scope *scope) {
   const int TKS[] = {TK_LSHIFT, TK_RSHIFT, '\0'};
   const int EXS[] = {EX_LSHIFT, EX_RSHIFT, '\0'};
   return binary_expression(ts, scope, TKS, EXS, additive_expression);
 }
-static Expr *relational_expression(TokenStream *ts, Scope *scope) {
+static Expr *relational_expression(TokenIterator *ts, Scope *scope) {
   const int TKS[] = {'<', '>', TK_LTEQ, TK_GTEQ, '\0'};
   const int EXS[] = {EX_LT, EX_GT, EX_LTEQ, EX_GTEQ, '\0'};
   return binary_expression(ts, scope, TKS, EXS, shift_expression);
 }
-static Expr *equality_expression(TokenStream *ts, Scope *scope) {
+static Expr *equality_expression(TokenIterator *ts, Scope *scope) {
   const int TKS[] = {TK_EQEQ, TK_NOTEQ, '\0'};
   const int EXS[] = {EX_EQEQ, EX_NOTEQ, '\0'};
   return binary_expression(ts, scope, TKS, EXS, relational_expression);
 }
-static Expr *and_expression(TokenStream *ts, Scope *scope) {
+static Expr *and_expression(TokenIterator *ts, Scope *scope) {
   const int TKS[] = {'&', '\0'};
   const int EXS[] = {EX_AND, '\0'};
   return binary_expression(ts, scope, TKS, EXS, equality_expression);
 }
-static Expr *exclusive_or_expression(TokenStream *ts, Scope *scope) {
+static Expr *exclusive_or_expression(TokenIterator *ts, Scope *scope) {
   const int TKS[] = {'^', '\0'};
   const int EXS[] = {EX_XOR, '\0'};
   return binary_expression(ts, scope, TKS, EXS, and_expression);
 }
-static Expr *inclusive_or_expression(TokenStream *ts, Scope *scope) {
+static Expr *inclusive_or_expression(TokenIterator *ts, Scope *scope) {
   const int TKS[] = {'|', '\0'};
   const int EXS[] = {EX_OR, '\0'};
   return binary_expression(ts, scope, TKS, EXS, exclusive_or_expression);
 }
-static Expr *logical_and_expression(TokenStream *ts, Scope *scope) {
+static Expr *logical_and_expression(TokenIterator *ts, Scope *scope) {
   const int TKS[] = {TK_LOGAND, '\0'};
   const int EXS[] = {EX_LOG_AND, '\0'};
   return binary_expression(ts, scope, TKS, EXS, inclusive_or_expression);
 }
-static Expr *logical_or_expression(TokenStream *ts, Scope *scope) {
+static Expr *logical_or_expression(TokenIterator *ts, Scope *scope) {
   const int TKS[] = {TK_LOGOR, '\0'};
   const int EXS[] = {EX_LOG_OR, '\0'};
   return binary_expression(ts, scope, TKS, EXS, logical_and_expression);
 }
-static Expr *conditional_expression(TokenStream *ts, Scope *scope) {
+static Expr *conditional_expression(TokenIterator *ts, Scope *scope) {
   Expr *cond = logical_or_expression(ts, scope);
   if (ts_consume(ts, '?')) {
     Expr *then_expr = expression(ts, scope);
@@ -2474,7 +2478,7 @@ static Expr *conditional_expression(TokenStream *ts, Scope *scope) {
   return cond;
 }
 
-static Expr *assignment_expression(TokenStream *ts, Scope *scope) {
+static Expr *assignment_expression(TokenIterator *ts, Scope *scope) {
   const int TKS[] = {
       '=',           TK_MUL_ASSIGN, TK_DIV_ASSIGN,    TK_MOD_ASSIGN,
       TK_ADD_ASSIGN, TK_SUB_ASSIGN, TK_LSHIFT_ASSIGN, TK_RSHIFT_ASSIGN,
@@ -2500,13 +2504,13 @@ static Expr *assignment_expression(TokenStream *ts, Scope *scope) {
   return lhs;
 }
 
-static Expr *expression(TokenStream *ts, Scope *scope) {
+static Expr *expression(TokenIterator *ts, Scope *scope) {
   const int TKS[] = {',', '\0'};
   const int EXS[] = {EX_COMMA, '\0'};
   return binary_expression(ts, scope, TKS, EXS, assignment_expression);
 }
 
-Expr *constant_expression(TokenStream *ts, Scope *scope) {
+Expr *constant_expression(TokenIterator *ts, Scope *scope) {
   Expr *expr = conditional_expression(ts, scope);
   sema_expr(expr);
   if (expr->ty != EX_NUM) {
@@ -2515,7 +2519,7 @@ Expr *constant_expression(TokenStream *ts, Scope *scope) {
   return expr;
 }
 
-Number integer_constant_expression(TokenStream *ts, Scope *scope) {
+Number integer_constant_expression(TokenIterator *ts, Scope *scope) {
   Expr *expr = constant_expression(ts, scope);
   assert(expr->ty == EX_NUM);
   if (!is_integer_type(expr->val_type)) {
@@ -2525,7 +2529,7 @@ Number integer_constant_expression(TokenStream *ts, Scope *scope) {
   return expr->num;
 }
 
-static Vector *declaration(TokenStream *ts, Scope *scope) {
+static Vector *declaration(TokenIterator *ts, Scope *scope) {
   Vector *def_list = new_vector();
 
   StorageClassSpecifier scs = EMPTY_STORAGE_CLASS_SPECIFIER;
@@ -2588,7 +2592,7 @@ static Vector *declaration(TokenStream *ts, Scope *scope) {
   return def_list;
 }
 
-static void declaration_specifiers(TokenStream *ts, Scope *scope, Type **type,
+static void declaration_specifiers(TokenIterator *ts, Scope *scope, Type **type,
                                    StorageClassSpecifier *scs,
                                    FunctionSpecifier *fs) {
   TypeSpecifier tspec = EMPTY_TYPE_SPECIFIER;
@@ -2614,7 +2618,7 @@ static void declaration_specifiers(TokenStream *ts, Scope *scope, Type **type,
   }
 }
 
-static Type *struct_or_union_specifier(Scope *scope, TokenStream *ts,
+static Type *struct_or_union_specifier(Scope *scope, TokenIterator *ts,
                                        Token *token) {
   assert(token->ty == TK_STRUCT || token->ty == TK_UNION);
   Token *tag = ts_consume(ts, TK_IDENT);
@@ -2664,7 +2668,7 @@ static Type *struct_or_union_specifier(Scope *scope, TokenStream *ts,
   return type;
 }
 
-static void struct_declaration(Scope *scope, TokenStream *ts, Type *type) {
+static void struct_declaration(Scope *scope, TokenIterator *ts, Type *type) {
   assert(type->ty == TY_STRUCT || type->ty == TY_UNION);
 
   Type *base_type = specifier_qualifier_list(scope, ts);
@@ -2687,7 +2691,7 @@ static void struct_declaration(Scope *scope, TokenStream *ts, Type *type) {
   ts_expect(ts, ';');
 }
 
-static void struct_declarator(Scope *scope, TokenStream *ts, Type *base_type,
+static void struct_declarator(Scope *scope, TokenIterator *ts, Type *base_type,
                               Token **name, Type **type, const Range **range) {
   if (ts_peek(ts)->ty != ':') {
     declarator(scope, ts, base_type, name, type, range);
@@ -2721,7 +2725,7 @@ static void struct_declarator(Scope *scope, TokenStream *ts, Type *base_type,
   }
 }
 
-static Type *specifier_qualifier_list(Scope *scope, TokenStream *ts) {
+static Type *specifier_qualifier_list(Scope *scope, TokenIterator *ts) {
   TypeSpecifier tspec = EMPTY_TYPE_SPECIFIER;
   TypeQualifier tqual = EMPTY_TYPE_QUALIFIER;
   while (true) {
@@ -2740,7 +2744,7 @@ static Type *specifier_qualifier_list(Scope *scope, TokenStream *ts) {
   return type;
 }
 
-static Type *enum_specifier(Scope *scope, TokenStream *ts, Token *token) {
+static Type *enum_specifier(Scope *scope, TokenIterator *ts, Token *token) {
   Token *tag_ident = ts_consume(ts, TK_IDENT);
   if (tag_ident == NULL && ts_peek(ts)->ty != '{') {
     range_error(token->range, "列挙型のタグまたは `{` がありません");
@@ -2772,7 +2776,7 @@ static Type *enum_specifier(Scope *scope, TokenStream *ts, Token *token) {
   return new_type_enum(tag, EMPTY_TYPE_QUALIFIER);
 }
 
-static void enumerator(Scope *scope, TokenStream *ts, Type *type, int *val) {
+static void enumerator(Scope *scope, TokenIterator *ts, Type *type, int *val) {
   Token *ident = ts_expect(ts, TK_IDENT);
   if (ts_consume(ts, '=')) {
     Number num = integer_constant_expression(ts, scope);
@@ -2788,7 +2792,7 @@ static void enumerator(Scope *scope, TokenStream *ts, Type *type, int *val) {
   (*val)++;
 }
 
-static void declarator_common(Scope *scope, TokenStream *ts,
+static void declarator_common(Scope *scope, TokenIterator *ts,
                               declarator_type_t dec_type, Type *base_type,
                               Token **name, Type **type, const Range **range) {
   const Range *start = ts_peek(ts)->range;
@@ -2802,7 +2806,7 @@ static void declarator_common(Scope *scope, TokenStream *ts,
   *range = range_join(start, end);
 }
 
-static void direct_declarator_common(Scope *scope, TokenStream *ts,
+static void direct_declarator_common(Scope *scope, TokenIterator *ts,
                                      declarator_type_t dec_type,
                                      Type *base_type, Token **name, Type **type,
                                      const Range **range) {
@@ -2920,13 +2924,13 @@ static void direct_declarator_common(Scope *scope, TokenStream *ts,
   *placeholder = *base_type;
 }
 
-static void declarator(Scope *scope, TokenStream *ts, Type *base_type,
+static void declarator(Scope *scope, TokenIterator *ts, Type *base_type,
                        Token **name, Type **type, const Range **range) {
   declarator_common(scope, ts, CONCRETE_DECLARATOR, base_type, name, type,
                     range);
 }
 
-static Param *parameter_declaration(Scope *scope, TokenStream *ts) {
+static Param *parameter_declaration(Scope *scope, TokenIterator *ts) {
   StorageClassSpecifier scs = EMPTY_STORAGE_CLASS_SPECIFIER;
   Type *base_type = NULL;
   FunctionSpecifier fs = EMPTY_FUNCTION_SPECIFIER;
@@ -2936,7 +2940,7 @@ static Param *parameter_declaration(Scope *scope, TokenStream *ts) {
   return parameter_declarator(scope, ts, base_type);
 }
 
-static Param *parameter_declarator(Scope *scope, TokenStream *ts,
+static Param *parameter_declarator(Scope *scope, TokenIterator *ts,
                                    Type *base_type) {
   Param *param = NEW(Param);
   declarator_common(scope, ts, ANY_DECLARATOR, base_type, &param->name,
@@ -2944,7 +2948,7 @@ static Param *parameter_declarator(Scope *scope, TokenStream *ts,
   return param;
 }
 
-static Type *type_name(Scope *scope, TokenStream *ts) {
+static Type *type_name(Scope *scope, TokenIterator *ts) {
   Type *base_type = specifier_qualifier_list(scope, ts);
 
   Type *type;
@@ -2953,15 +2957,16 @@ static Type *type_name(Scope *scope, TokenStream *ts) {
   return type;
 }
 
-static void abstract_declarator(Scope *scope, TokenStream *ts, Type *base_type,
-                                Type **type, const Range **range) {
+static void abstract_declarator(Scope *scope, TokenIterator *ts,
+                                Type *base_type, Type **type,
+                                const Range **range) {
   Token *name;
   declarator_common(scope, ts, ABSTRACT_DECLARATOR, base_type, &name, type,
                     range);
   assert(name == NULL);
 }
 
-static Designator *designator(TokenStream *ts, Scope *scope) {
+static Designator *designator(TokenIterator *ts, Scope *scope) {
   Token *token;
   if ((token = ts_consume(ts, '[')) != NULL) {
     Number first = integer_constant_expression(ts, scope);
@@ -2994,7 +2999,7 @@ static Designator *designator(TokenStream *ts, Scope *scope) {
   assert(false);
 }
 
-static Vector *designation(TokenStream *ts, Scope *scope) {
+static Vector *designation(TokenIterator *ts, Scope *scope) {
   Vector *list = new_vector();
   while (ts_peek(ts)->ty == '[' || ts_peek(ts)->ty == '.') {
     vec_push(list, designator(ts, scope));
@@ -3003,7 +3008,7 @@ static Vector *designation(TokenStream *ts, Scope *scope) {
   return list;
 }
 
-static Vector *initializer_list(TokenStream *ts, Scope *scope) {
+static Vector *initializer_list(TokenIterator *ts, Scope *scope) {
   Vector *list = new_vector();
   while (ts_peek(ts)->ty != '}') {
     InitElem *elem = NEW(InitElem);
@@ -3021,7 +3026,7 @@ static Vector *initializer_list(TokenStream *ts, Scope *scope) {
   return list;
 }
 
-static ParseInit *parse_initializer(TokenStream *ts, Scope *scope) {
+static ParseInit *parse_initializer(TokenIterator *ts, Scope *scope) {
   Token *token;
   if ((token = ts_consume(ts, '{')) != NULL) {
     Vector *list = initializer_list(ts, scope);
@@ -3340,7 +3345,7 @@ static void assign_initializer_list(Scope *scope, Vector *list, bool is_root,
   assign_initializer(scope, elem->pinit, type, init);
 }
 
-static void initializer(TokenStream *ts, Scope *scope, Type *type,
+static void initializer(TokenIterator *ts, Scope *scope, Type *type,
                         Initializer **init, const Range **range) {
   ParseInit *pinit = parse_initializer(ts, scope);
   if (range != NULL) {
@@ -3349,7 +3354,7 @@ static void initializer(TokenStream *ts, Scope *scope, Type *type,
   assign_initializer(scope, pinit, type, init);
 }
 
-static Stmt *statement(TokenStream *ts, Scope *scope) {
+static Stmt *statement(TokenIterator *ts, Scope *scope) {
   Token *start = ts_peek(ts);
   switch (start->ty) {
   case TK_IF: {
@@ -3530,7 +3535,7 @@ static Stmt *statement(TokenStream *ts, Scope *scope) {
   }
 }
 
-static Stmt *compound_statement(TokenStream *ts, Scope *scope) {
+static Stmt *compound_statement(TokenIterator *ts, Scope *scope) {
   Token *start = ts_expect(ts, '{');
 
   const Range *range = start->range;
@@ -3582,7 +3587,7 @@ static Stmt *compound_statement(TokenStream *ts, Scope *scope) {
   return new_stmt_compound(stmts, range);
 }
 
-static Function *function_definition(TokenStream *ts, Scope *global_scope,
+static Function *function_definition(TokenIterator *ts, Scope *global_scope,
                                      Type *type, const char *name,
                                      StorageClassSpecifier scs,
                                      FunctionSpecifier fs, const Range *start) {
@@ -3624,7 +3629,7 @@ static GlobalVar *new_global_variable(Type *type, const char *name,
 }
 
 static TranslationUnit *translation_unit(const Reader *reader,
-                                         TokenStream *ts) {
+                                         TokenIterator *ts) {
   GlobalCtxt *gcx = new_global_ctxt();
   Scope *scope = new_global_scope(gcx, reader);
 
