@@ -177,12 +177,13 @@ Reader *new_reader(void) {
 
 static bool next(void *arg, Char *output) {
   Reader *reader = arg;
+  int offset = reader->offset;
   char ch = reader_pop(reader);
 
   *output = (Char){
       .val = ch,
-      .start = reader->offset,
-      .end = reader->offset + 1,
+      .start = offset,
+      .end = offset + 1,
       .reader = reader,
   };
   return true;

@@ -645,7 +645,7 @@ static bool pp_directive(PpTokenizer *tokenizer) {
       range_error(num->range,
                   "#line directive requires a positive integer argument");
     }
-    int line = val - 1;
+    int line = val;
     const char *filename = NULL;
     if (vec_len(tokens) > 1) {
       Token *str = vec_get(tokens, 1);
