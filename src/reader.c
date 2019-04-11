@@ -6,16 +6,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define DISPATCH_BASE(reader, func, ...)                                       \
-  ((reader)->type == READER_BASE)                                              \
-      ? func##_base(&(reader)->base, ##__VA_ARGS__)                            \
-      : func((reader)->adapter.inner, ##__VA_ARGS__)
-
-#define DISPATCH(reader, func, ...)                                            \
-  ((reader)->type == READER_BASE)                                              \
-      ? func##_base(&(reader)->base, ##__VA_ARGS__)                            \
-      : func##_adapter(&(reader)->adapter, ##__VA_ARGS__)
-
 typedef struct File {
   const char *source;
   const char *name;
@@ -34,30 +24,12 @@ typedef struct FileOffset {
   File *file;
 } FileOffset;
 
-typedef struct Base {
+typedef struct Reader {
   int offset;
   bool is_sol;
   Vector *file_stack;
   Vector *file_offset;
-} Base;
-
-typedef struct Adapter {
-  int offset;
-  bool is_sol;
-  Reader *inner;
-  reader_pop_fn_t *pop;
-  void *arg;
-  IntVector *chars;
-  IntVector *offsets;
-} Adapter;
-
-struct Reader {
-  enum { READER_BASE, READER_ADAPTER } type;
-  union {
-    Base base;
-    Adapter adapter;
-  };
-};
+} Reader;
 
 typedef struct Range {
   const Reader *reader;
@@ -72,19 +44,12 @@ typedef enum {
   MESSAGE_NOTE,
 } message_t;
 
-static const Base *reader_from_range(const Range *range);
-static FileOffset *switch_file(Base *reader, File *file);
-static char reader_peek_ahead_adapter(Adapter *reader, int n);
-static char reader_peek_ahead_base(Base *reader, int n);
+static char reader_pop(Reader *reader);
+static FileOffset *switch_file(Reader *reader, File *file);
 static char reader_peek_ahead(Reader *reader, int n);
-static void reader_succ_base(Base *reader);
-static void reader_succ_adapter(Adapter *reader);
-static File *peek_file(const Base *reader);
-static File *peek_file_n(const Base *reader, int n);
-static FileOffset *get_file_offset(const Base *reader, int offset);
-static void reader_get_position_base(const Base *reader, int offset,
-                                     const char **filename, int *line,
-                                     int *column);
+static File *peek_file(const Reader *reader);
+static File *peek_file_n(const Reader *reader, int n);
+static FileOffset *get_file_offset(const Reader *reader, int offset);
 static __attribute__((format(printf, 5, 6))) void
 print_message(message_t msg, const Range *range, const char *dbg_file,
               int dbg_line, const char *fmt, ...);
@@ -107,15 +72,6 @@ const Range *range_from_reader(const Reader *reader, int start, int end) {
       .len = (end - start),
   };
   return range;
-}
-
-static const Base *reader_from_range(const Range *range) {
-  const Reader *reader = range->reader;
-  while (reader->type == READER_ADAPTER) {
-    reader = reader->adapter.inner;
-  }
-  assert(reader->type == READER_BASE);
-  return &reader->base;
 }
 
 const Range *range_builtin(const Reader *reader) {
@@ -148,8 +104,8 @@ const Range *range_join(const Range *a, const Range *b) {
   assert(b->start >= 0);
   assert(a->reader == b->reader);
 
-  const Base *ar = reader_from_range(a);
-  const Base *br = reader_from_range(b);
+  const Reader *ar = a->reader;
+  const Reader *br = b->reader;
 
   while (true) {
     File *af = get_file_offset(ar, a->start)->file;
@@ -203,8 +159,7 @@ void range_get_end(const Range *range, const char **filename, int *line,
 
 Reader *new_reader(void) {
   Reader *reader = NEW(Reader);
-  reader->type = READER_BASE;
-  reader->base = (Base){
+  *reader = (Reader){
       .offset = 0,
       .is_sol = true,
       .file_stack = new_vector(),
@@ -213,42 +168,43 @@ Reader *new_reader(void) {
 
   File *file = new_builtin_file();
   file->stack_idx = INT_MAX;
-  (void)switch_file(&reader->base, file);
+  (void)switch_file(reader, file);
 
-  reader->base.offset = 1;
+  reader->offset = 1;
 
   return reader;
 }
 
-Reader *new_filtered_reader(Reader *base, reader_pop_fn_t *pop, void *arg) {
-  Reader *reader = NEW(Reader);
-  reader->type = READER_ADAPTER;
-  reader->adapter = (Adapter){
-      .offset = reader_get_offset(base),
-      .is_sol = true,
-      .inner = base,
-      .pop = pop,
-      .arg = arg,
-      .chars = new_int_vector(),
-      .offsets = new_int_vector(),
+static bool next(void *arg, Char *output) {
+  Reader *reader = arg;
+  char ch = reader_pop(reader);
+
+  *output = (Char){
+      .val = ch,
+      .start = reader->offset,
+      .end = reader->offset + 1,
+      .reader = reader,
   };
-  return reader;
+  return true;
 }
 
-static void reader_add_file_base(Base *reader, FILE *fp, const char *filename) {
+CharIterator *char_iterator_from_reader(Reader *reader) {
+  return new_char_iterator(next, reader);
+}
+
+void reader_add_file(Reader *reader, FILE *fp, const char *filename) {
   File *file = new_file(fp, filename);
   file->stack_idx = vec_len(reader->file_stack);
   vec_push(reader->file_stack, file);
   (void)switch_file(reader, file);
 }
-void reader_add_file(Reader *reader, FILE *fp, const char *filename) {
-  DISPATCH_BASE(reader, reader_add_file, fp, filename);
-}
 
-static void reader_set_position_base(Base *reader, const int *line,
-                                     const char *filename) {
+int reader_get_offset(const Reader *reader) { return reader->offset; }
+
+void reader_set_position(Reader *reader, const int *line,
+                         const char *filename) {
   int current_line;
-  reader_get_position_base(reader, reader->offset, NULL, &current_line, NULL);
+  reader_get_position(reader, reader->offset, NULL, &current_line, NULL);
 
   File *file = peek_file(reader);
   FileOffset *fo = switch_file(reader, file);
@@ -257,12 +213,8 @@ static void reader_set_position_base(Base *reader, const int *line,
   }
   fo->alt_filename = filename;
 }
-void reader_set_position(Reader *reader, const int *line,
-                         const char *filename) {
-  DISPATCH_BASE(reader, reader_set_position, line, filename);
-}
 
-static FileOffset *switch_file(Base *reader, File *file) {
+static FileOffset *switch_file(Reader *reader, File *file) {
   FileOffset *fo = NEW(FileOffset);
   fo->index = vec_len(reader->file_offset);
   fo->global_offset = reader->offset;
@@ -273,8 +225,8 @@ static FileOffset *switch_file(Base *reader, File *file) {
   return fo;
 }
 
-static File *peek_file(const Base *reader) { return peek_file_n(reader, 0); }
-static File *peek_file_n(const Base *reader, int n) {
+static File *peek_file(const Reader *reader) { return peek_file_n(reader, 0); }
+static File *peek_file_n(const Reader *reader, int n) {
   if (n >= vec_len(reader->file_stack)) {
     return NULL;
   }
@@ -283,7 +235,7 @@ static File *peek_file_n(const Base *reader, int n) {
 
 char reader_peek(Reader *reader) { return reader_peek_ahead(reader, 0); }
 
-static char reader_peek_ahead_base(Base *reader, int n) {
+static char reader_peek_ahead(Reader *reader, int n) {
   int file_idx = 0;
   int count = n;
   while (true) {
@@ -299,22 +251,8 @@ static char reader_peek_ahead_base(Base *reader, int n) {
     return file->source[file->offset + count];
   }
 }
-static char reader_peek_ahead_adapter(Adapter *reader, int n) {
-  while (int_vec_len(reader->chars) <= n) {
-    char c = reader->pop(reader->arg, reader->inner);
-    int_vec_push(reader->chars, c);
-    int_vec_push(reader->offsets, reader_get_offset(reader->inner));
-    if (c == '\0') {
-      return c;
-    }
-  }
-  return int_vec_get(reader->chars, n);
-}
-static char reader_peek_ahead(Reader *reader, int n) {
-  return DISPATCH(reader, reader_peek_ahead, n);
-}
 
-static void reader_succ_base(Base *reader) {
+static void reader_succ(Reader *reader) {
   File *file = peek_file(reader);
   assert(file != NULL);
 
@@ -326,21 +264,8 @@ static void reader_succ_base(Base *reader) {
     (void)switch_file(reader, peek_file(reader));
   }
 }
-static void reader_succ_adapter(Adapter *reader) {
-  int last, offset;
-  if (int_vec_len(reader->chars) > 0) {
-    last = int_vec_remove(reader->chars, 0);
-    offset = int_vec_remove(reader->offsets, 0);
-  } else {
-    last = reader->pop(reader->arg, reader->inner);
-    offset = reader_get_offset(reader->inner);
-  }
-  reader->is_sol = (last == '\n');
-  reader->offset = offset;
-}
-void reader_succ(Reader *reader) { DISPATCH(reader, reader_succ); }
 
-char reader_pop(Reader *reader) {
+static char reader_pop(Reader *reader) {
   char ch = reader_peek(reader);
   if (ch != '\0') {
     reader_succ(reader);
@@ -348,48 +273,7 @@ char reader_pop(Reader *reader) {
   return ch;
 }
 
-bool reader_consume(Reader *reader, char ch) {
-  if (reader_peek(reader) == ch) {
-    reader_succ(reader);
-    return true;
-  }
-  return false;
-}
-
-bool reader_consume_str(Reader *reader, const char *str) {
-  int len = strlen(str);
-  for (int i = 0; i < len; i++) {
-    if (reader_peek_ahead(reader, i) != str[i]) {
-      return false;
-    }
-  }
-  for (int i = 0; i < len; i++) {
-    reader_succ(reader);
-  }
-  return true;
-}
-void reader_expect(Reader *reader, char ch) {
-  if (!reader_consume(reader, ch)) {
-    reader_error_here(reader, "'%c' がありません", ch);
-  }
-}
-
-static bool reader_is_sol_base(const Base *reader) { return reader->is_sol; }
-static bool reader_is_sol_adapter(const Adapter *reader) {
-  return reader->is_sol;
-}
-bool reader_is_sol(const Reader *reader) {
-  return DISPATCH(reader, reader_is_sol);
-}
-static int reader_get_offset_base(const Base *reader) { return reader->offset; }
-static int reader_get_offset_adapter(const Adapter *reader) {
-  return reader->offset;
-}
-int reader_get_offset(const Reader *reader) {
-  return DISPATCH(reader, reader_get_offset);
-}
-
-static FileOffset *get_file_offset(const Base *reader, int offset) {
+static FileOffset *get_file_offset(const Reader *reader, int offset) {
   assert(vec_len(reader->file_offset) > 0);
   for (int i = vec_len(reader->file_offset) - 1; i >= 0; i--) {
     FileOffset *fo = vec_get(reader->file_offset, i);
@@ -404,7 +288,7 @@ static FileOffset *get_file_offset(const Base *reader, int offset) {
   assert(false);
 }
 
-static void reader_get_position_inner(const Base *reader, int offset,
+static void reader_get_position_inner(const Reader *reader, int offset,
                                       bool get_real, const char **filename,
                                       int *line, int *column) {
   FileOffset *fo = get_file_offset(reader, offset);
@@ -435,27 +319,16 @@ static void reader_get_position_inner(const Base *reader, int offset,
   assert(false);
 }
 
-static void reader_get_position_base(const Base *reader, int offset,
-                                     const char **filename, int *line,
-                                     int *column) {
-  reader_get_position_inner(reader, offset, false, filename, line, column);
-}
 void reader_get_position(const Reader *reader, int offset,
                          const char **filename, int *line, int *column) {
-  DISPATCH_BASE(reader, reader_get_position, offset, filename, line, column);
-}
-static void reader_get_real_position_base(const Base *reader, int offset,
-                                          const char **filename, int *line,
-                                          int *column) {
-  reader_get_position_inner(reader, offset, true, filename, line, column);
+  reader_get_position_inner(reader, offset, false, filename, line, column);
 }
 void reader_get_real_position(const Reader *reader, int offset,
                               const char **filename, int *line, int *column) {
-  DISPATCH_BASE(reader, reader_get_real_position, offset, filename, line,
-                column);
+  reader_get_position_inner(reader, offset, true, filename, line, column);
 }
 char *reader_get_source(const Range *range) {
-  const Base *reader = reader_from_range(range);
+  const Reader *reader = range->reader;
   int offset = range->start;
   FileOffset *fo = get_file_offset(reader, offset);
   const char *source =
@@ -548,7 +421,7 @@ static void print_message_raw(message_t msg, const Range *range,
 }
 
 static void print_source(const Range *range) {
-  const Base *reader = reader_from_range(range);
+  const Reader *reader = range->reader;
   int start = range->start;
   int len = range->len;
   while (len > 0) {
@@ -568,12 +441,12 @@ static void print_source(const Range *range) {
 
     const char *start_filename;
     int start_line, start_column;
-    reader_get_real_position_base(reader, start, &start_filename, &start_line,
-                                  &start_column);
+    reader_get_real_position(reader, start, &start_filename, &start_line,
+                             &start_column);
     const char *end_filename;
     int end_line, end_column;
-    reader_get_real_position_base(reader, start + file_len - 1, &end_filename,
-                                  &end_line, &end_column);
+    reader_get_real_position(reader, start + file_len - 1, &end_filename,
+                             &end_line, &end_column);
     assert(strcmp(start_filename, end_filename) == 0);
 
     for (int line = start_line; line <= end_line; line++) {

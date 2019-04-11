@@ -19,6 +19,7 @@ typedef struct Set Set;
 typedef struct Map Map;
 typedef struct String String;
 typedef struct IntVector IntVector;
+typedef struct CharVector CharVector;
 
 // トークンの型を表す値
 enum {
@@ -597,11 +598,18 @@ typedef struct TranslationUnit {
 } TranslationUnit;
 
 typedef struct Reader Reader;
+typedef struct Char {
+  char val;
+  int start;
+  int end;
+  const Reader *reader;
+} Char;
+typedef struct CharIterator CharIterator;
 typedef struct TokenIterator TokenIterator;
 typedef struct PpTokenizer PpTokenizer;
 typedef struct Scope Scope;
 
-typedef char reader_pop_fn_t(void *, Reader *);
+typedef bool cs_next_fn_t(void *, Char *);
 typedef bool ts_next_fn_t(void *, Vector *);
 
 typedef enum {
@@ -643,6 +651,13 @@ int int_vec_len(const IntVector *vec);
 int int_vec_get(const IntVector *vec, int n);
 void int_vec_push(IntVector *vec, int elem);
 int int_vec_remove(IntVector *vec, int n);
+
+// char_vector.c
+CharVector *new_char_vector(void);
+int char_vec_len(const CharVector *vec);
+Char char_vec_get(const CharVector *vec, int n);
+void char_vec_push(CharVector *vec, Char elem);
+Char char_vec_remove(CharVector *vec, int n);
 
 // string.c
 String *new_string(void);
@@ -691,17 +706,10 @@ void range_get_start(const Range *range, const char **filename, int *line,
 void range_get_end(const Range *range, const char **filename, int *line,
                    int *column);
 Reader *new_reader(void);
-Reader *new_filtered_reader(Reader *base, reader_pop_fn_t *pop, void *arg);
+CharIterator *char_iterator_from_reader(Reader *reader);
 void reader_add_file(Reader *reader, FILE *fp, const char *filename);
-void reader_set_position(Reader *reader, const int *line, const char *filename);
-char reader_peek(Reader *reader);
-void reader_succ(Reader *reader);
-char reader_pop(Reader *Reader);
-bool reader_consume(Reader *reader, char ch);
-bool reader_consume_str(Reader *reader, const char *str);
-void reader_expect(Reader *reader, char ch);
-bool reader_is_sol(const Reader *reader);
 int reader_get_offset(const Reader *reader);
+void reader_set_position(Reader *reader, const int *line, const char *filename);
 void reader_get_position(const Reader *reader, int offset,
                          const char **filename, int *line, int *column);
 char *reader_get_source(const Range *range);
@@ -751,6 +759,19 @@ void range_warn_raw_v(const Range *range, const char *dbg_file, int dbg_line,
     }                                                                          \
   } while (0)
 
+// char_iter.c
+CharIterator *new_char_iterator(cs_next_fn_t *next, void *arg);
+bool cs_pop(CharIterator *cs, Char *output);
+void cs_succ(CharIterator *cs);
+Char cs_peek_ahead(CharIterator *cs, int n);
+Char cs_peek(CharIterator *cs);
+bool cs_consume(CharIterator *cs, char ch, const Reader **reader, int *start,
+                int *end);
+bool cs_consume_str(CharIterator *cs, const char *str, const Reader **reader,
+                    int *start, int *end);
+Char cs_expect(CharIterator *cs, char ch);
+bool cs_is_sol(CharIterator *cs);
+
 // number.c
 Number new_number(type_t ty, unsigned long long val);
 Number new_number_float(type_t ty, long double val);
@@ -779,21 +800,22 @@ const char *token_to_str(const Token *token);
 TokenIterator *new_token_iterator(ts_next_fn_t *next, void *arg);
 TokenIterator *token_iterator_from_vec(Vector *tokens);
 void consume_all_token_iterator(TokenIterator *ts);
+Token *ts_pop(TokenIterator *ts);
 void ts_succ(TokenIterator *ts);
 Token *ts_peek(TokenIterator *ts);
 Token *ts_peek_ahead(TokenIterator *ts, int n);
-Token *ts_pop(TokenIterator *ts);
 Token *ts_consume(TokenIterator *ts, int ty);
 Token *ts_consume2(TokenIterator *ts, int ty1, int ty2);
 Token *ts_expect(TokenIterator *ts, int ty);
 
 // pp_tokenize.c
-TokenIterator *new_pp_tokenizer(Reader *reader);
+TokenIterator *new_pp_tokenizer(CharIterator *cs, Reader *reader);
 
 // filter.c
-Reader *phase2_filter(Reader *reader);
+CharIterator *phase2_filter(CharIterator *cs);
 TokenIterator *phase6_filter(TokenIterator *ts);
 TokenIterator *phase7_filter(TokenIterator *ts);
+
 // type.c
 extern const TypeQualifier EMPTY_TYPE_QUALIFIER;
 extern const TypeQualifier CONST_TYPE_QUALIFIER;

@@ -9,6 +9,7 @@
 
 struct PpTokenizer {
   Reader *reader;
+  CharIterator *cs;
   Map *define_map;
   Vector *pp_cond_stack;
 };
@@ -54,14 +55,14 @@ static void do_include(Reader *reader, int offset, const char *path,
                        const Range *range, bool include_sourcedir);
 static bool try_include(Reader *reader, const char *base_path,
                         const char *rel_path);
-static Token *read_normal_token(Reader *reader);
-static Token *punctuator(Reader *reader);
-static Token *identifier_or_keyword(Reader *reader);
-static Token *constant(Reader *reader);
-static Token *number_constant(Reader *reader);
-static Token *character_constant(Reader *reader);
-static Token *string_literal(Reader *reader);
-static char c_char(Reader *reader);
+static Token *read_normal_token(CharIterator *cs);
+static Token *punctuator(CharIterator *cs);
+static Token *identifier_or_keyword(CharIterator *cs);
+static Token *constant(CharIterator *cs);
+static Token *number_constant(CharIterator *cs);
+static Token *character_constant(CharIterator *cs);
+static Token *string_literal(CharIterator *cs);
+static Char c_char(CharIterator *cs);
 
 static void set_predefined_num_macro(const Reader *reader, Map *map, char *name,
                                      const char *num) {
@@ -118,8 +119,8 @@ static Vector *macro_time(PpTokenizer *tokenizer __attribute__((unused))) {
 
 static Vector *macro_file(PpTokenizer *tokenizer) {
   const char *filename;
-  int offset = reader_get_offset(tokenizer->reader);
-  reader_get_position(tokenizer->reader, offset, &filename, NULL, NULL);
+  Char c = cs_peek(tokenizer->cs);
+  reader_get_position(c.reader, c.start, &filename, NULL, NULL);
 
   Vector *rep = new_vector();
   vec_push(rep, new_token_str(filename, range_builtin(tokenizer->reader)));
@@ -128,8 +129,8 @@ static Vector *macro_file(PpTokenizer *tokenizer) {
 
 static Vector *macro_line(PpTokenizer *tokenizer) {
   int line;
-  int offset = reader_get_offset(tokenizer->reader);
-  reader_get_position(tokenizer->reader, offset, NULL, &line, NULL);
+  Char c = cs_peek(tokenizer->cs);
+  reader_get_position(c.reader, c.start, NULL, &line, NULL);
 
   Vector *rep = new_vector();
   vec_push(rep, new_token_pp_num(format("%d", line),
@@ -172,8 +173,9 @@ static bool next(void *arg, Vector *output) {
   }
 }
 
-TokenIterator *new_pp_tokenizer(Reader *reader) {
+TokenIterator *new_pp_tokenizer(CharIterator *cs, Reader *reader) {
   PpTokenizer *tokenizer = NEW(PpTokenizer);
+  tokenizer->cs = cs;
   tokenizer->reader = reader;
   tokenizer->define_map = new_map();
   tokenizer->pp_cond_stack = new_vector();
@@ -189,10 +191,6 @@ static bool read_token(PpTokenizer *tokenizer, Token **token) {
   return do_read_token(tokenizer, token, true, true);
 }
 
-const Reader *pp_tknzr_get_reader(const PpTokenizer *tokenizer) {
-  return tokenizer->reader;
-}
-
 static inline bool is_ident_head(int c) {
   return ('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z') || c == '_';
 }
@@ -200,42 +198,43 @@ static inline bool is_ident_tail(int c) {
   return is_ident_head(c) || ('0' <= c && c <= '9');
 }
 
-static bool skip_space(Reader *reader) {
+static bool skip_space(CharIterator *cs) {
   bool skipped = false;
   while (true) {
-    char ch = reader_peek(reader);
-    if (!isspace(ch) || ch == '\n') {
+    Char ch = cs_peek(cs);
+    if (!isspace(ch.val) || ch.val == '\n') {
       return skipped;
     }
     skipped = true;
-    reader_succ(reader);
+    cs_succ(cs);
   }
 }
 
-static bool skip_comment(Reader *reader) {
+static bool skip_comment(CharIterator *cs) {
   bool skipped = false;
 
   while (true) {
-    if (reader_consume_str(reader, "//")) {
+    if (cs_consume_str(cs, "//", NULL, NULL, NULL)) {
       while (true) {
-        char ch = reader_peek(reader);
-        if (ch == '\n' || ch == '\0') {
+        Char ch = cs_peek(cs);
+        if (ch.val == '\n' || ch.val == '\0') {
           break;
         }
-        reader_succ(reader);
+        cs_succ(cs);
       }
       skipped = true;
       continue;
     }
-    if (reader_consume_str(reader, "/*")) {
+    if (cs_consume_str(cs, "/*", NULL, NULL, NULL)) {
       while (true) {
-        if (reader_consume_str(reader, "*/")) {
+        if (cs_consume_str(cs, "*/", NULL, NULL, NULL)) {
           break;
         }
-        if (reader_peek(reader) == '\0') {
-          reader_error_here(reader, "コメントの終端文字列 `*/` がありません");
+        if (cs_peek(cs).val == '\0') {
+          reader_error_here(cs_peek(cs).reader,
+                            "コメントの終端文字列 `*/` がありません");
         }
-        reader_succ(reader);
+        cs_succ(cs);
       }
       skipped = true;
       continue;
@@ -246,14 +245,14 @@ static bool skip_comment(Reader *reader) {
   return skipped;
 }
 
-static bool skip_space_or_comment(Reader *reader) {
+static bool skip_space_or_comment(CharIterator *cs) {
   bool skipped = false;
   while (true) {
-    if (skip_space(reader)) {
+    if (skip_space(cs)) {
       skipped = true;
       continue;
     }
-    if (skip_comment(reader)) {
+    if (skip_comment(cs)) {
       skipped = true;
       continue;
     }
@@ -262,36 +261,48 @@ static bool skip_space_or_comment(Reader *reader) {
   return skipped;
 }
 
-static void skip_to_eol(Reader *reader) {
+static void skip_to_eol(CharIterator *cs) {
   while (true) {
-    char ch = reader_peek(reader);
-    if (ch == '\n' || ch == '\0') {
+    Char ch = cs_peek(cs);
+    if (ch.val == '\n' || ch.val == '\0') {
       break;
     }
-    reader_succ(reader);
+    cs_succ(cs);
   }
   return;
 }
 
-static String *read_identifier(Reader *reader) {
-  char ch = reader_peek(reader);
-  if (!is_ident_head(ch)) {
+static String *read_identifier(CharIterator *cs, const Reader **reader,
+                               int *start, int *end) {
+  Char ch = cs_peek(cs);
+  Char cstart = ch;
+  if (!is_ident_head(ch.val)) {
     return NULL;
   }
 
   String *str = new_string();
-  str_push(str, ch);
-  reader_succ(reader);
+  str_push(str, ch.val);
+  cs_succ(cs);
 
   while (true) {
-    ch = reader_peek(reader);
-    if (!is_ident_tail(ch)) {
+    ch = cs_peek(cs);
+    if (!is_ident_tail(ch.val)) {
       break;
     }
-    str_push(str, ch);
-    reader_succ(reader);
+    str_push(str, ch.val);
+    cs_succ(cs);
   }
   str_push(str, '\0');
+
+  if (reader != NULL) {
+    *reader = cstart.reader;
+  }
+  if (start != NULL) {
+    *start = cstart.start;
+  }
+  if (end != NULL) {
+    *end = ch.end;
+  }
 
   return str;
 }
@@ -316,18 +327,18 @@ static inline int oct2num(int c) {
 
 static bool do_read_token(PpTokenizer *tokenizer, Token **token, bool skip_eol,
                           bool check_pp_cond) {
-  char ch;
-  while ((ch = reader_peek(tokenizer->reader)) != '\0') {
-    bool is_sol = reader_is_sol(tokenizer->reader);
-    if (skip_space_or_comment(tokenizer->reader)) {
-      ch = reader_peek(tokenizer->reader);
-      if (ch == '\0') {
+  Char ch;
+  while ((ch = cs_peek(tokenizer->cs)).val != '\0') {
+    bool is_sol = cs_is_sol(tokenizer->cs);
+    if (skip_space_or_comment(tokenizer->cs)) {
+      ch = cs_peek(tokenizer->cs);
+      if (ch.val == '\0') {
         break;
       }
     }
-    if (ch == '\n') {
+    if (ch.val == '\n') {
       if (skip_eol) {
-        reader_succ(tokenizer->reader);
+        cs_succ(tokenizer->cs);
         continue;
       }
       *token = NULL;
@@ -338,10 +349,10 @@ static bool do_read_token(PpTokenizer *tokenizer, Token **token, bool skip_eol,
       continue;
     }
 
-    Token *read_token = read_normal_token(tokenizer->reader);
+    Token *read_token = read_normal_token(tokenizer->cs);
     if (read_token == NULL) {
       reader_error_here(tokenizer->reader, "トークナイズできません: `%c`",
-                        reader_peek(tokenizer->reader));
+                        cs_peek(tokenizer->cs).val);
     }
     if (!check_pp_cond || pp_cond_fullfilled(tokenizer->pp_cond_stack)) {
       *token = read_token;
@@ -352,9 +363,7 @@ static bool do_read_token(PpTokenizer *tokenizer, Token **token, bool skip_eol,
     return true;
   }
 
-  int start = reader_get_offset(tokenizer->reader);
-  int end = reader_get_offset(tokenizer->reader);
-  *token = new_token(TK_EOF, range_from_reader(tokenizer->reader, start, end));
+  *token = new_token(TK_EOF, range_from_reader(ch.reader, ch.start, ch.end));
   return true;
 }
 
@@ -388,12 +397,12 @@ static Vector *read_tokens_to_eol(PpTokenizer *tokenizer) {
   while (true) {
     Token *token = NULL;
     if (!do_read_token(tokenizer, &token, false, false)) {
-      char ch = reader_peek(tokenizer->reader);
-      if (ch == '\n' || ch == '\0') {
+      Char ch = cs_peek(tokenizer->cs);
+      if (ch.val == '\n' || ch.val == '\0') {
         break;
       }
       reader_error_here(tokenizer->reader, "トークナイズできません: `%c`",
-                        reader_peek(tokenizer->reader));
+                        ch.val);
     }
     vec_push(tokens, token);
   }
@@ -401,18 +410,19 @@ static Vector *read_tokens_to_eol(PpTokenizer *tokenizer) {
 }
 
 static bool pp_directive(PpTokenizer *tokenizer) {
-  int start = reader_get_offset(tokenizer->reader);
-  if (!reader_consume(tokenizer->reader, '#')) {
+  const Reader *reader;
+  int start;
+  if (!cs_consume(tokenizer->cs, '#', &reader, &start, NULL)) {
     return false;
   }
-  skip_space_or_comment(tokenizer->reader);
+  skip_space_or_comment(tokenizer->cs);
 
-  String *directive = read_identifier(tokenizer->reader);
+  String *directive = read_identifier(tokenizer->cs, NULL, NULL, NULL);
   if (directive == NULL) {
-    skip_to_eol(tokenizer->reader);
-    int end = reader_get_offset(tokenizer->reader);
-    reader_expect(tokenizer->reader, '\n');
-    range_warn(range_from_reader(tokenizer->reader, start, end),
+    skip_to_eol(tokenizer->cs);
+    Char end = cs_peek(tokenizer->cs);
+    (void)cs_expect(tokenizer->cs, '\n');
+    range_warn(range_from_reader(end.reader, start, end.start),
                "不明なディレクティブです");
   }
   const char *directive_raw = str_get_raw(directive);
@@ -422,9 +432,9 @@ static bool pp_directive(PpTokenizer *tokenizer) {
     if (pp_cond_fullfilled(tokenizer->pp_cond_stack)) {
       fullfilled = pp_read_if_cond(tokenizer);
     } else {
-      skip_to_eol(tokenizer->reader);
+      skip_to_eol(tokenizer->cs);
     }
-    reader_expect(tokenizer->reader, '\n');
+    (void)cs_expect(tokenizer->cs, '\n');
     pp_if(tokenizer->pp_cond_stack, fullfilled);
     return true;
   }
@@ -434,23 +444,23 @@ static bool pp_directive(PpTokenizer *tokenizer) {
     if (pp_outer_cond_fullfilled(tokenizer->pp_cond_stack)) {
       fullfilled = pp_read_if_cond(tokenizer);
     } else {
-      skip_to_eol(tokenizer->reader);
+      skip_to_eol(tokenizer->cs);
     }
-    int end = reader_get_offset(tokenizer->reader);
-    reader_expect(tokenizer->reader, '\n');
+    Char end = cs_peek(tokenizer->cs);
+    (void)cs_expect(tokenizer->cs, '\n');
     pp_elif(tokenizer->pp_cond_stack, fullfilled,
-            range_from_reader(tokenizer->reader, start, end));
+            range_from_reader(end.reader, start, end.start));
     return true;
   }
 
   if (strcmp(directive_raw, "ifdef") == 0) {
-    skip_space_or_comment(tokenizer->reader);
-    String *ident = read_identifier(tokenizer->reader);
+    skip_space_or_comment(tokenizer->cs);
+    String *ident = read_identifier(tokenizer->cs, NULL, NULL, NULL);
     if (ident == NULL) {
       reader_error_here(tokenizer->reader, "識別子がありません");
     }
-    skip_space_or_comment(tokenizer->reader);
-    reader_expect(tokenizer->reader, '\n');
+    skip_space_or_comment(tokenizer->cs);
+    (void)cs_expect(tokenizer->cs, '\n');
 
     bool defined = map_get(tokenizer->define_map, str_get_raw(ident)) != NULL;
     pp_if(tokenizer->pp_cond_stack, defined);
@@ -458,13 +468,13 @@ static bool pp_directive(PpTokenizer *tokenizer) {
   }
 
   if (strcmp(directive_raw, "ifndef") == 0) {
-    skip_space_or_comment(tokenizer->reader);
-    String *ident = read_identifier(tokenizer->reader);
+    skip_space_or_comment(tokenizer->cs);
+    String *ident = read_identifier(tokenizer->cs, NULL, NULL, NULL);
     if (ident == NULL) {
       reader_error_here(tokenizer->reader, "識別子がありません");
     }
-    skip_space_or_comment(tokenizer->reader);
-    reader_expect(tokenizer->reader, '\n');
+    skip_space_or_comment(tokenizer->cs);
+    cs_expect(tokenizer->cs, '\n');
 
     bool defined = map_get(tokenizer->define_map, str_get_raw(ident)) != NULL;
     pp_if(tokenizer->pp_cond_stack, !defined);
@@ -472,69 +482,69 @@ static bool pp_directive(PpTokenizer *tokenizer) {
   }
 
   if (strcmp(directive_raw, "else") == 0) {
-    int end = reader_get_offset(tokenizer->reader);
-    skip_space_or_comment(tokenizer->reader);
-    reader_expect(tokenizer->reader, '\n');
+    Char end = cs_peek(tokenizer->cs);
+    skip_space_or_comment(tokenizer->cs);
+    (void)cs_expect(tokenizer->cs, '\n');
 
     pp_else(tokenizer->pp_cond_stack,
-            range_from_reader(tokenizer->reader, start, end));
+            range_from_reader(end.reader, start, end.start));
     return true;
   }
 
   if (strcmp(directive_raw, "endif") == 0) {
-    int end = reader_get_offset(tokenizer->reader);
-    skip_space_or_comment(tokenizer->reader);
-    reader_expect(tokenizer->reader, '\n');
+    Char end = cs_peek(tokenizer->cs);
+    skip_space_or_comment(tokenizer->cs);
+    (void)cs_expect(tokenizer->cs, '\n');
 
     pp_endif(tokenizer->pp_cond_stack,
-             range_from_reader(tokenizer->reader, start, end));
+             range_from_reader(end.reader, start, end.start));
     return true;
   }
 
   if (!pp_cond_fullfilled(tokenizer->pp_cond_stack)) {
-    skip_to_eol(tokenizer->reader);
+    skip_to_eol(tokenizer->cs);
     return true;
   }
 
   if (strcmp(directive_raw, "include") == 0) {
-    skip_space_or_comment(tokenizer->reader);
+    skip_space_or_comment(tokenizer->cs);
 
-    if (reader_consume(tokenizer->reader, '<')) {
+    if (cs_consume(tokenizer->cs, '<', NULL, NULL, NULL)) {
       String *str = new_string();
-      while ((reader_peek(tokenizer->reader) != '>') &&
-             (reader_peek(tokenizer->reader) != '\0')) {
-        char ch = reader_pop(tokenizer->reader);
-        str_push(str, ch);
+      while ((cs_peek(tokenizer->cs).val != '>') &&
+             (cs_peek(tokenizer->cs).val != '\0')) {
+        Char ch;
+        cs_pop(tokenizer->cs, &ch);
+        str_push(str, ch.val);
       }
       str_push(str, '\0');
-      reader_expect(tokenizer->reader, '>');
-      int end = reader_get_offset(tokenizer->reader);
+      Char end = cs_expect(tokenizer->cs, '>');
 
-      skip_space_or_comment(tokenizer->reader);
-      reader_expect(tokenizer->reader, '\n');
+      skip_space_or_comment(tokenizer->cs);
+      (void)cs_expect(tokenizer->cs, '\n');
 
       do_include(tokenizer->reader, start, str_get_raw(str),
-                 range_from_reader(tokenizer->reader, start, end), false);
+                 range_from_reader(end.reader, start, end.end), false);
 
       return true;
     }
 
-    if (reader_consume(tokenizer->reader, '"')) {
+    if (cs_consume(tokenizer->cs, '"', NULL, NULL, NULL)) {
       String *str = new_string();
-      while ((reader_peek(tokenizer->reader) != '"') &&
-             (reader_peek(tokenizer->reader) != '\0')) {
-        char ch = reader_pop(tokenizer->reader);
-        str_push(str, ch);
+      while ((cs_peek(tokenizer->cs).val != '"') &&
+             (cs_peek(tokenizer->cs).val != '\0')) {
+        Char ch;
+        cs_pop(tokenizer->cs, &ch);
+        str_push(str, ch.val);
       }
       str_push(str, '\0');
-      reader_expect(tokenizer->reader, '"');
-      int end = reader_get_offset(tokenizer->reader);
+      Char end = cs_expect(tokenizer->cs, '"');
 
-      skip_space_or_comment(tokenizer->reader);
-      reader_expect(tokenizer->reader, '\n');
+      skip_space_or_comment(tokenizer->cs);
+      (void)cs_expect(tokenizer->cs, '\n');
 
       do_include(tokenizer->reader, start, str_get_raw(str),
-                 range_from_reader(tokenizer->reader, start, end), true);
+                 range_from_reader(end.reader, start, end.end), true);
       return true;
     }
 
@@ -543,38 +553,38 @@ static bool pp_directive(PpTokenizer *tokenizer) {
   }
 
   if (strcmp(directive_raw, "define") == 0) {
-    skip_space_or_comment(tokenizer->reader);
-    String *ident = read_identifier(tokenizer->reader);
+    skip_space_or_comment(tokenizer->cs);
+    String *ident = read_identifier(tokenizer->cs, NULL, NULL, NULL);
     if (ident == NULL) {
       reader_error_here(tokenizer->reader, "識別子がありません");
     }
     bool has_varargs = false;
     Vector *params = NULL;
-    if (reader_consume(tokenizer->reader, '(')) {
+    if (cs_consume(tokenizer->cs, '(', NULL, NULL, NULL)) {
       params = new_vector();
-      while (reader_peek(tokenizer->reader) != ')') {
-        skip_space_or_comment(tokenizer->reader);
-        if (reader_consume_str(tokenizer->reader, "...")) {
+      while (cs_peek(tokenizer->cs).val != ')') {
+        skip_space_or_comment(tokenizer->cs);
+        if (cs_consume_str(tokenizer->cs, "...", NULL, NULL, NULL)) {
           has_varargs = true;
           vec_push(params, "__VA_ARGS__");
           break;
         }
-        String *ident = read_identifier(tokenizer->reader);
+        String *ident = read_identifier(tokenizer->cs, NULL, NULL, NULL);
         if (ident == NULL) {
           reader_error_here(tokenizer->reader, "識別子がありません");
         }
         vec_push(params, str_get_raw(ident));
-        skip_space_or_comment(tokenizer->reader);
-        if (!reader_consume(tokenizer->reader, ',')) {
+        skip_space_or_comment(tokenizer->cs);
+        if (!cs_consume(tokenizer->cs, ',', NULL, NULL, NULL)) {
           break;
         }
       }
-      skip_space_or_comment(tokenizer->reader);
-      reader_expect(tokenizer->reader, ')');
+      skip_space_or_comment(tokenizer->cs);
+      (void)cs_expect(tokenizer->cs, ')');
     }
 
     Vector *tokens = read_tokens_to_eol(tokenizer);
-    reader_expect(tokenizer->reader, '\n');
+    (void)cs_expect(tokenizer->cs, '\n');
     Macro *macro;
     if (params != NULL) {
       macro = new_func_macro(params, has_varargs, tokens);
@@ -587,35 +597,34 @@ static bool pp_directive(PpTokenizer *tokenizer) {
   }
 
   if (strcmp(directive_raw, "undef") == 0) {
-    skip_space_or_comment(tokenizer->reader);
-    String *ident = read_identifier(tokenizer->reader);
+    skip_space_or_comment(tokenizer->cs);
+    String *ident = read_identifier(tokenizer->cs, NULL, NULL, NULL);
     if (ident == NULL) {
       reader_error_here(tokenizer->reader, "識別子がありません");
     }
-    skip_space_or_comment(tokenizer->reader);
-    reader_expect(tokenizer->reader, '\n');
+    skip_space_or_comment(tokenizer->cs);
+    (void)cs_expect(tokenizer->cs, '\n');
     map_remove(tokenizer->define_map, str_get_raw(ident));
     return true;
   }
 
   if (strcmp(directive_raw, "error") == 0) {
-    skip_space_or_comment(tokenizer->reader);
+    skip_space_or_comment(tokenizer->cs);
 
     String *str = new_string();
-    while ((reader_peek(tokenizer->reader) != '\n') &&
-           (reader_peek(tokenizer->reader) != '\0')) {
-      str_push(str, reader_peek(tokenizer->reader));
-      reader_succ(tokenizer->reader);
+    while ((cs_peek(tokenizer->cs).val != '\n') &&
+           (cs_peek(tokenizer->cs).val != '\0')) {
+      str_push(str, cs_peek(tokenizer->cs).val);
+      cs_succ(tokenizer->cs);
     }
     str_push(str, '\0');
-    int end = reader_get_offset(tokenizer->reader);
-    reader_expect(tokenizer->reader, '\n');
-    range_error(range_from_reader(tokenizer->reader, start, end), "#error %s",
+    Char end = cs_expect(tokenizer->cs, '\n');
+    range_error(range_from_reader(end.reader, start, end.start), "#error %s",
                 str_get_raw(str));
   }
 
   if (strcmp(directive_raw, "line") == 0) {
-    skip_space_or_comment(tokenizer->reader);
+    skip_space_or_comment(tokenizer->cs);
     Vector *tokens = read_tokens_to_eol(tokenizer);
     tokens = pp_expand_macros(tokenizer, tokens, NULL);
     if (vec_len(tokens) == 0) {
@@ -636,7 +645,7 @@ static bool pp_directive(PpTokenizer *tokenizer) {
       range_error(num->range,
                   "#line directive requires a positive integer argument");
     }
-    int line = val;
+    int line = val - 1;
     const char *filename = NULL;
     if (vec_len(tokens) > 1) {
       Token *str = vec_get(tokens, 1);
@@ -650,17 +659,16 @@ static bool pp_directive(PpTokenizer *tokenizer) {
       range_warn(token->range, "extra tokens at end of #line directive");
     }
 
-    reader_expect(tokenizer->reader, '\n');
+    (void)cs_expect(tokenizer->cs, '\n');
 
     reader_set_position(tokenizer->reader, &line, filename);
     return true;
   }
 
-  skip_to_eol(tokenizer->reader);
-  int end = reader_get_offset(tokenizer->reader);
-  reader_expect(tokenizer->reader, '\n');
-  range_warn(range_from_reader(tokenizer->reader, start, end),
-             "不明なディレクティブです");
+  skip_to_eol(tokenizer->cs);
+  Char end = cs_expect(tokenizer->cs, '\n');
+  range_warn(range_from_reader(end.reader, start, end.start),
+             "不明なディレクティブです: %s", directive_raw);
 
   return true;
 }
@@ -683,7 +691,7 @@ static bool pp_outer_cond_fullfilled(Vector *pp_cond_stack) {
 
 static bool pp_read_if_cond(PpTokenizer *tokenizer) {
   Vector *tokens = read_tokens_to_eol(tokenizer);
-  int here_offset = reader_get_offset(tokenizer->reader);
+  int here_offset = cs_peek(tokenizer->cs).start;
   const Range *here =
       range_from_reader(tokenizer->reader, here_offset, here_offset);
   Token *eof_token = new_token(TK_EOF, here);
@@ -1161,24 +1169,23 @@ static bool try_include(Reader *reader, const char *base_path,
   return false;
 }
 
-static Token *read_normal_token(Reader *reader) {
+static Token *read_normal_token(CharIterator *cs) {
   Token *token;
-  if ((token = punctuator(reader)) != NULL ||
-      (token = constant(reader)) != NULL ||
-      (token = string_literal(reader)) != NULL ||
-      (token = identifier_or_keyword(reader)) != NULL) {
+  if ((token = punctuator(cs)) != NULL || (token = constant(cs)) != NULL ||
+      (token = string_literal(cs)) != NULL ||
+      (token = identifier_or_keyword(cs)) != NULL) {
     return token;
   }
   return NULL;
 }
 
-static Token *punctuator(Reader *reader) {
-  int kind;
-  int start = reader_get_offset(reader);
+static Token *punctuator(CharIterator *cs) {
+  int kind, start, end;
+  const Reader *reader;
 
   for (int i = 0; LONG_PUNCT_TOKENS[i].str != NULL; i++) {
     const LongToken *tk = &LONG_PUNCT_TOKENS[i];
-    if (reader_consume_str(reader, tk->str)) {
+    if (cs_consume_str(cs, tk->str, &reader, &start, &end)) {
       kind = tk->kind;
       goto Hit;
     }
@@ -1186,7 +1193,7 @@ static Token *punctuator(Reader *reader) {
 
   for (int i = 0; SHORT_PUNCT_TOKENS[i] != '\0'; i++) {
     char tk = SHORT_PUNCT_TOKENS[i];
-    if (reader_consume(reader, tk)) {
+    if (cs_consume(cs, tk, &reader, &start, &end)) {
       kind = tk;
       goto Hit;
     }
@@ -1195,116 +1202,123 @@ static Token *punctuator(Reader *reader) {
   return NULL;
 
 Hit:;
-  int end = reader_get_offset(reader);
   return new_token(kind, range_from_reader(reader, start, end));
 }
 
-static Token *identifier_or_keyword(Reader *reader) {
-  int start = reader_get_offset(reader);
-  String *str = read_identifier(reader);
+static Token *identifier_or_keyword(CharIterator *cs) {
+  int start, end;
+  const Reader *reader;
+
+  String *str = read_identifier(cs, &reader, &start, &end);
   if (str == NULL) {
     return NULL;
   }
-  int end = reader_get_offset(reader);
   const Range *range = range_from_reader(reader, start, end);
   return new_token_pp_ident(str_get_raw(str), range);
 }
 
-static Token *constant(Reader *reader) {
+static Token *constant(CharIterator *cs) {
   Token *token;
-  if ((token = number_constant(reader)) != NULL ||
-      (token = character_constant(reader)) != NULL) {
+  if ((token = number_constant(cs)) != NULL ||
+      (token = character_constant(cs)) != NULL) {
     return token;
   }
   return NULL;
 }
 
-static Token *number_constant(Reader *reader) {
-  if (!isdigit(reader_peek(reader))) {
+static Token *number_constant(CharIterator *cs) {
+  if (!isdigit(cs_peek(cs).val)) {
     return NULL;
   }
 
-  int start = reader_get_offset(reader);
-
   String *str = new_string();
-  char ch = reader_pop(reader);
-  str_push(str, ch);
+  Char ch;
+  cs_pop(cs, &ch);
+  str_push(str, ch.val);
+  int start = ch.start;
 
-  char last = ch;
+  Char last = ch;
   while (true) {
-    ch = reader_peek(reader);
-    bool is_float = strchr("eEpP", last) && strchr("+-", ch);
-    if (!isdigit(ch) && !is_ident_head(ch) && ch != '.' && !is_float) {
+    ch = cs_peek(cs);
+    bool is_float = strchr("eEpP", last.val) && strchr("+-", ch.val);
+    if (!isdigit(ch.val) && !is_ident_head(ch.val) && ch.val != '.' &&
+        !is_float) {
       break;
     }
-    str_push(str, ch);
-    reader_succ(reader);
+    str_push(str, ch.val);
+    cs_succ(cs);
     last = ch;
   }
 
-  int end = reader_get_offset(reader);
+  int end = last.end;
 
   str_push(str, '\0');
   return new_token_pp_num(str_get_raw(str),
-                          range_from_reader(reader, start, end));
+                          range_from_reader(ch.reader, start, end));
 }
 
-static Token *character_constant(Reader *reader) {
-  int start = reader_get_offset(reader);
+static Token *character_constant(CharIterator *cs) {
+  int start;
   bool is_wide;
-  if (reader_consume_str(reader, "L\'")) {
+  if (cs_consume_str(cs, "L\'", NULL, &start, NULL)) {
     is_wide = true;
-  } else if (reader_consume(reader, '\'')) {
+  } else if (cs_consume(cs, '\'', NULL, &start, NULL)) {
     is_wide = false;
   } else {
     return NULL;
   }
-  char ch;
-  ch = reader_peek(reader);
-  if (ch == '\'' || ch == '\0') {
-    reader_error_offset(reader, start, "空の文字リテラルです");
+  Char ch;
+  ch = cs_peek(cs);
+  if (ch.val == '\'' || ch.val == '\0') {
+    reader_error_offset(ch.reader, start, "空の文字リテラルです");
   }
-  ch = c_char(reader);
-  reader_expect(reader, '\'');
+  ch = c_char(cs);
+  int end = cs_expect(cs, '\'').end;
 
-  int end = reader_get_offset(reader);
   if (is_wide) {
-    return new_token_char(new_number_wchar_t(ch),
-                          range_from_reader(reader, start, end));
+    return new_token_char(new_number_wchar_t(ch.val),
+                          range_from_reader(ch.reader, start, end));
   }
-  return new_token_char(new_number_int(ch),
-                        range_from_reader(reader, start, end));
+  return new_token_char(new_number_int(ch.val),
+                        range_from_reader(ch.reader, start, end));
 }
 
-static Token *string_literal(Reader *reader) {
-  int start = reader_get_offset(reader);
-  if (!reader_consume(reader, '"')) {
+static Token *string_literal(CharIterator *cs) {
+  const Reader *reader;
+  int start;
+  if (!cs_consume(cs, '"', &reader, &start, NULL)) {
     return NULL;
   }
 
   String *str = new_string();
   while (true) {
-    char ch = reader_peek(reader);
-    if (ch == '"' || ch == '\0') {
+    Char ch = cs_peek(cs);
+    if (ch.val == '"' || ch.val == '\0') {
       break;
     }
-    str_push(str, c_char(reader));
+    str_push(str, c_char(cs).val);
   }
   str_push(str, '\0');
 
-  reader_expect(reader, '"');
-  int end = reader_get_offset(reader);
+  int end = cs_expect(cs, '"').end;
   return new_token_str(str_get_raw(str), range_from_reader(reader, start, end));
 }
 
-static char c_char(Reader *reader) {
-  int start = reader_get_offset(reader);
+static Char c_char(CharIterator *cs) {
+  const Reader *reader;
+  int start;
 
-  if (reader_consume(reader, '\\')) {
+  if (cs_consume(cs, '\\', &reader, &start, NULL)) {
     const char ESCAPE_CHARS[] = {'\'', '"', '?', '\\', '\0'};
     for (int i = 0; ESCAPE_CHARS[i] != '\0'; i++) {
-      if (reader_consume(reader, ESCAPE_CHARS[i])) {
-        return ESCAPE_CHARS[i];
+      int end;
+      if (cs_consume(cs, ESCAPE_CHARS[i], NULL, NULL, &end)) {
+        return (Char){
+            .val = ESCAPE_CHARS[i],
+            .start = start,
+            .end = end,
+            .reader = reader,
+        };
       }
     }
 
@@ -1318,47 +1332,68 @@ static char c_char(Reader *reader) {
         {'r', '\r'}, {'t', '\t'}, {'v', '\v'}, {'\0', '\0'},
     };
     for (int i = 0; META_CHARS[i].raw != '\0'; i++) {
-      if (reader_consume(reader, META_CHARS[i].raw)) {
-        return META_CHARS[i].meta;
+      int end;
+      if (cs_consume(cs, META_CHARS[i].raw, NULL, NULL, &end)) {
+        return (Char){
+            .val = META_CHARS[i].meta,
+            .start = start,
+            .end = end,
+            .reader = reader,
+        };
       }
     }
 
-    if (reader_consume(reader, 'x')) {
-      if (!is_hex_digit(reader_peek(reader))) {
+    if (cs_consume(cs, 'x', NULL, NULL, NULL)) {
+      int end = cs_peek(cs).end;
+      if (!is_hex_digit(cs_peek(cs).val)) {
         reader_error_offset(reader, start, "空の16進文字リテラルです");
       }
       int val = 0;
       while (true) {
-        char ch = reader_peek(reader);
-        if (!is_hex_digit(ch)) {
+        Char ch = cs_peek(cs);
+        if (!is_hex_digit(ch.val)) {
           break;
         }
-        val = val * 0x10 + hex2num(ch);
-        reader_succ(reader);
+        val = val * 0x10 + hex2num(ch.val);
+        cs_succ(cs);
       }
-      return val;
+      return (Char){
+          .val = val,
+          .start = start,
+          .end = end,
+          .reader = reader,
+      };
     }
 
-    if (is_oct_digit(reader_peek(reader))) {
+    if (is_oct_digit(cs_peek(cs).val)) {
       int val = 0;
+      int end = cs_peek(cs).end;
       while (true) {
-        char ch = reader_peek(reader);
-        if (!is_oct_digit(ch)) {
+        Char ch = cs_peek(cs);
+        if (!is_oct_digit(ch.val)) {
           break;
         }
-        val = val * 010 + oct2num(ch);
-        reader_succ(reader);
+        end = ch.end;
+        val = val * 010 + oct2num(ch.val);
+        cs_succ(cs);
       }
-      return val;
+      return (Char){
+          .val = val,
+          .start = start,
+          .end = end,
+          .reader = reader,
+      };
     }
 
     reader_error_offset(reader, start, "不明なエスケープシーケンスです");
   }
 
-  if (reader_consume(reader, '\n')) {
+  if (cs_consume(cs, '\n', NULL, NULL, NULL)) {
     reader_error_here(reader,
                       "改行文字を文字リテラル中に含めることはできません");
   }
 
-  return reader_pop(reader);
+  Char ch;
+  cs_pop(cs, &ch);
+  return ch;
 }
