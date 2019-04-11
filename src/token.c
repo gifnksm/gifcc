@@ -134,6 +134,7 @@ const char *token_kind_to_str(int kind) {
   }
   }
 }
+
 const char *token_to_str(const Token *token) {
   if (token->ty <= 255) {
     return format("%c", token->ty);
@@ -153,4 +154,54 @@ const char *token_to_str(const Token *token) {
     }
   }
   range_error(token->range, "結合できないトークンです");
+}
+
+static void dump_token(FILE *fp, const Token *token) {
+  fprintf(fp, "%s: %-8s ", format_range_start(token->range),
+          token_kind_to_str(token->ty));
+  switch (token->ty) {
+  case TK_PP_NUM:
+    fprintf(fp, "%s", token->pp_num);
+    break;
+  case TK_PP_IDENT:
+    fprintf(fp, "%s", token->pp_ident);
+    break;
+  case TK_NUM:
+    fprintf(fp, "%s", format_number(token->num));
+    break;
+  case TK_IDENT:
+    fprintf(fp, "%s", token->ident);
+    break;
+  case TK_CHARCONST:
+    fprintf(fp, "%s", format_number(token->char_val));
+    break;
+  case TK_STR:
+    fprintf(fp, "%s", format_string_literal(token->str));
+    break;
+  default:
+    break;
+  }
+  fprintf(fp, "\n");
+}
+
+typedef struct {
+  FILE *fp;
+  TokenIterator *ts;
+} TokenFilterArg;
+
+static bool token_filter(void *arg, Vector *output) {
+  TokenFilterArg *tfa = arg;
+  Token *token = ts_pop(tfa->ts);
+  if (token == NULL) {
+    return false;
+  }
+  dump_token(tfa->fp, token);
+  vec_push(output, token);
+  return true;
+}
+
+TokenIterator *new_token_dumper(TokenIterator *ts, FILE *fp) {
+  TokenFilterArg *arg = NEW(TokenFilterArg);
+  *arg = (TokenFilterArg){.fp = fp, .ts = ts};
+  return new_token_iterator(token_filter, arg);
 }

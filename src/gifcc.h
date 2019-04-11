@@ -705,6 +705,8 @@ void range_get_start(const Range *range, const char **filename, int *line,
                      int *column);
 void range_get_end(const Range *range, const char **filename, int *line,
                    int *column);
+char *format_range_start(const Range *range);
+char *format_range_end(const Range *range);
 Reader *new_reader(void);
 CharIterator *char_iterator_from_reader(Reader *reader);
 void reader_add_file(Reader *reader, FILE *fp, const char *filename);
@@ -795,6 +797,7 @@ Token *new_token_char(Number val, const Range *range);
 Token *new_token_str(const char *str, const Range *range);
 const char *token_kind_to_str(int kind);
 const char *token_to_str(const Token *token);
+TokenIterator *new_token_dumper(TokenIterator *ts, FILE *fp);
 
 // token_iter.c
 TokenIterator *new_token_iterator(ts_next_fn_t *next, void *arg);

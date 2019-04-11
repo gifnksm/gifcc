@@ -157,6 +157,27 @@ void range_get_end(const Range *range, const char **filename, int *line,
                       column);
 }
 
+static const char *trim_filename(const char *filename) {
+  if (strncmp(filename, GIFCC_INCLUDE, sizeof(GIFCC_INCLUDE) - 1) == 0) {
+    return format("<gifcc>%s", &filename[sizeof(GIFCC_INCLUDE) - 1]);
+  }
+  return filename;
+}
+
+char *format_range_start(const Range *range) {
+  const char *filename;
+  int line, column;
+  range_get_start(range, &filename, &line, &column);
+  return format("%32s:%4d:%3d", trim_filename(filename), line, column);
+}
+
+char *format_range_end(const Range *range) {
+  const char *filename;
+  int line, column;
+  range_get_end(range, &filename, &line, &column);
+  return format("%32s:%4d:%3d", trim_filename(filename), line, column);
+}
+
 Reader *new_reader(void) {
   Reader *reader = NEW(Reader);
   *reader = (Reader){
