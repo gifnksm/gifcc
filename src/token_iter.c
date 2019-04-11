@@ -37,15 +37,17 @@ void consume_all_token_iterator(TokenIterator *ts) {
   } while (token->ty != TK_EOF);
 }
 
-void ts_succ(TokenIterator *ts) {
+Token *ts_pop(TokenIterator *ts) {
   while (vec_len(ts->tokens) == 0) {
     if (!ts->next(ts->arg, ts->tokens)) {
-      return;
+      return NULL;
     }
   }
 
-  vec_remove(ts->tokens, 0);
+  return vec_remove(ts->tokens, 0);
 }
+
+void ts_succ(TokenIterator *ts) { (void)ts_pop(ts); }
 
 Token *ts_peek(TokenIterator *ts) { return ts_peek_ahead(ts, 0); }
 Token *ts_peek_ahead(TokenIterator *ts, int n) {
@@ -55,15 +57,6 @@ Token *ts_peek_ahead(TokenIterator *ts, int n) {
     }
   }
   return vec_get(ts->tokens, n);
-}
-
-Token *ts_pop(TokenIterator *ts) {
-  Token *token = ts_peek(ts);
-  if (token == NULL) {
-    return NULL;
-  }
-  ts_succ(ts);
-  return token;
 }
 
 Token *ts_consume(TokenIterator *ts, int ty) {

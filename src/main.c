@@ -725,10 +725,12 @@ int main(int argc, char **argv) {
   }
 
   Reader *reader = new_reader();
-  reader = phase2_filter(reader);
   reader_add_file(reader, file, filename);
 
-  TokenIterator *ts = new_pp_tokenizer(reader);
+  CharIterator *cs = char_iterator_from_reader(reader);
+  cs = phase2_filter(cs);
+
+  TokenIterator *ts = new_pp_tokenizer(cs, reader);
   if (emit_target & EMIT_PP_TOKEN) {
     emit_target ^= EMIT_PP_TOKEN;
     FILE *fp = open_output_file(replace_suffix(output, ".s", ".pp_token"));

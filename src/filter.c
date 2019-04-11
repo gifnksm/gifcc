@@ -8,16 +8,18 @@ static void convert_ident(Token *token);
 static Number read_float(Token *token);
 static Number read_integer(Token *token);
 
-static char phase2_pop_fun(void *arg UNUSED, Reader *reader) {
+static bool phase2_next(void *arg, Char *output) {
+  CharIterator *cs = arg;
+
   // Translation phase #2
   // * backslash character (\) immediately followed by a new-line character is
   //   deleted
-  reader_consume_str(reader, "\\\n");
-  return reader_pop(reader);
+  (void)cs_consume_str(cs, "\\\n", NULL, NULL, NULL);
+  return cs_pop(cs, output);
 }
 
-Reader *phase2_filter(Reader *reader) {
-  return new_filtered_reader(reader, phase2_pop_fun, NULL);
+CharIterator *phase2_filter(CharIterator *cs) {
+  return new_char_iterator(phase2_next, cs);
 }
 
 static bool phase6_next(void *arg, Vector *output) {
