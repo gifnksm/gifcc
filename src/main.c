@@ -24,73 +24,12 @@ noreturn void error_raw_v(const char *dbg_file, int dbg_line, const char *fmt,
   exit(1);
 }
 
-static const char *trim_filename(const char *filename) {
-  if (strncmp(filename, GIFCC_INCLUDE, sizeof(GIFCC_INCLUDE) - 1) == 0) {
-    return format("<gifcc>%s", &filename[sizeof(GIFCC_INCLUDE) - 1]);
-  }
-  return filename;
-}
-
-static void dump_token(FILE *fp, const Token *token) {
-  const char *filename;
-  int line, column;
-  range_get_start(token->range, &filename, &line, &column);
-  fprintf(fp, "%32s:%4d:%3d:\t%-8s ", trim_filename(filename), line, column,
-          token_kind_to_str(token->ty));
-  switch (token->ty) {
-  case TK_PP_NUM:
-    fprintf(fp, "%s", token->pp_num);
-    break;
-  case TK_PP_IDENT:
-    fprintf(fp, "%s", token->pp_ident);
-    break;
-  case TK_NUM:
-    fprintf(fp, "%s", format_number(token->num));
-    break;
-  case TK_IDENT:
-    fprintf(fp, "%s", token->ident);
-    break;
-  case TK_CHARCONST:
-    fprintf(fp, "%s", format_number(token->char_val));
-    break;
-  case TK_STR:
-    fprintf(fp, "%s", format_string_literal(token->str));
-    break;
-  default:
-    break;
-  }
-  fprintf(fp, "\n");
-}
-
-typedef struct {
-  FILE *fp;
-  TokenIterator *ts;
-} TokenFilterArg;
-
-static bool token_filter(void *arg, Vector *output) {
-  TokenFilterArg *tfa = arg;
-  Token *token = ts_pop(tfa->ts);
-  if (token == NULL) {
-    return false;
-  }
-  dump_token(tfa->fp, token);
-  vec_push(output, token);
-  return true;
-}
-
 static void dump_range_start(FILE *fp, const Range *range) {
-  const char *filename;
-  int line, column;
-  range_get_start(range, &filename, &line, &column);
-  fprintf(fp, "%32s:%4d:%3d\t", trim_filename(filename), line, column);
+  fprintf(fp, "%s: ", format_range_start(range));
 }
 static void dump_range_end(FILE *fp, const Range *range) {
-  const char *filename;
-  int line, column;
-  range_get_end(range, &filename, &line, &column);
-  fprintf(fp, "%32s:%4d:%3d\t", trim_filename(filename), line, column);
+  fprintf(fp, "%s: ", format_range_end(range));
 }
-
 static void dump_indent(FILE *fp, int level) {
   fprintf(fp, "%*s", 2 * level, "");
 }
@@ -734,9 +673,7 @@ int main(int argc, char **argv) {
   if (emit_target & EMIT_PP_TOKEN) {
     emit_target ^= EMIT_PP_TOKEN;
     FILE *fp = open_output_file(replace_suffix(output, ".s", ".pp_token"));
-    TokenFilterArg *arg = NEW(TokenFilterArg);
-    *arg = (TokenFilterArg){.fp = fp, .ts = ts};
-    ts = new_token_iterator(token_filter, arg);
+    ts = new_token_dumper(ts, fp);
     if (emit_target == 0) {
       // consume all tokens to trigger event listener
       consume_all_token_iterator(ts);
@@ -749,9 +686,7 @@ int main(int argc, char **argv) {
   if (emit_target & EMIT_TOKEN) {
     emit_target ^= EMIT_TOKEN;
     FILE *fp = open_output_file(replace_suffix(output, ".s", ".token"));
-    TokenFilterArg *arg = NEW(TokenFilterArg);
-    *arg = (TokenFilterArg){.fp = fp, .ts = ts};
-    ts = new_token_iterator(token_filter, arg);
+    ts = new_token_dumper(ts, fp);
     if (emit_target == 0) {
       // consume all tokens to trigger event listener
       consume_all_token_iterator(ts);
