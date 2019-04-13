@@ -6,6 +6,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+typedef DEFINE_VECTOR(IntVector, int) IntVector;
+
 typedef struct File {
   const char *source;
   const char *name;
@@ -314,8 +316,8 @@ static void reader_get_position_inner(const Reader *reader, int offset,
                                       bool get_real, const char **filename,
                                       int *line, int *column) {
   FileOffset *fo = get_file_offset(reader, offset);
-  for (int j = int_vec_len(fo->file->line_offset) - 1; j >= 0; j--) {
-    int line_start = int_vec_get(fo->file->line_offset, j);
+  for (int j = VEC_LEN(fo->file->line_offset) - 1; j >= 0; j--) {
+    int line_start = VEC_GET(fo->file->line_offset, j);
     if (line_start > offset - fo->global_offset + fo->file_offset) {
       continue;
     }
@@ -472,8 +474,8 @@ static void print_source(const Range *range) {
     assert(strcmp(start_filename, end_filename) == 0);
 
     for (int line = start_line; line <= end_line; line++) {
-      int sl = int_vec_get(fo->file->line_offset, line - 1);
-      int el = int_vec_get(fo->file->line_offset, line);
+      int sl = VEC_GET(fo->file->line_offset, line - 1);
+      int el = VEC_GET(fo->file->line_offset, line);
       const char *line_str = &fo->file->source[sl];
       int line_len = el - sl;
       int sc = (line == start_line) ? start_column : 0;
@@ -520,8 +522,8 @@ static File *new_builtin_file(void) {
   file->source = "";
   file->name = "<builtin>";
   file->offset = 0;
-  file->line_offset = new_int_vector();
-  int_vec_push(file->line_offset, file->offset);
+  file->line_offset = NEW_VECTOR(IntVector);
+  VEC_PUSH(file->line_offset, file->offset);
   return file;
 }
 
@@ -532,8 +534,8 @@ static File *new_file(FILE *fp, const char *filename) {
   file->name = filename;
   file->size = 0;
   file->offset = 0;
-  file->line_offset = new_int_vector();
-  int_vec_push(file->line_offset, file->offset);
+  file->line_offset = NEW_VECTOR(IntVector);
+  VEC_PUSH(file->line_offset, file->offset);
   read_whole_file(file, fp);
   fclose(fp);
 
@@ -562,7 +564,7 @@ static char *read_whole_file(File *file, FILE *fp) {
 
   for (size_t i = 0; i < size; i++) {
     if (source[i] == '\n') {
-      int_vec_push(file->line_offset, i + 1);
+      VEC_PUSH(file->line_offset, i + 1);
     }
   }
 
