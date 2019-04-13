@@ -16,6 +16,7 @@ typedef struct File {
   int offset;
   IntVector *line_offset;
 } File;
+typedef DEFINE_VECTOR(FileVector, File *) FileVector;
 
 typedef struct FileOffset {
   int index;
@@ -25,12 +26,13 @@ typedef struct FileOffset {
   const char *alt_filename;
   File *file;
 } FileOffset;
+typedef DEFINE_VECTOR(FileOffsetVector, FileOffset *) FileOffsetVector;
 
 typedef struct Reader {
   int offset;
   bool is_sol;
-  Vector *file_stack;
-  Vector *file_offset;
+  FileVector *file_stack;
+  FileOffsetVector *file_offset;
 } Reader;
 
 typedef struct Range {
@@ -185,8 +187,8 @@ Reader *new_reader(void) {
   *reader = (Reader){
       .offset = 0,
       .is_sol = true,
-      .file_stack = new_vector(),
-      .file_offset = new_vector(),
+      .file_stack = NEW_VECTOR(FileVector),
+      .file_offset = NEW_VECTOR(FileOffsetVector),
   };
 
   File *file = new_builtin_file();
@@ -218,8 +220,8 @@ CharIterator *char_iterator_from_reader(Reader *reader) {
 
 void reader_add_file(Reader *reader, FILE *fp, const char *filename) {
   File *file = new_file(fp, filename);
-  file->stack_idx = vec_len(reader->file_stack);
-  vec_push(reader->file_stack, file);
+  file->stack_idx = VEC_LEN(reader->file_stack);
+  VEC_PUSH(reader->file_stack, file);
   (void)switch_file(reader, file);
 }
 
@@ -240,21 +242,21 @@ void reader_set_position(Reader *reader, const int *line,
 
 static FileOffset *switch_file(Reader *reader, File *file) {
   FileOffset *fo = NEW(FileOffset);
-  fo->index = vec_len(reader->file_offset);
+  fo->index = VEC_LEN(reader->file_offset);
   fo->global_offset = reader->offset;
   fo->file_offset = file != NULL ? file->offset : 0;
   fo->file = file;
-  vec_push(reader->file_offset, fo);
+  VEC_PUSH(reader->file_offset, fo);
   reader->is_sol = true;
   return fo;
 }
 
 static File *peek_file(const Reader *reader) { return peek_file_n(reader, 0); }
 static File *peek_file_n(const Reader *reader, int n) {
-  if (n >= vec_len(reader->file_stack)) {
+  if (n >= VEC_LEN(reader->file_stack)) {
     return NULL;
   }
-  return vec_rget(reader->file_stack, n);
+  return VEC_RGET(reader->file_stack, n);
 }
 
 char reader_peek(Reader *reader) { return reader_peek_ahead(reader, 0); }
@@ -284,7 +286,7 @@ static void reader_succ(Reader *reader) {
   reader->offset++;
   file->offset++;
   if (file->offset >= file->size) {
-    vec_pop(reader->file_stack);
+    VEC_POP(reader->file_stack);
     (void)switch_file(reader, peek_file(reader));
   }
 }
@@ -298,9 +300,9 @@ static char reader_pop(Reader *reader) {
 }
 
 static FileOffset *get_file_offset(const Reader *reader, int offset) {
-  assert(vec_len(reader->file_offset) > 0);
-  for (int i = vec_len(reader->file_offset) - 1; i >= 0; i--) {
-    FileOffset *fo = vec_get(reader->file_offset, i);
+  assert(VEC_LEN(reader->file_offset) > 0);
+  for (int i = VEC_LEN(reader->file_offset) - 1; i >= 0; i--) {
+    FileOffset *fo = VEC_GET(reader->file_offset, i);
     if (fo->global_offset > offset) {
       continue;
     }
@@ -450,8 +452,8 @@ static void print_source(const Range *range) {
   int len = range->len;
   while (len > 0) {
     FileOffset *fo = get_file_offset(reader, start);
-    FileOffset *next_fo = fo->index < vec_len(reader->file_offset) - 1
-                              ? vec_get(reader->file_offset, fo->index + 1)
+    FileOffset *next_fo = fo->index < VEC_LEN(reader->file_offset) - 1
+                              ? VEC_GET(reader->file_offset, fo->index + 1)
                               : NULL;
     int file_end = next_fo != NULL
                        ? next_fo->global_offset

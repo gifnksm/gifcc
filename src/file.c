@@ -9,7 +9,9 @@ typedef struct {
   const char *outname;
 } OutputFile;
 
-static Vector *file_list = NULL;
+typedef DEFINE_VECTOR(OutputFileVector, OutputFile *) OutputFileVector;
+
+static OutputFileVector *file_list = NULL;
 static void cleanup(void);
 
 char *replace_suffix(const char *filename, const char *from_suffix,
@@ -34,7 +36,7 @@ char *replace_suffix(const char *filename, const char *from_suffix,
 
 FILE *open_output_file(const char *filename) {
   if (file_list == NULL) {
-    file_list = new_vector();
+    file_list = NEW_VECTOR(OutputFileVector);
     atexit(cleanup);
   }
 
@@ -48,7 +50,7 @@ FILE *open_output_file(const char *filename) {
   file->fp = fp;
   file->tmpname = tmpname;
   file->outname = filename;
-  vec_push(file_list, file);
+  VEC_PUSH(file_list, file);
 
   return fp;
 }
@@ -58,8 +60,8 @@ void complete_output_file(void) {
     return;
   }
 
-  while (vec_len(file_list) > 0) {
-    OutputFile *file = vec_pop(file_list);
+  while (VEC_LEN(file_list) > 0) {
+    OutputFile *file = VEC_POP(file_list);
     fclose(file->fp);
     if (rename(file->tmpname, file->outname) < 0) {
       error("failed to rename file: %s. %s => %s", strerror(errno),
@@ -69,8 +71,8 @@ void complete_output_file(void) {
 }
 
 static void cleanup(void) {
-  while (vec_len(file_list) > 0) {
-    OutputFile *file = vec_pop(file_list);
+  while (VEC_LEN(file_list) > 0) {
+    OutputFile *file = VEC_POP(file_list);
     (void)unlink(file->tmpname);
     (void)fclose(file->fp);
   }

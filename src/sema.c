@@ -762,9 +762,9 @@ static void walk_expr(Expr *expr) {
 
   case EX_CALL:
     walk_expr(expr->call.callee);
-    if (expr->call.argument != NULL) {
-      for (int i = 0; i < vec_len(expr->call.argument); i++) {
-        walk_expr(vec_get(expr->call.argument, i));
+    if (expr->call.arguments != NULL) {
+      for (int i = 0; i < VEC_LEN(expr->call.arguments); i++) {
+        walk_expr(VEC_GET(expr->call.arguments, i));
       }
     }
     return;
@@ -774,16 +774,16 @@ static void walk_expr(Expr *expr) {
     return;
   case EX_DOT: {
     Expr *operand = expr->dot.operand;
-    Vector *members = expr->dot.members;
+    MemberVector *members = expr->dot.members;
     walk_expr(operand);
     if (operand->ty == EX_GLOBAL_VAR) {
-      int offset = get_members_offset(expr->dot.members);
+      int offset = get_members_offset(members);
       replace_expr(expr, operand);
       expr->global_var.offset += offset;
       return;
     }
     if (operand->ty == EX_STACK_VAR) {
-      int offset = get_members_offset(expr->dot.members);
+      int offset = get_members_offset(members);
       replace_expr(expr, operand);
       expr->stack_var.offset += offset;
       return;
@@ -796,13 +796,13 @@ static void walk_expr(Expr *expr) {
       return;
     }
     if (operand->ty == EX_DOT) {
-      vec_append(operand->dot.members, members);
+      VEC_APPEND(operand->dot.members, members);
       replace_expr(expr, operand);
       walk_expr(expr);
       return;
     }
     if (operand->ty == EX_ARROW) {
-      vec_append(operand->arrow.members, members);
+      VEC_APPEND(operand->arrow.members, members);
       replace_expr(expr, operand);
       walk_expr(expr);
       return;
@@ -811,7 +811,7 @@ static void walk_expr(Expr *expr) {
   }
   case EX_ARROW: {
     Expr *operand = expr->arrow.operand;
-    Vector *members = expr->arrow.members;
+    MemberVector *members = expr->arrow.members;
     walk_expr(operand);
     if (operand->ty == EX_ADDRESS) {
       expr->ty = EX_DOT;
@@ -931,8 +931,8 @@ static void walk_expr(Expr *expr) {
     assert(false);
     return;
   case EX_COMMA:
-    for (int i = 0; i < vec_len(expr->comma.exprs); i++) {
-      Expr *op = vec_get(expr->comma.exprs, i);
+    for (int i = 0; i < VEC_LEN(expr->comma.exprs); i++) {
+      Expr *op = VEC_GET(expr->comma.exprs, i);
       walk_expr(op);
     }
     return;
@@ -981,13 +981,13 @@ static void walk_stmt(Stmt *stmt) {
     walk_expr(stmt->expr);
     return;
   case ST_COMPOUND:
-    for (int i = 0; i < vec_len(stmt->stmts); i++) {
-      walk_stmt(vec_get(stmt->stmts, i));
+    for (int i = 0; i < VEC_LEN(stmt->stmts); i++) {
+      walk_stmt(VEC_GET(stmt->stmts, i));
     }
     return;
   case ST_DECL:
-    for (int i = 0; i < vec_len(stmt->decl); i++) {
-      StackVarDecl *decl = vec_get(stmt->decl, i);
+    for (int i = 0; i < VEC_LEN(stmt->decl); i++) {
+      StackVarDecl *decl = VEC_GET(stmt->decl, i);
       walk_initializer(decl->init);
     }
     return;
@@ -998,8 +998,8 @@ static void walk_stmt(Stmt *stmt) {
     return;
   case ST_SWITCH:
     walk_expr(stmt->cond);
-    for (int i = 0; i < vec_len(stmt->cases); i++) {
-      walk_stmt(vec_get(stmt->cases, i));
+    for (int i = 0; i < VEC_LEN(stmt->cases); i++) {
+      walk_stmt(VEC_GET(stmt->cases, i));
     }
     if (stmt->default_case != NULL) {
       walk_stmt(stmt->default_case);
@@ -1058,15 +1058,15 @@ static void walk_initializer(Initializer *init) {
   }
 
   if (init->members != NULL) {
-    for (int i = 0; i < vec_len(init->members); i++) {
-      MemberInitializer *meminit = vec_get(init->members, i);
+    for (int i = 0; i < VEC_LEN(init->members); i++) {
+      MemberInitializer *meminit = VEC_GET(init->members, i);
       walk_initializer(meminit->init);
     }
   }
 
   if (init->elements != NULL) {
-    for (int i = 0; i < vec_len(init->elements); i++) {
-      Initializer *eleminit = vec_get(init->elements, i);
+    for (int i = 0; i < VEC_LEN(init->elements); i++) {
+      Initializer *eleminit = VEC_GET(init->elements, i);
       walk_initializer(eleminit);
     }
   }
@@ -1087,13 +1087,13 @@ static void walk_str(StringLiteral *str __attribute__((unused))) {
 void sema_expr(Expr *expr) { walk_expr(expr); }
 
 void sema(TranslationUnit *tunit) {
-  for (int i = 0; i < vec_len(tunit->func_list); i++) {
-    walk_func(vec_get(tunit->func_list, i));
+  for (int i = 0; i < VEC_LEN(tunit->func_list); i++) {
+    walk_func(VEC_GET(tunit->func_list, i));
   }
-  for (int i = 0; i < vec_len(tunit->gvar_list); i++) {
-    walk_gvar(vec_get(tunit->gvar_list, i));
+  for (int i = 0; i < VEC_LEN(tunit->gvar_list); i++) {
+    walk_gvar(VEC_GET(tunit->gvar_list, i));
   }
-  for (int i = 0; i < vec_len(tunit->str_list); i++) {
-    walk_str(vec_get(tunit->str_list, i));
+  for (int i = 0; i < VEC_LEN(tunit->str_list); i++) {
+    walk_str(VEC_GET(tunit->str_list, i));
   }
 }

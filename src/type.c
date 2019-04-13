@@ -51,11 +51,11 @@ Type *new_type_unsized_array(Type *base_type, TypeQualifier tq) {
   return ptrtype;
 }
 
-Type *new_type_func(Type *ret_type, Vector *func_param, bool has_varargs,
+Type *new_type_func(Type *ret_type, ParamVector *func_param, bool has_varargs,
                     TypeQualifier tq) {
   Type *funtype = new_type(TY_FUNC, tq);
   funtype->func.ret = ret_type;
-  funtype->func.param = func_param;
+  funtype->func.params = func_param;
   funtype->func.has_varargs = has_varargs;
   return funtype;
 }
@@ -114,7 +114,7 @@ Type *new_type_builtin_va_list(const Range *range) {
 
 void init_struct_body(StructBody *body) {
   body->member_name_map = new_map();
-  body->member_list = new_vector();
+  body->members = NEW_VECTOR(MemberVector);
   body->member_size = 0;
   body->member_align = 0;
 }
@@ -174,9 +174,9 @@ void register_struct_member(Type *type, const char *member_name,
     body->member_align = mem_align;
   }
 
-  int index = vec_len(body->member_list);
+  int index = VEC_LEN(body->members);
   Member *member = new_member(member_name, member_type, offset, index, range);
-  vec_push(body->member_list, member);
+  VEC_PUSH(body->members, member);
 
   if (member_name == NULL) {
     if (member_type->ty == TY_STRUCT || member_type->ty == TY_UNION) {
@@ -209,7 +209,7 @@ const Member *lookup_struct_member(Type *type, const char *name) {
   if (member == NULL) {
     return NULL;
   }
-  return vec_get(body->member_list, member->index);
+  return VEC_GET(body->members, member->index);
 }
 
 bool is_unqualified_type(const Type *type) {
@@ -269,16 +269,16 @@ bool is_sametype(Type *ty1, Type *ty2) {
     if ((ty1->func.has_varargs ^ ty2->func.has_varargs) != 0) {
       return false;
     }
-    if (((ty1->func.param == NULL) ^ (ty2->func.param == NULL)) != 0) {
+    if (((ty1->func.params == NULL) ^ (ty2->func.params == NULL)) != 0) {
       return false;
     }
-    if (ty1->func.param != NULL) {
-      if (vec_len(ty1->func.param) != vec_len(ty2->func.param)) {
+    if (ty1->func.params != NULL) {
+      if (VEC_LEN(ty1->func.params) != VEC_LEN(ty2->func.params)) {
         return false;
       }
-      for (int i = 0; i < vec_len(ty1->func.param); i++) {
-        Param *p1 = vec_get(ty1->func.param, i);
-        Param *p2 = vec_get(ty2->func.param, i);
+      for (int i = 0; i < VEC_LEN(ty1->func.params); i++) {
+        Param *p1 = VEC_GET(ty1->func.params, i);
+        Param *p2 = VEC_GET(ty2->func.params, i);
         if (!is_sametype(p1->type, p2->type)) {
           return false;
         }
@@ -503,12 +503,12 @@ char *format_type(const Type *type, bool detail) {
     break;
   case TY_FUNC:
     type_str = format("FUNC(");
-    if (type->func.param != NULL) {
-      for (int i = 0; i < vec_len(type->func.param); i++) {
+    if (type->func.params != NULL) {
+      for (int i = 0; i < VEC_LEN(type->func.params); i++) {
         if (i > 0) {
           type_str = format("%s, ", type_str);
         }
-        Param *param = vec_get(type->func.param, i);
+        Param *param = VEC_GET(type->func.params, i);
         type_str = format("%s%s", type_str, format_type(param->type, false));
         if (param->name != NULL) {
           assert(param->name->ty == TK_IDENT);
@@ -516,12 +516,12 @@ char *format_type(const Type *type, bool detail) {
         }
       }
       if (type->func.has_varargs) {
-        if (vec_len(type->func.param) > 0) {
+        if (VEC_LEN(type->func.params) > 0) {
           type_str = format("%s, ", type_str);
         }
         type_str = format("%s...", type_str);
       } else {
-        if (vec_len(type->func.param) == 0) {
+        if (VEC_LEN(type->func.params) == 0) {
           type_str = format("%svoid", type_str);
         }
       }
@@ -539,10 +539,10 @@ char *format_type(const Type *type, bool detail) {
       type_str = format("%s %s", kind, type->tag);
     }
     if (detail) {
-      if (body->member_list != NULL) {
+      if (body->members != NULL) {
         type_str = format("%s {", type_str);
-        for (int i = 0; i < vec_len(body->member_list); i++) {
-          Member *member = vec_get(body->member_list, i);
+        for (int i = 0; i < VEC_LEN(body->members); i++) {
+          Member *member = VEC_GET(body->members, i);
           type_str = format("%s %s %s;", type_str,
                             format_type(member->type, true), member->name);
         }

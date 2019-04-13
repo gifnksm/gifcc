@@ -10,16 +10,16 @@
 #include <strings.h>
 
 typedef struct GlobalCtxt {
-  Vector *func_list;
-  Vector *gvar_list;
-  Vector *str_list;
+  FunctionVector *func_list;
+  GlobalVarVector *gvar_list;
+  StringLiteralVector *str_list;
 } GlobalCtxt;
 
 typedef struct FuncCtxt {
   const char *name;
   Type *type;
-  Vector *var_list;
-  Vector *switches;
+  StackVarVector *var_list;
+  StmtVector *switches;
   Map *label_map;
 } FuncCtxt;
 
@@ -59,12 +59,15 @@ typedef struct VarDef {
   GlobalVar *global_var;
   Function *func;
 } VarDef;
+typedef DEFINE_VECTOR(VarDefVector, VarDef *) VarDefVector;
 
 typedef struct GenericAssociation {
   const Range *range;
   Type *type;
   Expr *expr;
 } GenericAssociation;
+typedef DEFINE_VECTOR(GenericAssociationVector,
+                      GenericAssociation *) GenericAssociationVector;
 
 typedef struct TypeSpecifier {
   const Range *range;
@@ -101,18 +104,20 @@ typedef struct Designator {
     const char *member;
   };
 } Designator;
+typedef DEFINE_VECTOR(DesignatorVector, Designator *) DesignatorVector;
 
 typedef struct ParseInit ParseInit;
 typedef struct InitElem {
   const Range *range;
-  Vector *designation;
+  DesignatorVector *designation;
   ParseInit *pinit;
 } InitElem;
+typedef DEFINE_VECTOR(InitElemVector, InitElem *) InitElemVector;
 
 typedef struct ParseInit {
   const Range *range;
   Expr *expr;
-  Vector *list;
+  InitElemVector *list;
 } ParseInit;
 
 static const StorageClassSpecifier EMPTY_STORAGE_CLASS_SPECIFIER = {};
@@ -121,7 +126,7 @@ static const FunctionSpecifier EMPTY_FUNCTION_SPECIFIER = {};
 
 static Initializer *new_initializer(Type *type);
 static MemberInitializer *new_member_initializer(Member *member);
-static ParseInit *new_parse_init_list(const Range *range, Vector *list);
+static ParseInit *new_parse_init_list(const Range *range, InitElemVector *list);
 static ParseInit *new_parse_init_expr(Expr *expr);
 static GlobalCtxt *new_global_ctxt(void);
 static FuncCtxt *new_func_ctxt(const char *name, Type *type);
@@ -174,17 +179,20 @@ static Expr *new_expr_num(Number val, const Range *range);
 static Expr *new_expr_ident(Scope *scope, Token *ident);
 static Expr *new_expr_str(Scope *scope, const char *val, const Range *range);
 static Expr *new_expr_stmt(Stmt *stmt, const Range *range);
-static Expr *new_expr_generic(Scope *scope, Expr *control, Vector *assoc_list);
-static Expr *new_expr_call(Scope *scope, Expr *callee, Vector *argument,
+static Expr *new_expr_generic(Scope *scope, Expr *control,
+                              GenericAssociationVector *assoc_list);
+static Expr *new_expr_call(Scope *scope, Expr *callee, ExprVector *arguments,
                            const Range *range);
 static Expr *new_expr_builtin_va_start(Scope *scope, Expr *callee,
-                                       Vector *argument, const Range *range);
+                                       ExprVector *arguments,
+                                       const Range *range);
 static Expr *new_expr_builtin_va_arg(Scope *scope, Expr *callee,
-                                     Vector *argument, const Range *range);
+                                     ExprVector *arguments, const Range *range);
 static Expr *new_expr_builtin_va_end(Scope *scope, Expr *callee,
-                                     Vector *argument, const Range *range);
+                                     ExprVector *arguments, const Range *range);
 static Expr *new_expr_builtin_va_copy(Scope *scope, Expr *callee,
-                                      Vector *argument, const Range *range);
+                                      ExprVector *arguments,
+                                      const Range *range);
 static Expr *new_expr_postfix(Scope *scope, int ty, Expr *operand,
                               const Range *range);
 static Expr *new_expr_cast(Scope *scope, Type *val_type, Expr *operand,
@@ -221,22 +229,23 @@ static Stmt *new_stmt_goto(const char *name, const Range *range);
 static Stmt *new_stmt_break(const Range *range);
 static Stmt *new_stmt_continue(const Range *range);
 static Stmt *new_stmt_return(Scope *scope, Expr *expr, const Range *range);
-static Stmt *new_stmt_compound(Vector *stmts, const Range *range);
-static Stmt *new_stmt_decl(Vector *decl, const Range *range);
+static Stmt *new_stmt_compound(StmtVector *stmts, const Range *range);
+static Stmt *new_stmt_decl(StackVarDeclVector *decl, const Range *range);
 
 static Expr *builtin_va_start_handler(Scope *scope, Expr *callee,
-                                      Vector *argument, const Range *range);
+                                      ExprVector *arguments,
+                                      const Range *range);
 static Expr *builtin_va_arg_handler(Scope *scope, Expr *callee,
-                                    Vector *argument, const Range *range);
+                                    ExprVector *arguments, const Range *range);
 static Expr *builtin_va_end_handler(Scope *scope, Expr *callee,
-                                    Vector *argument, const Range *range);
+                                    ExprVector *arguments, const Range *range);
 static Expr *builtin_va_copy_handler(Scope *scope, Expr *callee,
-                                     Vector *argument, const Range *range);
+                                     ExprVector *arguments, const Range *range);
 
 // expression
 static Expr *primary_expression(TokenIterator *ts, Scope *scope);
 static Expr *postfix_expression(TokenIterator *ts, Scope *scope);
-static Vector *argument_expression_list(TokenIterator *ts, Scope *scope);
+static ExprVector *argument_expression_list(TokenIterator *ts, Scope *scope);
 static Expr *unary_expression(TokenIterator *ts, Scope *scope);
 static Expr *cast_expression(TokenIterator *ts, Scope *scope);
 static Expr *binary_expression(TokenIterator *ts, Scope *scope, const int *tks,
@@ -257,7 +266,7 @@ static Expr *assignment_expression(TokenIterator *ts, Scope *scope);
 static Expr *expression(TokenIterator *ts, Scope *scope);
 
 // declaration
-static Vector *declaration(TokenIterator *ts, Scope *scope);
+static VarDefVector *declaration(TokenIterator *ts, Scope *scope);
 static void declaration_specifiers(TokenIterator *ts, Scope *scope, Type **type,
                                    StorageClassSpecifier *scs,
                                    FunctionSpecifier *fs);
@@ -287,20 +296,20 @@ static void abstract_declarator(Scope *scope, TokenIterator *ts,
                                 const Range **range);
 static ParseInit *parse_initializer(TokenIterator *ts, Scope *scope);
 static const Member *consume_member_designator(Type *type, InitElem *elem);
-static void assign_struct_initializer(Scope *scope, Vector *list, bool is_root,
-                                      Type *type, const Range *range,
-                                      Initializer **init);
-static void assign_union_initializer(Scope *scope, Vector *list, bool is_root,
-                                     Type *type, const Range *range,
-                                     Initializer **init);
-static void assign_array_initializer(Scope *scope, Vector *list, bool is_root,
-                                     Type *type, const Range *range,
-                                     Initializer **init);
+static void assign_struct_initializer(Scope *scope, InitElemVector *list,
+                                      bool is_root, Type *type,
+                                      const Range *range, Initializer **init);
+static void assign_union_initializer(Scope *scope, InitElemVector *list,
+                                     bool is_root, Type *type,
+                                     const Range *range, Initializer **init);
+static void assign_array_initializer(Scope *scope, InitElemVector *list,
+                                     bool is_root, Type *type,
+                                     const Range *range, Initializer **init);
 static void assign_initializer(Scope *scope, ParseInit *pinit, Type *type,
                                Initializer **init);
-static void assign_initializer_list(Scope *scope, Vector *list, bool is_root,
-                                    Type *type, const Range *range,
-                                    Initializer **init);
+static void assign_initializer_list(Scope *scope, InitElemVector *list,
+                                    bool is_root, Type *type,
+                                    const Range *range, Initializer **init);
 static void initializer(TokenIterator *ts, Scope *scope, Type *type,
                         Initializer **init, const Range **range);
 
@@ -330,27 +339,27 @@ static Initializer *new_initializer(Type *type) {
   init->elements = NULL;
   switch (type->ty) {
   case TY_STRUCT: {
-    init->members = new_vector();
+    init->members = NEW_VECTOR(MemberInitializerVector);
     StructBody *body = type->struct_body;
-    for (int i = 0; i < vec_len(body->member_list); i++) {
-      Member *member = vec_get(body->member_list, i);
+    for (int i = 0; i < VEC_LEN(body->members); i++) {
+      Member *member = VEC_GET(body->members, i);
       MemberInitializer *meminit = new_member_initializer(member);
-      vec_push(init->members, meminit);
+      VEC_PUSH(init->members, meminit);
     }
     break;
   }
   case TY_UNION: {
-    init->members = new_vector();
+    init->members = NEW_VECTOR(MemberInitializerVector);
     StructBody *body = type->struct_body;
-    if (vec_len(body->member_list) > 0) {
+    if (VEC_LEN(body->members) > 0) {
       MemberInitializer *meminit = new_member_initializer(NULL);
-      vec_push(init->members, meminit);
+      VEC_PUSH(init->members, meminit);
     }
     break;
   }
   case TY_ARRAY:
-    init->elements = new_vector();
-    vec_extend(init->elements, type->array.len);
+    init->elements = NEW_VECTOR(InitializerVector);
+    VEC_EXTEND(init->elements, type->array.len, NULL);
     break;
   default:
     break;
@@ -364,7 +373,8 @@ static MemberInitializer *new_member_initializer(Member *member) {
   return meminit;
 }
 
-static ParseInit *new_parse_init_list(const Range *range, Vector *list) {
+static ParseInit *new_parse_init_list(const Range *range,
+                                      InitElemVector *list) {
   ParseInit *pinit = NEW(ParseInit);
   pinit->range = range;
   pinit->list = list;
@@ -380,9 +390,9 @@ static ParseInit *new_parse_init_expr(Expr *expr) {
 
 static GlobalCtxt *new_global_ctxt(void) {
   GlobalCtxt *gcx = NEW(GlobalCtxt);
-  gcx->func_list = new_vector();
-  gcx->gvar_list = new_vector();
-  gcx->str_list = new_vector();
+  gcx->func_list = NEW_VECTOR(FunctionVector);
+  gcx->gvar_list = NEW_VECTOR(GlobalVarVector);
+  gcx->str_list = NEW_VECTOR(StringLiteralVector);
 
   return gcx;
 }
@@ -392,8 +402,8 @@ static FuncCtxt *new_func_ctxt(const char *name, Type *type) {
 
   fcx->name = name;
   fcx->type = type;
-  fcx->var_list = new_vector();
-  fcx->switches = new_vector();
+  fcx->var_list = NEW_VECTOR(StackVarVector);
+  fcx->switches = NEW_VECTOR(StmtVector);
   fcx->label_map = new_map();
 
   return fcx;
@@ -503,7 +513,7 @@ static StackVar *register_stack_var(Scope *scope, Token *name, Type *type,
   var->offset = INT_MIN; // Initialize with invalid value
   var->type = type;
   var->range = range;
-  vec_push(fcx->var_list, var);
+  VEC_PUSH(fcx->var_list, var);
 
   if (!register_decl(scope, DECL_STACK_VAR, name->ident, type, var, NULL, NULL,
                      NULL)) {
@@ -1171,7 +1181,7 @@ int get_val_size(const Type *ty, const Range *range) {
                 format_type(ty, false));
   case TY_STRUCT:
   case TY_UNION:
-    if (ty->struct_body->member_list == NULL) {
+    if (ty->struct_body->members == NULL) {
       range_error(range, "不完全型の値のサイズを取得しようとしました: %s",
                   format_type(ty, false));
     }
@@ -1229,7 +1239,7 @@ int get_val_align(const Type *ty, const Range *range) {
                 format_type(ty, false));
   case TY_STRUCT:
   case TY_UNION:
-    if (ty->struct_body->member_list == NULL) {
+    if (ty->struct_body->members == NULL) {
       range_error(range,
                   "不完全型の値のアラインメントを取得しようとしました: %s",
                   format_type(ty, false));
@@ -1379,8 +1389,8 @@ static Expr *new_expr_str(Scope *scope, const char *val, const Range *range) {
                      new_number_int(strlen(val)), EMPTY_TYPE_QUALIFIER);
 
   StringLiteral *lit = NULL;
-  for (int i = 0; i < vec_len(scope->global_ctxt->str_list); i++) {
-    StringLiteral *l = vec_get(scope->global_ctxt->str_list, i);
+  for (int i = 0; i < VEC_LEN(scope->global_ctxt->str_list); i++) {
+    StringLiteral *l = VEC_GET(scope->global_ctxt->str_list, i);
     if (strcmp(l->val, val) == 0) {
       lit = l;
       break;
@@ -1391,7 +1401,7 @@ static Expr *new_expr_str(Scope *scope, const char *val, const Range *range) {
     lit = NEW(StringLiteral);
     lit->name = make_label("str");
     lit->val = val;
-    vec_push(scope->global_ctxt->str_list, lit);
+    VEC_PUSH(scope->global_ctxt->str_list, lit);
   }
 
   Expr *expr = new_expr(EX_STR, type, range);
@@ -1405,13 +1415,14 @@ static Expr *new_expr_stmt(Stmt *stmt, const Range *range) {
   return expr;
 }
 
-static Expr *new_expr_generic(Scope *scope, Expr *control, Vector *assoc_list) {
+static Expr *new_expr_generic(Scope *scope, Expr *control,
+                              GenericAssociationVector *assoc_list) {
   control = coerce_func2ptr(scope, control);
   control = coerce_array2ptr(scope, control);
 
   Expr *default_expr = NULL;
-  for (int i = 0; i < vec_len(assoc_list); i++) {
-    GenericAssociation *assoc = vec_get(assoc_list, i);
+  for (int i = 0; i < VEC_LEN(assoc_list); i++) {
+    GenericAssociation *assoc = VEC_GET(assoc_list, i);
     if (assoc->type == NULL) {
       if (default_expr != NULL) {
         range_error(assoc->range, "duplicate default generic association");
@@ -1432,10 +1443,10 @@ static Expr *new_expr_generic(Scope *scope, Expr *control, Vector *assoc_list) {
   return default_expr;
 }
 
-static Expr *new_expr_call(Scope *scope, Expr *callee, Vector *argument,
+static Expr *new_expr_call(Scope *scope, Expr *callee, ExprVector *arguments,
                            const Range *range) {
   if (callee->ty == EX_BUILTIN_FUNC) {
-    return callee->builtin_func.handler(scope, callee, argument, range);
+    return callee->builtin_func.handler(scope, callee, arguments, range);
   }
 
   callee = coerce_array2ptr(scope, callee);
@@ -1456,16 +1467,16 @@ static Expr *new_expr_call(Scope *scope, Expr *callee, Vector *argument,
   ret_type = func_type->func.ret;
 
   int narg = 0;
-  if (argument != NULL) {
-    for (int i = 0; i < vec_len(argument); i++) {
-      vec_set(argument, i, coerce_array2ptr(scope, vec_get(argument, i)));
-      vec_set(argument, i, coerce_func2ptr(scope, vec_get(argument, i)));
+  if (arguments != NULL) {
+    for (int i = 0; i < VEC_LEN(arguments); i++) {
+      VEC_SET(arguments, i, coerce_array2ptr(scope, VEC_GET(arguments, i)));
+      VEC_SET(arguments, i, coerce_func2ptr(scope, VEC_GET(arguments, i)));
     }
-    narg = vec_len(argument);
+    narg = VEC_LEN(arguments);
   }
 
-  Vector *params = func_type->func.param;
-  int nparam = params != NULL ? vec_len(params) : 0;
+  ParamVector *params = func_type->func.params;
+  int nparam = params != NULL ? VEC_LEN(params) : 0;
   if (params != NULL) {
     if ((narg < nparam) || (narg > nparam && !func_type->func.has_varargs)) {
       range_error(range,
@@ -1475,13 +1486,13 @@ static Expr *new_expr_call(Scope *scope, Expr *callee, Vector *argument,
   }
 
   for (int i = 0; i < nparam; i++) {
-    Param *param = vec_get(params, i);
-    Expr *arg = vec_get(argument, i);
-    vec_set(argument, i, new_expr_cast(scope, param->type, arg, arg->range));
+    Param *param = VEC_GET(params, i);
+    Expr *arg = VEC_GET(arguments, i);
+    VEC_SET(arguments, i, new_expr_cast(scope, param->type, arg, arg->range));
   }
   // default argument promotion
   for (int i = nparam; i < narg; i++) {
-    Expr *arg = vec_get(argument, i);
+    Expr *arg = VEC_GET(arguments, i);
     if (is_integer_type(arg->val_type)) {
       integer_promoted(scope, &arg);
     } else if (arg->val_type->ty == TY_FLOAT) {
@@ -1490,28 +1501,29 @@ static Expr *new_expr_call(Scope *scope, Expr *callee, Vector *argument,
     } else {
       // do nothing
     }
-    vec_set(argument, i, arg);
+    VEC_SET(arguments, i, arg);
   }
 
   Expr *expr = new_expr(EX_CALL, ret_type, range);
   expr->call.callee = callee;
-  expr->call.argument = argument;
+  expr->call.arguments = arguments;
   return expr;
 }
 
 static Expr *new_expr_builtin_va_start(Scope *scope,
                                        Expr *callee __attribute__((unused)),
-                                       Vector *argument, const Range *range) {
-  int narg = argument != NULL ? vec_len(argument) : 0;
+                                       ExprVector *arguments,
+                                       const Range *range) {
+  int narg = arguments != NULL ? VEC_LEN(arguments) : 0;
 
-  if (argument == NULL || vec_len(argument) != 2) {
+  if (arguments == NULL || VEC_LEN(arguments) != 2) {
     range_error(range,
                 "関数の引数の個数が一致しません: argument=%d, parameter=%d",
                 narg, 2);
   }
 
-  Expr *ap = vec_get(argument, 0);
-  Expr *last = vec_get(argument, 1);
+  Expr *ap = VEC_GET(arguments, 0);
+  Expr *last = VEC_GET(arguments, 1);
 
   ap = coerce_array2ptr(scope, ap);
   ap = coerce_func2ptr(scope, ap);
@@ -1525,18 +1537,19 @@ static Expr *new_expr_builtin_va_start(Scope *scope,
 
 static Expr *new_expr_builtin_va_arg(Scope *scope __attribute__((unused)),
                                      Expr *callee __attribute__((unused)),
-                                     Vector *argument __attribute__((unused)),
+                                     ExprVector *arguments
+                                     __attribute__((unused)),
                                      const Range *range) {
-  int narg = argument != NULL ? vec_len(argument) : 0;
+  int narg = arguments != NULL ? VEC_LEN(arguments) : 0;
 
-  if (argument == NULL || vec_len(argument) != 2) {
+  if (arguments == NULL || VEC_LEN(arguments) != 2) {
     range_error(range,
                 "関数の引数の個数が一致しません: argument=%d, parameter=%d",
                 narg, 2);
   }
 
-  Expr *ap = vec_get(argument, 0);
-  Expr *type_expr = vec_get(argument, 1);
+  Expr *ap = VEC_GET(arguments, 0);
+  Expr *type_expr = VEC_GET(arguments, 1);
 
   ap = coerce_array2ptr(scope, ap);
   ap = coerce_func2ptr(scope, ap);
@@ -1554,17 +1567,18 @@ static Expr *new_expr_builtin_va_arg(Scope *scope __attribute__((unused)),
 
 static Expr *new_expr_builtin_va_end(Scope *scope __attribute__((unused)),
                                      Expr *callee __attribute__((unused)),
-                                     Vector *argument __attribute__((unused)),
+                                     ExprVector *arguments
+                                     __attribute__((unused)),
                                      const Range *range) {
-  int narg = argument != NULL ? vec_len(argument) : 0;
+  int narg = arguments != NULL ? VEC_LEN(arguments) : 0;
 
-  if (argument == NULL || vec_len(argument) != 1) {
+  if (arguments == NULL || VEC_LEN(arguments) != 1) {
     range_error(range,
                 "関数の引数の個数が一致しません: argument=%d, parameter=%d",
                 narg, 2);
   }
 
-  Expr *ap = vec_get(argument, 0);
+  Expr *ap = VEC_GET(arguments, 0);
 
   ap = coerce_array2ptr(scope, ap);
   ap = coerce_func2ptr(scope, ap);
@@ -1577,18 +1591,19 @@ static Expr *new_expr_builtin_va_end(Scope *scope __attribute__((unused)),
 
 static Expr *new_expr_builtin_va_copy(Scope *scope __attribute__((unused)),
                                       Expr *callee __attribute__((unused)),
-                                      Vector *argument __attribute__((unused)),
+                                      ExprVector *arguments
+                                      __attribute__((unused)),
                                       const Range *range) {
-  int narg = argument != NULL ? vec_len(argument) : 0;
+  int narg = arguments != NULL ? VEC_LEN(arguments) : 0;
 
-  if (argument == NULL || vec_len(argument) != 2) {
+  if (arguments == NULL || VEC_LEN(arguments) != 2) {
     range_error(range,
                 "関数の引数の個数が一致しません: argument=%d, parameter=%d",
                 narg, 2);
   }
 
-  Expr *dest = vec_get(argument, 0);
-  Expr *src = vec_get(argument, 1);
+  Expr *dest = VEC_GET(arguments, 0);
+  Expr *src = VEC_GET(arguments, 1);
 
   dest = coerce_array2ptr(scope, dest);
   dest = coerce_func2ptr(scope, dest);
@@ -1646,7 +1661,7 @@ static Expr *new_expr_compound(Scope *scope, Type *val_type, Initializer *init,
     svar->offset = INT_MIN;
     svar->type = val_type;
     svar->range = range;
-    vec_push(fcx->var_list, svar);
+    VEC_PUSH(fcx->var_list, svar);
   }
 
   Expr *expr = new_expr(EX_COMPOUND, val_type, range);
@@ -1924,26 +1939,26 @@ static Expr *new_expr_binop(Scope *scope, int op, Expr *lhs, Expr *rhs,
                           new_expr_binop(scope, EX_OR, lhs, rhs, range), range);
   case EX_COMMA: {
     if (lhs->ty == EX_COMMA && rhs->ty == EX_COMMA) {
-      vec_append(lhs->comma.exprs, rhs->comma.exprs);
+      VEC_APPEND(lhs->comma.exprs, rhs->comma.exprs);
       lhs->range = range;
       lhs->val_type = rhs->val_type;
       return lhs;
     }
     if (lhs->ty == EX_COMMA) {
-      vec_push(lhs->comma.exprs, rhs);
+      VEC_PUSH(lhs->comma.exprs, rhs);
       lhs->range = range;
       lhs->val_type = rhs->val_type;
       return lhs;
     }
     if (rhs->ty == EX_COMMA) {
-      vec_insert(rhs->comma.exprs, 0, lhs);
+      VEC_INSERT(rhs->comma.exprs, 0, lhs);
       rhs->range = range;
       return rhs;
     }
     Expr *expr = new_expr(op, rhs->val_type, range);
-    expr->comma.exprs = new_vector();
-    vec_push(expr->comma.exprs, lhs);
-    vec_push(expr->comma.exprs, rhs);
+    expr->comma.exprs = NEW_VECTOR(ExprVector);
+    VEC_PUSH(expr->comma.exprs, lhs);
+    VEC_PUSH(expr->comma.exprs, rhs);
     return expr;
   }
   default:
@@ -2040,8 +2055,8 @@ static Expr *new_expr_dot(Scope *scope, Expr *operand, const char *name,
 
   Expr *expr = new_expr(EX_DOT, member->type, range);
   expr->dot.operand = operand;
-  expr->dot.members = new_vector();
-  vec_push(expr->dot.members, member);
+  expr->dot.members = NEW_VECTOR(MemberVector);
+  VEC_PUSH(expr->dot.members, member);
   return expr;
 }
 
@@ -2066,8 +2081,8 @@ static Expr *new_expr_arrow(Scope *scope, Expr *operand, const char *name,
 
   Expr *expr = new_expr(EX_ARROW, member->type, range);
   expr->arrow.operand = operand;
-  expr->arrow.members = new_vector();
-  vec_push(expr->arrow.members, member);
+  expr->arrow.members = NEW_VECTOR(MemberVector);
+  VEC_PUSH(expr->arrow.members, member);
   return expr;
 }
 
@@ -2103,7 +2118,7 @@ static Stmt *new_stmt_switch(Expr *cond, Stmt *body, const Range *range) {
       new_stmt(ST_SWITCH, new_type(TY_VOID, EMPTY_TYPE_QUALIFIER), range);
   stmt->cond = cond;
   stmt->body = body;
-  stmt->cases = new_vector();
+  stmt->cases = NEW_VECTOR(StmtVector);
   stmt->default_case = NULL;
   return stmt;
 }
@@ -2188,10 +2203,10 @@ static Stmt *new_stmt_return(Scope *scope, Expr *expr, const Range *range) {
   return stmt;
 }
 
-static Stmt *new_stmt_compound(Vector *stmts, const Range *range) {
+static Stmt *new_stmt_compound(StmtVector *stmts, const Range *range) {
   Type *type;
-  if (vec_len(stmts) != 0) {
-    Stmt *last = vec_last(stmts);
+  if (VEC_LEN(stmts) != 0) {
+    Stmt *last = VEC_LAST(stmts);
     type = last->val_type;
   } else {
     type = new_type(TY_VOID, EMPTY_TYPE_QUALIFIER);
@@ -2201,7 +2216,7 @@ static Stmt *new_stmt_compound(Vector *stmts, const Range *range) {
   return stmt;
 }
 
-static Stmt *new_stmt_decl(Vector *decl, const Range *range) {
+static Stmt *new_stmt_decl(StackVarDeclVector *decl, const Range *range) {
   Stmt *stmt =
       new_stmt(ST_DECL, new_type(TY_VOID, EMPTY_TYPE_QUALIFIER), range);
   stmt->decl = decl;
@@ -2209,21 +2224,23 @@ static Stmt *new_stmt_decl(Vector *decl, const Range *range) {
 }
 
 static Expr *builtin_va_start_handler(Scope *scope, Expr *callee,
-                                      Vector *argument, const Range *range) {
-  return new_expr_builtin_va_start(scope, callee, argument, range);
+                                      ExprVector *arguments,
+                                      const Range *range) {
+  return new_expr_builtin_va_start(scope, callee, arguments, range);
 }
 
 static Expr *builtin_va_arg_handler(Scope *scope, Expr *callee,
-                                    Vector *argument, const Range *range) {
-  return new_expr_builtin_va_arg(scope, callee, argument, range);
+                                    ExprVector *arguments, const Range *range) {
+  return new_expr_builtin_va_arg(scope, callee, arguments, range);
 }
 static Expr *builtin_va_end_handler(Scope *scope, Expr *callee,
-                                    Vector *argument, const Range *range) {
-  return new_expr_builtin_va_end(scope, callee, argument, range);
+                                    ExprVector *arguments, const Range *range) {
+  return new_expr_builtin_va_end(scope, callee, arguments, range);
 }
 static Expr *builtin_va_copy_handler(Scope *scope, Expr *callee,
-                                     Vector *argument, const Range *range) {
-  return new_expr_builtin_va_copy(scope, callee, argument, range);
+                                     ExprVector *arguments,
+                                     const Range *range) {
+  return new_expr_builtin_va_copy(scope, callee, arguments, range);
 }
 
 static Expr *primary_expression(TokenIterator *ts, Scope *scope) {
@@ -2262,7 +2279,7 @@ static Expr *primary_expression(TokenIterator *ts, Scope *scope) {
     ts_expect(ts, '(');
     Expr *control = assignment_expression(ts, scope);
     ts_expect(ts, ',');
-    Vector *assoc_list = new_vector();
+    GenericAssociationVector *assoc_list = NEW_VECTOR(GenericAssociationVector);
     while (ts_peek(ts)->ty != ')') {
       GenericAssociation *assoc = NEW(GenericAssociation);
       if ((token = ts_consume(ts, TK_DEFAULT)) != NULL) {
@@ -2275,7 +2292,7 @@ static Expr *primary_expression(TokenIterator *ts, Scope *scope) {
       Token *colon = ts_expect(ts, ':');
       assoc->range = range_join(assoc->range, colon->range);
       assoc->expr = assignment_expression(ts, scope);
-      vec_push(assoc_list, assoc);
+      VEC_PUSH(assoc_list, assoc);
       if (!ts_consume(ts, ',')) {
         break;
       }
@@ -2300,12 +2317,12 @@ static Expr *postfix_expression(TokenIterator *ts, Scope *scope) {
     }
 
     if (ts_consume(ts, '(')) {
-      Vector *argument = NULL;
+      ExprVector *arguments = NULL;
       if (ts_peek(ts)->ty != ')') {
-        argument = argument_expression_list(ts, scope);
+        arguments = argument_expression_list(ts, scope);
       }
       Token *end = ts_expect(ts, ')');
-      expr = new_expr_call(scope, expr, argument,
+      expr = new_expr_call(scope, expr, arguments,
                            range_join(expr->range, end->range));
       continue;
     }
@@ -2340,15 +2357,15 @@ static Expr *postfix_expression(TokenIterator *ts, Scope *scope) {
   }
 }
 
-static Vector *argument_expression_list(TokenIterator *ts, Scope *scope) {
-  Vector *argument = new_vector();
+static ExprVector *argument_expression_list(TokenIterator *ts, Scope *scope) {
+  ExprVector *arguments = NEW_VECTOR(ExprVector);
   while (true) {
-    vec_push(argument, assignment_expression(ts, scope));
+    VEC_PUSH(arguments, assignment_expression(ts, scope));
     if (!ts_consume(ts, ',')) {
       break;
     }
   }
-  return argument;
+  return arguments;
 }
 
 static Expr *unary_expression(TokenIterator *ts, Scope *scope) {
@@ -2547,8 +2564,8 @@ Number integer_constant_expression(TokenIterator *ts, Scope *scope) {
   return expr->num;
 }
 
-static Vector *declaration(TokenIterator *ts, Scope *scope) {
-  Vector *def_list = new_vector();
+static VarDefVector *declaration(TokenIterator *ts, Scope *scope) {
+  VarDefVector *def_list = NEW_VECTOR(VarDefVector);
 
   StorageClassSpecifier scs = EMPTY_STORAGE_CLASS_SPECIFIER;
   Type *base_type = NULL;
@@ -2575,7 +2592,7 @@ static Vector *declaration(TokenIterator *ts, Scope *scope) {
       if (ts_peek(ts)->ty == '{') {
         def->func =
             function_definition(ts, scope, type, name->ident, scs, fs, range);
-        vec_push(def_list, def);
+        VEC_PUSH(def_list, def);
         return def_list;
       }
     } else {
@@ -2583,7 +2600,7 @@ static Vector *declaration(TokenIterator *ts, Scope *scope) {
       if (ts_consume(ts, '=')) {
         initializer(ts, scope, type, &def->init, NULL);
       }
-      vec_push(def_list, def);
+      VEC_PUSH(def_list, def);
     }
   }
 
@@ -2601,7 +2618,7 @@ static Vector *declaration(TokenIterator *ts, Scope *scope) {
         if (ts_consume(ts, '=')) {
           initializer(ts, scope, type, &def->init, NULL);
         }
-        vec_push(def_list, def);
+        VEC_PUSH(def_list, def);
       }
     }
   }
@@ -2655,7 +2672,7 @@ static Type *struct_or_union_specifier(Scope *scope, TokenIterator *ts,
                       predef_type->ty);
         }
         StructBody *body = predef_type->struct_body;
-        if (body->member_list != NULL) {
+        if (body->members != NULL) {
           range_error(tag->range, "構造体の多重定義です");
         }
         init_struct_body(body);
@@ -2897,15 +2914,15 @@ static void direct_declarator_common(Scope *scope, TokenIterator *ts,
     }
 
     if (ts_consume(ts, '(')) {
-      Vector *params;
+      ParamVector *params;
       bool has_varargs = false;
       Token *end;
       if ((end = ts_consume(ts, ')'))) {
         params = NULL;
       } else if ((end = ts_consume2(ts, TK_VOID, ')'))) {
-        params = new_vector();
+        params = NEW_VECTOR(ParamVector);
       } else {
-        params = new_vector();
+        params = NEW_VECTOR(ParamVector);
         while (true) {
           Param *param = parameter_declaration(scope, ts);
           if (is_array_type(param->type)) {
@@ -2914,7 +2931,7 @@ static void direct_declarator_common(Scope *scope, TokenIterator *ts,
                 new_type_ptr(param->type->array.elem, param->type->qualifier);
             param->type = type;
           }
-          vec_push(params, param);
+          VEC_PUSH(params, param);
           if (ts_peek(ts)->ty == ')') {
             break;
           }
@@ -3017,17 +3034,17 @@ static Designator *designator(TokenIterator *ts, Scope *scope) {
   assert(false);
 }
 
-static Vector *designation(TokenIterator *ts, Scope *scope) {
-  Vector *list = new_vector();
+static DesignatorVector *designation(TokenIterator *ts, Scope *scope) {
+  DesignatorVector *list = NEW_VECTOR(DesignatorVector);
   while (ts_peek(ts)->ty == '[' || ts_peek(ts)->ty == '.') {
-    vec_push(list, designator(ts, scope));
+    VEC_PUSH(list, designator(ts, scope));
   }
   ts_expect(ts, '=');
   return list;
 }
 
-static Vector *initializer_list(TokenIterator *ts, Scope *scope) {
-  Vector *list = new_vector();
+static InitElemVector *initializer_list(TokenIterator *ts, Scope *scope) {
+  InitElemVector *list = NEW_VECTOR(InitElemVector);
   while (ts_peek(ts)->ty != '}') {
     InitElem *elem = NEW(InitElem);
     Token *start = ts_peek(ts);
@@ -3036,7 +3053,7 @@ static Vector *initializer_list(TokenIterator *ts, Scope *scope) {
     }
     elem->pinit = parse_initializer(ts, scope);
     elem->range = range_join(start->range, elem->pinit->range);
-    vec_push(list, elem);
+    VEC_PUSH(list, elem);
     if (ts_consume(ts, ',') == NULL) {
       break;
     }
@@ -3047,7 +3064,7 @@ static Vector *initializer_list(TokenIterator *ts, Scope *scope) {
 static ParseInit *parse_initializer(TokenIterator *ts, Scope *scope) {
   Token *token;
   if ((token = ts_consume(ts, '{')) != NULL) {
-    Vector *list = initializer_list(ts, scope);
+    InitElemVector *list = initializer_list(ts, scope);
     Token *end = ts_expect(ts, '}');
     const Range *range = range_join(token->range, end->range);
     return new_parse_init_list(range, list);
@@ -3063,7 +3080,7 @@ static const Member *consume_member_designator(Type *type, InitElem *elem) {
     return NULL;
   }
 
-  Designator *desig = vec_get(elem->designation, 0);
+  Designator *desig = VEC_GET(elem->designation, 0);
   if (desig->type != DESIG_MEMBER) {
     assert(desig->type == DESIG_INDEX);
     range_error(desig->range,
@@ -3078,17 +3095,17 @@ static const Member *consume_member_designator(Type *type, InitElem *elem) {
                 desig->member, format_type(type, false));
   }
   if (member->name != NULL) {
-    vec_remove(elem->designation, 0);
-    if (vec_len(elem->designation) == 0) {
+    VEC_REMOVE(elem->designation, 0);
+    if (VEC_LEN(elem->designation) == 0) {
       elem->designation = NULL;
     }
   }
   return member;
 }
 
-static void assign_struct_initializer(Scope *scope, Vector *list, bool is_root,
-                                      Type *type, const Range *range,
-                                      Initializer **init) {
+static void assign_struct_initializer(Scope *scope, InitElemVector *list,
+                                      bool is_root, Type *type,
+                                      const Range *range, Initializer **init) {
   assert(type->ty == TY_STRUCT);
   StructBody *body = type->struct_body;
 
@@ -3099,8 +3116,8 @@ static void assign_struct_initializer(Scope *scope, Vector *list, bool is_root,
   bool is_first = true;
 
   int memidx = 0;
-  while (vec_len(list) > 0) {
-    InitElem *elem = vec_get(list, 0);
+  while (VEC_LEN(list) > 0) {
+    InitElem *elem = VEC_GET(list, 0);
     if (!is_first && !is_root && elem->designation != NULL) {
       break;
     }
@@ -3109,7 +3126,7 @@ static void assign_struct_initializer(Scope *scope, Vector *list, bool is_root,
           is_sametype(elem->pinit->expr->val_type, type)) {
         (*init)->expr = elem->pinit->expr;
         (*init)->members = NULL;
-        vec_remove(list, 0);
+        VEC_REMOVE(list, 0);
         return;
       }
     }
@@ -3117,23 +3134,23 @@ static void assign_struct_initializer(Scope *scope, Vector *list, bool is_root,
 
     const Member *member = consume_member_designator(type, elem);
     if (member == NULL) {
-      if (memidx >= vec_len(body->member_list)) {
+      if (memidx >= VEC_LEN(body->members)) {
         break;
       }
-      member = vec_get(body->member_list, memidx);
+      member = VEC_GET(body->members, memidx);
       assert(member->index == memidx);
     }
 
-    MemberInitializer *meminit = vec_get((*init)->members, member->index);
+    MemberInitializer *meminit = VEC_GET((*init)->members, member->index);
     memidx = member->index + 1;
     assign_initializer_list(scope, list, false, member->type, range,
                             &meminit->init);
   }
 }
 
-static void assign_union_initializer(Scope *scope, Vector *list, bool is_root,
-                                     Type *type, const Range *range,
-                                     Initializer **init) {
+static void assign_union_initializer(Scope *scope, InitElemVector *list,
+                                     bool is_root, Type *type,
+                                     const Range *range, Initializer **init) {
   assert(type->ty == TY_UNION);
   StructBody *body = type->struct_body;
 
@@ -3144,8 +3161,8 @@ static void assign_union_initializer(Scope *scope, Vector *list, bool is_root,
   bool is_first = true;
 
   int memidx = 0;
-  while (vec_len(list) > 0) {
-    InitElem *elem = vec_get(list, 0);
+  while (VEC_LEN(list) > 0) {
+    InitElem *elem = VEC_GET(list, 0);
     if (!is_first && !is_root && elem->designation != NULL) {
       break;
     }
@@ -3154,7 +3171,7 @@ static void assign_union_initializer(Scope *scope, Vector *list, bool is_root,
           is_sametype(elem->pinit->expr->val_type, type)) {
         (*init)->expr = elem->pinit->expr;
         (*init)->members = NULL;
-        vec_remove(list, 0);
+        VEC_REMOVE(list, 0);
         return;
       }
     }
@@ -3162,13 +3179,13 @@ static void assign_union_initializer(Scope *scope, Vector *list, bool is_root,
 
     const Member *member = consume_member_designator(type, elem);
     if (member == NULL) {
-      if (memidx >= vec_len(body->member_list)) {
+      if (memidx >= VEC_LEN(body->members)) {
         break;
       }
-      member = vec_get(body->member_list, memidx);
+      member = VEC_GET(body->members, memidx);
     }
 
-    MemberInitializer *meminit = vec_get((*init)->members, 0);
+    MemberInitializer *meminit = VEC_GET((*init)->members, 0);
     memidx = member->index + 1;
     meminit->member = member;
     assign_initializer_list(scope, list, false, member->type, range,
@@ -3187,8 +3204,8 @@ static bool consume_array_designator(Type *type, InitElem *elem, int *first,
     return false;
   }
 
-  Designator *desig = vec_remove(elem->designation, 0);
-  if (vec_len(elem->designation) == 0) {
+  Designator *desig = VEC_REMOVE(elem->designation, 0);
+  if (VEC_LEN(elem->designation) == 0) {
     elem->designation = NULL;
   }
 
@@ -3227,14 +3244,14 @@ static bool consume_str_for_array(ParseInit *pinit, Type *type,
 
   if (type->array.len < 0) {
     type->array.len = strlen(str->str->val) + 1;
-    vec_extend((*init)->elements, type->array.len);
+    VEC_EXTEND((*init)->elements, type->array.len, NULL);
   }
 
   for (int i = 0; i < type->array.len; i++) {
     Initializer *eleminit = new_initializer(elem_type);
     eleminit->expr =
         new_expr_num(new_number(elem_type->ty, str->str->val[i]), str->range);
-    vec_set((*init)->elements, i, eleminit);
+    VEC_SET((*init)->elements, i, eleminit);
     if (str->str->val[i] == '\0') {
       break;
     }
@@ -3243,9 +3260,9 @@ static bool consume_str_for_array(ParseInit *pinit, Type *type,
   return true;
 }
 
-static void assign_array_initializer(Scope *scope, Vector *list, bool is_root,
-                                     Type *type, const Range *range,
-                                     Initializer **init) {
+static void assign_array_initializer(Scope *scope, InitElemVector *list,
+                                     bool is_root, Type *type,
+                                     const Range *range, Initializer **init) {
   assert(type->ty == TY_ARRAY);
 
   if (*init == NULL) {
@@ -3255,14 +3272,14 @@ static void assign_array_initializer(Scope *scope, Vector *list, bool is_root,
   bool is_first = true;
 
   int elemidx = 0;
-  while (vec_len(list) > 0) {
-    InitElem *elem = vec_get(list, 0);
+  while (VEC_LEN(list) > 0) {
+    InitElem *elem = VEC_GET(list, 0);
     if (!is_first && !is_root && elem->designation != NULL) {
       break;
     }
     if (!is_root && is_first) {
       if (consume_str_for_array(elem->pinit, type, init)) {
-        vec_remove(list, 0);
+        VEC_REMOVE(list, 0);
         return;
       }
     }
@@ -3276,20 +3293,20 @@ static void assign_array_initializer(Scope *scope, Vector *list, bool is_root,
     }
 
     if (type->array.len < 0) {
-      vec_extend((*init)->elements, last + 1);
+      VEC_EXTEND((*init)->elements, last + 1, NULL);
     }
 
     Initializer *eleminit = NULL;
     assign_initializer_list(scope, list, false, type->array.elem, range,
                             &eleminit);
     for (int i = first; i <= last; i++) {
-      vec_set((*init)->elements, i, eleminit);
+      VEC_SET((*init)->elements, i, eleminit);
     }
     elemidx = last + 1;
   }
 
   if (type->array.len < 0) {
-    type->array.len = vec_len((*init)->elements);
+    type->array.len = VEC_LEN((*init)->elements);
   }
 }
 
@@ -3310,17 +3327,17 @@ static void assign_initializer(Scope *scope, ParseInit *pinit, Type *type,
   assign_initializer_list(scope, pinit->list, true, type, pinit->range, init);
 }
 
-static void assign_initializer_list(Scope *scope, Vector *list, bool is_root,
-                                    Type *type, const Range *range,
-                                    Initializer **init) {
+static void assign_initializer_list(Scope *scope, InitElemVector *list,
+                                    bool is_root, Type *type,
+                                    const Range *range, Initializer **init) {
   if (init == NULL) {
     *init = new_initializer(type);
   }
 
-  if (!is_root && vec_len(list) > 0) {
-    InitElem *elem = vec_get(list, 0);
+  if (!is_root && VEC_LEN(list) > 0) {
+    InitElem *elem = VEC_GET(list, 0);
     if (elem->designation == NULL && elem->pinit->list != NULL) {
-      vec_remove(list, 0);
+      VEC_REMOVE(list, 0);
       assign_initializer(scope, elem->pinit, type, init);
       return;
     }
@@ -3341,22 +3358,22 @@ static void assign_initializer_list(Scope *scope, Vector *list, bool is_root,
   }
 
   if (is_root) {
-    if (vec_len(list) == 0) {
+    if (VEC_LEN(list) == 0) {
       range_error(range, "scalar initializer cannot be empty: %s",
                   format_type(type, false));
     }
-    if (vec_len(list) > 1) {
+    if (VEC_LEN(list) > 1) {
       range_warn(range, "excess elements in scalar initializer: %s",
                  format_type(type, false));
     }
   } else {
-    if (vec_len(list) == 0) {
+    if (VEC_LEN(list) == 0) {
       return;
     }
   }
-  InitElem *elem = vec_remove(list, 0);
+  InitElem *elem = VEC_REMOVE(list, 0);
   if (elem->designation != NULL) {
-    Designator *desig = vec_get(elem->designation, 0);
+    Designator *desig = VEC_GET(elem->designation, 0);
     range_error(desig->range, "designator in initilizer for scalar type: %s",
                 format_type(type, false));
   }
@@ -3397,10 +3414,10 @@ static Stmt *statement(TokenIterator *ts, Scope *scope) {
     Expr *cond = expression(ts, scope);
     ts_expect(ts, ')');
     Stmt *stmt = new_stmt_switch(cond, NULL, start->range);
-    vec_push(scope->func_ctxt->switches, stmt);
+    VEC_PUSH(scope->func_ctxt->switches, stmt);
     stmt->body = statement(ts, scope);
     stmt->range = range_join(stmt->range, stmt->body->range);
-    vec_pop(scope->func_ctxt->switches);
+    VEC_POP(scope->func_ctxt->switches);
     return stmt;
   }
   case TK_CASE: {
@@ -3410,11 +3427,11 @@ static Stmt *statement(TokenIterator *ts, Scope *scope) {
     Stmt *body = statement(ts, scope);
     Stmt *stmt =
         new_stmt_case(num, body, range_join(start->range, body->range));
-    if (vec_len(scope->func_ctxt->switches) <= 0) {
+    if (VEC_LEN(scope->func_ctxt->switches) <= 0) {
       range_error(stmt->range, "switch文中でない箇所にcase文があります");
     }
-    Stmt *switch_stmt = vec_last(scope->func_ctxt->switches);
-    vec_push(switch_stmt->cases, stmt);
+    Stmt *switch_stmt = VEC_LAST(scope->func_ctxt->switches);
+    VEC_PUSH(switch_stmt->cases, stmt);
     return stmt;
   }
   case TK_DEFAULT: {
@@ -3422,10 +3439,10 @@ static Stmt *statement(TokenIterator *ts, Scope *scope) {
     ts_expect(ts, ':');
     Stmt *body = statement(ts, scope);
     Stmt *stmt = new_stmt_default(body, range_join(start->range, body->range));
-    if (vec_len(scope->func_ctxt->switches) <= 0) {
+    if (VEC_LEN(scope->func_ctxt->switches) <= 0) {
       range_error(stmt->range, "switch文中でない箇所にcase文があります");
     }
-    Stmt *switch_expr = vec_last(scope->func_ctxt->switches);
+    Stmt *switch_expr = VEC_LAST(scope->func_ctxt->switches);
     switch_expr->default_case = stmt;
     return stmt;
   }
@@ -3456,11 +3473,11 @@ static Stmt *statement(TokenIterator *ts, Scope *scope) {
     ts_expect(ts, '(');
     if (!ts_consume(ts, ';')) {
       if (token_is_declaration_specifiers(inner, ts_peek(ts))) {
-        Vector *svar_decl = NULL;
+        StackVarDeclVector *svar_decl = NULL;
         const Range *svar_range = NULL;
-        Vector *def_list = declaration(ts, inner);
-        for (int i = 0; i < vec_len(def_list); i++) {
-          VarDef *def = vec_get(def_list, i);
+        VarDefVector *def_list = declaration(ts, inner);
+        for (int i = 0; i < VEC_LEN(def_list); i++) {
+          VarDef *def = VEC_GET(def_list, i);
           switch (def->type) {
           case DEF_FUNC:
             range_error(def->name->range, "関数内で関数は定義できません");
@@ -3469,7 +3486,7 @@ static Stmt *statement(TokenIterator *ts, Scope *scope) {
             range_error(def->name->range, "ローカル変数ではありません");
           case DEF_STACK_VAR: {
             if (svar_decl == NULL) {
-              svar_decl = new_vector();
+              svar_decl = NEW_VECTOR(StackVarDeclVector);
               svar_range = def->stack_var->range;
             } else {
               svar_range = range_join(svar_range, def->stack_var->range);
@@ -3477,7 +3494,7 @@ static Stmt *statement(TokenIterator *ts, Scope *scope) {
             StackVarDecl *decl = NEW(StackVarDecl);
             decl->stack_var = def->stack_var;
             decl->init = def->init;
-            vec_push(svar_decl, decl);
+            VEC_PUSH(svar_decl, decl);
             break;
           }
           }
@@ -3557,27 +3574,27 @@ static Stmt *compound_statement(TokenIterator *ts, Scope *scope) {
   Token *start = ts_expect(ts, '{');
 
   const Range *range = start->range;
-  Vector *stmts = new_vector();
+  StmtVector *stmts = NEW_VECTOR(StmtVector);
   while (!ts_consume(ts, '}')) {
     Token *token = ts_peek(ts);
     if ((token->ty != TK_IDENT || ts_peek_ahead(ts, 1)->ty != ':') &&
         (token_is_declaration_specifiers(scope, token))) {
 
-      Vector *svar_decl = NULL;
+      StackVarDeclVector *svar_decl = NULL;
       const Range *svar_range = NULL;
-      Vector *def_list = declaration(ts, scope);
-      for (int i = 0; i < vec_len(def_list); i++) {
-        VarDef *def = vec_get(def_list, i);
+      VarDefVector *def_list = declaration(ts, scope);
+      for (int i = 0; i < VEC_LEN(def_list); i++) {
+        VarDef *def = VEC_GET(def_list, i);
         switch (def->type) {
         case DEF_FUNC:
           range_error(def->name->range, "関数内で関数は定義できません");
         case DEF_GLOBAL_VAR:
           def->global_var->init = def->init;
-          vec_push(scope->global_ctxt->gvar_list, def->global_var);
+          VEC_PUSH(scope->global_ctxt->gvar_list, def->global_var);
           break;
         case DEF_STACK_VAR: {
           if (svar_decl == NULL) {
-            svar_decl = new_vector();
+            svar_decl = NEW_VECTOR(StackVarDeclVector);
             svar_range = def->stack_var->range;
           } else {
             svar_range = range_join(svar_range, def->stack_var->range);
@@ -3585,7 +3602,7 @@ static Stmt *compound_statement(TokenIterator *ts, Scope *scope) {
           StackVarDecl *decl = NEW(StackVarDecl);
           decl->stack_var = def->stack_var;
           decl->init = def->init;
-          vec_push(svar_decl, decl);
+          VEC_PUSH(svar_decl, decl);
           break;
         }
         }
@@ -3593,14 +3610,14 @@ static Stmt *compound_statement(TokenIterator *ts, Scope *scope) {
 
       if (svar_decl != NULL) {
         Stmt *s = new_stmt_decl(svar_decl, svar_range);
-        vec_push(stmts, s);
+        VEC_PUSH(stmts, s);
       }
       continue;
     }
 
     Stmt *s = statement(ts, scope);
     range = range_join(range, s->range);
-    vec_push(stmts, s);
+    VEC_PUSH(stmts, s);
   }
   return new_stmt_compound(stmts, range);
 }
@@ -3611,9 +3628,9 @@ static Function *function_definition(TokenIterator *ts, Scope *global_scope,
                                      FunctionSpecifier fs, const Range *start) {
   FuncCtxt *fcx = new_func_ctxt(name, type);
   Scope *scope = new_func_scope(global_scope, fcx);
-  if (type->func.param != NULL) {
-    for (int i = 0; i < vec_len(type->func.param); i++) {
-      Param *param = vec_get(type->func.param, i);
+  if (type->func.params != NULL) {
+    for (int i = 0; i < VEC_LEN(type->func.params); i++) {
+      Param *param = VEC_GET(type->func.params, i);
       param->stack_var =
           register_stack_var(scope, param->name, param->type, param->range);
     }
@@ -3654,18 +3671,18 @@ static TranslationUnit *translation_unit(const Reader *reader,
   Map *gvar_map = new_map();
 
   while (ts_peek(ts)->ty != TK_EOF) {
-    Vector *def_list = declaration(ts, scope);
-    for (int i = 0; i < vec_len(def_list); i++) {
-      VarDef *def = vec_get(def_list, i);
+    VarDefVector *def_list = declaration(ts, scope);
+    for (int i = 0; i < VEC_LEN(def_list); i++) {
+      VarDef *def = VEC_GET(def_list, i);
       switch (def->type) {
       case DEF_FUNC:
-        vec_push(gcx->func_list, def->func);
+        VEC_PUSH(gcx->func_list, def->func);
         break;
       case DEF_GLOBAL_VAR: {
         GlobalVar *prev_def = map_get(gvar_map, def->name->ident);
         if (prev_def == NULL) {
           def->global_var->init = def->init;
-          vec_push(gcx->gvar_list, def->global_var);
+          VEC_PUSH(gcx->gvar_list, def->global_var);
           map_put(gvar_map, def->name->ident, def->global_var);
         } else {
           if (def->init != NULL) {

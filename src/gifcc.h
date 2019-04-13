@@ -19,6 +19,7 @@ typedef struct Vector Vector;
 typedef struct Set Set;
 typedef struct Map Map;
 typedef struct String String;
+typedef DEFINE_VECTOR(StrVector, const char *) StrVector;
 
 // トークンの型を表す値
 enum {
@@ -227,6 +228,7 @@ typedef struct {
   const char *str;
   Number char_val;
 } Token;
+typedef DEFINE_VECTOR(TokenVector, Token *) TokenVector;
 
 typedef enum {
   // primary expression
@@ -334,16 +336,21 @@ typedef struct FunctionSpecifier {
   bool is_noreturn;
 } FunctionSpecifier;
 
+typedef struct Member Member;
+typedef DEFINE_VECTOR(MemberVector, Member *) MemberVector;
+
 typedef struct StructBody {
   int struct_id;
   Map *member_name_map;
-  Vector *member_list;
+  MemberVector *members;
   int member_size;
   int member_align;
   bool has_flex_array;
 } StructBody;
 
 typedef struct Type Type;
+typedef struct Param Param;
+typedef DEFINE_VECTOR(ParamVector, Param *) ParamVector;
 typedef struct Type {
   type_t ty;
   TypeQualifier qualifier;
@@ -361,7 +368,7 @@ typedef struct Type {
     // TY_FUNC
     struct {
       Type *ret;
-      Vector *param;
+      ParamVector *params;
       bool has_varargs;
     } func;
 
@@ -376,14 +383,18 @@ typedef struct Type {
 } Type;
 
 typedef struct Expr Expr;
+typedef struct Initializer Initializer;
+typedef struct MemberInitializer MemberInitializer;
+typedef DEFINE_VECTOR(MemberInitializerVector,
+                      MemberInitializer *) MemberInitializerVector;
+typedef DEFINE_VECTOR(InitializerVector, Initializer *) InitializerVector;
 typedef struct Initializer {
   Type *type;
-  Vector *members;
-  Vector *elements;
+  MemberInitializerVector *members;
+  InitializerVector *elements;
   Expr *expr;
 } Initializer;
 
-typedef struct Member Member;
 typedef struct MemberInitializer {
   const Member *member;
   Initializer *init;
@@ -395,6 +406,7 @@ typedef struct StackVar {
   Type *type;
   const Range *range;
 } StackVar;
+typedef DEFINE_VECTOR(StackVarVector, StackVar *) StackVarVector;
 
 typedef struct GlobalVar {
   const char *name;
@@ -403,6 +415,7 @@ typedef struct GlobalVar {
   StorageClassSpecifier storage_class;
   Initializer *init;
 } GlobalVar;
+typedef DEFINE_VECTOR(GlobalVarVector, GlobalVar *) GlobalVarVector;
 
 typedef struct Param {
   Token *name;
@@ -415,10 +428,12 @@ typedef struct StringLiteral {
   const char *name;
   const char *val;
 } StringLiteral;
+typedef DEFINE_VECTOR(StringLiteralVector, StringLiteral *) StringLiteralVector;
 
+typedef DEFINE_VECTOR(ExprVector, Expr *) ExprVector;
 typedef struct Scope Scope;
 typedef Expr *builtin_func_handler_t(Scope *scope, Expr *callee,
-                                     Vector *argument, const Range *range);
+                                     ExprVector *argument, const Range *range);
 
 typedef struct Stmt Stmt;
 typedef struct Expr {
@@ -455,19 +470,19 @@ typedef struct Expr {
     // EX_CALL
     struct {
       Expr *callee;
-      Vector *argument;
+      ExprVector *arguments;
     } call;
 
     // EX_DOT
     struct {
       Expr *operand;
-      Vector *members;
+      MemberVector *members;
     } dot;
 
     // EX_ARROW
     struct {
       Expr *operand;
-      Vector *members;
+      MemberVector *members;
     } arrow;
 
     // EX_COND
@@ -479,7 +494,7 @@ typedef struct Expr {
 
     // EX_COMMA
     struct {
-      Vector *exprs;
+      ExprVector *exprs;
     } comma;
 
     // EX_STMT
@@ -531,6 +546,9 @@ typedef struct {
   Initializer *init;
 } StackVarDecl;
 
+typedef struct Stmt Stmt;
+typedef DEFINE_VECTOR(StmtVector, Stmt *) StmtVector;
+typedef DEFINE_VECTOR(StackVarDeclVector, StackVarDecl *) StackVarDeclVector;
 typedef struct Stmt {
   stmt_t ty;
   Type *val_type;
@@ -556,7 +574,7 @@ typedef struct Stmt {
   struct Stmt *body;
 
   // ST_SWITCH
-  Vector *cases;
+  StmtVector *cases;
   struct Stmt *default_case;
 
   // ST_EXPR:   <expr>;
@@ -567,10 +585,10 @@ typedef struct Stmt {
   struct Number case_val;
 
   // ST_COMPOUND
-  Vector *stmts;
+  StmtVector *stmts;
 
   // ST_DECL
-  Vector *decl;
+  StackVarDeclVector *decl;
 } Stmt;
 
 typedef struct Member {
@@ -586,15 +604,17 @@ typedef struct Function {
   const Range *range;
   StorageClassSpecifier storage_class;
   FunctionSpecifier func;
-  Vector *var_list;
+  StackVarVector *var_list;
   Map *label_map;
   Stmt *body;
 } Function;
 
+typedef DEFINE_VECTOR(FunctionVector, Function *) FunctionVector;
+
 typedef struct TranslationUnit {
-  Vector *func_list;
-  Vector *gvar_list;
-  Vector *str_list;
+  FunctionVector *func_list;
+  GlobalVarVector *gvar_list;
+  StringLiteralVector *str_list;
 } TranslationUnit;
 
 typedef struct Reader Reader;
@@ -815,7 +835,7 @@ Type *to_unqualified(Type *type);
 Type *new_type_ptr(Type *base_type, TypeQualifier tq);
 Type *new_type_array(Type *base_type, Number len, TypeQualifier tq);
 Type *new_type_unsized_array(Type *base_type, TypeQualifier tq);
-Type *new_type_func(Type *ret_type, Vector *func_param, bool has_varargs,
+Type *new_type_func(Type *ret_type, ParamVector *func_param, bool has_varargs,
                     TypeQualifier tq);
 Type *new_type_struct(type_t ty, const char *tag, TypeQualifier tq);
 Type *new_type_opaque_struct(type_t ty, const char *tag, TypeQualifier tq);
@@ -859,10 +879,10 @@ static inline char *get_label(Function *func, const char *name) {
   return map_get(func->label_map, name);
 }
 
-static inline int get_members_offset(Vector *members) {
+static inline int get_members_offset(MemberVector *members) {
   int offset = 0;
-  for (int i = 0; i < vec_len(members); i++) {
-    Member *member = vec_get(members, i);
+  for (int i = 0; i < VEC_LEN(members); i++) {
+    Member *member = VEC_GET(members, i);
     offset += member->offset;
   }
   return offset;
