@@ -14,7 +14,7 @@ STAGE3_ASMS=$(patsubst src/%.c,$(OUTDIR)/stage3/%.s,$(SRCS))
 STAGE3_OBJS=$(patsubst src/%.c,$(OUTDIR)/stage3/%.o,$(SRCS))
 
 STAGE1_CC=$(CC)
-STAGE1_CFLAGS=-Wall -Wextra -std=c11 -g3 -D_POSIX_C_SOURCE=201809L -MMD -fdiagnostics-color
+STAGE1_CFLAGS=-Wall -Wextra -g3 -D_POSIX_C_SOURCE=201809L -MMD -fdiagnostics-color
 STAGE1_GIFCC=target/stage1/gifcc
 
 STAGE2_CC=$(STAGE1_GIFCC)
