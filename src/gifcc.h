@@ -2,6 +2,7 @@
 #define GIFCC_H
 
 #include "include_path.h"
+#include "vector.h"
 
 #include <assert.h>
 #include <stdbool.h>
