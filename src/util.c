@@ -2,6 +2,15 @@
 #include <ctype.h>
 #include <stdarg.h>
 
+// djb2 hash algorithm
+uint64_t str2hash(const char *str) {
+  uint64_t hash = 5381;
+  for (int i = 0; str[i] != '\0'; i++) {
+    hash = ((hash << 5) + hash) + str[i];
+  }
+  return hash;
+}
+
 char *format_string_literal(const char *str) {
   String *buf = new_string();
   str_push(buf, '"');

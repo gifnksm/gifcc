@@ -54,19 +54,53 @@ static void test_vector(void) {
 static void test_map(void) {
   Map *map = new_map();
   expect(__LINE__, 0, (intptr_t)map_get(map, "foo"));
+  expect(__LINE__, 0, map_size(map));
 
   map_put(map, "foo", (void *)2);
   expect(__LINE__, 2, (intptr_t)map_get(map, "foo"));
+  expect(__LINE__, 1, map_size(map));
+  map_put(map, "foo", (void *)2);
+  expect(__LINE__, 2, (intptr_t)map_get(map, "foo"));
+  expect(__LINE__, 1, map_size(map));
 
   map_put(map, "bar", (void *)4);
   expect(__LINE__, 4, (intptr_t)map_get(map, "bar"));
+  expect(__LINE__, 2, map_size(map));
 
   map_put(map, "foo", (void *)6);
   expect(__LINE__, 6, (intptr_t)map_get(map, "foo"));
+  expect(__LINE__, 2, map_size(map));
+}
+
+static void test_set(void) {
+  Set *set = new_set();
+  expect(__LINE__, 0, set_contains(set, "foo"));
+  expect(__LINE__, 0, set_size(set));
+
+  set_insert(set, "foo");
+  expect(__LINE__, 1, set_contains(set, "foo"));
+  expect(__LINE__, 1, set_size(set));
+  set_insert(set, "foo");
+  expect(__LINE__, 1, set_contains(set, "foo"));
+  expect(__LINE__, 1, set_size(set));
+
+  set_insert(set, "bar");
+  expect(__LINE__, 1, set_contains(set, "foo"));
+  expect(__LINE__, 1, set_contains(set, "bar"));
+  expect(__LINE__, 2, set_size(set));
+
+  Set *set2 = new_set();
+  set_insert(set2, "foo");
+  set_insert(set2, "baz");
+
+  Set *set3 = set_intersection(set, set2);
+  expect(__LINE__, 1, set_contains(set3, "foo"));
+  expect(__LINE__, 1, set_size(set3));
 }
 
 void runtest(void) {
   test_vector();
   test_map();
+  test_set();
   printf("OK\n");
 }

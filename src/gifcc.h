@@ -690,6 +690,7 @@ FILE *open_output_file(const char *filename);
 void complete_output_file(void);
 
 // util.c
+uint64_t str2hash(const char *str);
 char *format_string_literal(const char *str);
 char *__attribute__((format(printf, 1, 2))) format(const char *fmt, ...);
 
