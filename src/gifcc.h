@@ -20,7 +20,6 @@ typedef struct Set Set;
 typedef struct Map Map;
 typedef struct String String;
 typedef struct IntVector IntVector;
-typedef struct CharVector CharVector;
 
 // トークンの型を表す値
 enum {
@@ -653,13 +652,6 @@ int int_vec_len(const IntVector *vec);
 int int_vec_get(const IntVector *vec, int n);
 void int_vec_push(IntVector *vec, int elem);
 int int_vec_remove(IntVector *vec, int n);
-
-// char_vector.c
-CharVector *new_char_vector(void);
-int char_vec_len(const CharVector *vec);
-Char char_vec_get(const CharVector *vec, int n);
-void char_vec_push(CharVector *vec, Char elem);
-Char char_vec_remove(CharVector *vec, int n);
 
 // string.c
 String *new_string(void);
