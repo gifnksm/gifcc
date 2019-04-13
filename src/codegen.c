@@ -18,6 +18,8 @@ typedef enum {
   ARG_CLASS_X87,
 } arg_class_t;
 
+typedef DEFINE_VECTOR(ArgClassVector, int) ArgClassVector;
+
 typedef struct {
   int size;
   char suffix;
@@ -192,7 +194,7 @@ static void emit_assign(Type *type, const Range *range, Expr *dest, Expr *src);
 static void emit_expr(Expr *expr);
 static arg_class_t classify_arg_type(const Type *type, const Range *range,
                                      int *num_int, int *num_sse);
-static IntVector *classify_arg(const Vector *args, int int_reg_idx);
+static ArgClassVector *classify_arg(const Vector *args, int int_reg_idx);
 static void emit_expr_num(Expr *expr);
 static void emit_expr_stack_var(Expr *expr);
 static void emit_expr_global_var(Expr *expr);
@@ -835,14 +837,14 @@ static arg_class_t classify_arg_type(const Type *type, const Range *range,
   range_error(range, "不正な型の引数です: %s", format_type(type, false));
 }
 
-static IntVector *classify_arg(const Vector *args, int int_reg_idx) {
-  IntVector *class = new_int_vector();
+static ArgClassVector *classify_arg(const Vector *args, int int_reg_idx) {
+  ArgClassVector *class = NEW_VECTOR(ArgClassVector);
   int num_int_reg = int_reg_idx;
   int num_sse_reg = 0;
   for (int i = 0; i < vec_len(args); i++) {
     Expr *expr = vec_get(args, i);
-    int_vec_push(class, classify_arg_type(expr->val_type, expr->range,
-                                          &num_int_reg, &num_sse_reg));
+    VEC_PUSH(class, classify_arg_type(expr->val_type, expr->range, &num_int_reg,
+                                      &num_sse_reg));
   }
   return class;
 }
@@ -962,14 +964,15 @@ static void emit_expr_call(Expr *expr) {
     ret_class = ARG_CLASS_INTEGER;
   }
   Vector *arg = expr->call.argument;
-  IntVector *arg_class = arg != NULL ? classify_arg(arg, int_reg_idx) : NULL;
+  ArgClassVector *arg_class =
+      arg != NULL ? classify_arg(arg, int_reg_idx) : NULL;
 
   int arg_size = 0;
   if (arg != NULL && vec_len(arg) > 0) {
     for (int i = vec_len(arg) - 1; i >= 0; i--) {
       Expr *expr = vec_get(arg, i);
       int size = get_val_size(expr->val_type, expr->range);
-      arg_class_t class = int_vec_get(arg_class, i);
+      arg_class_t class = VEC_GET(arg_class, i);
       if (class == ARG_CLASS_MEMORY || class == ARG_CLASS_X87) {
         arg_size += align(size, 8);
       }
@@ -986,14 +989,14 @@ static void emit_expr_call(Expr *expr) {
   if (arg != NULL && vec_len(arg) > 0) {
     // メモリ渡しする引数をスタックに積む
     for (int i = vec_len(arg) - 1; i >= 0; i--) {
-      arg_class_t class = int_vec_get(arg_class, i);
+      arg_class_t class = VEC_GET(arg_class, i);
       if (class == ARG_CLASS_MEMORY || class == ARG_CLASS_X87) {
         emit_expr(vec_get(arg, i));
       }
     }
     // レジスタ渡しする引数をスタックに積む
     for (int i = vec_len(arg) - 1; i >= 0; i--) {
-      arg_class_t class = int_vec_get(arg_class, i);
+      arg_class_t class = VEC_GET(arg_class, i);
       switch (class) {
       case ARG_CLASS_X87:
       case ARG_CLASS_MEMORY:
@@ -1020,7 +1023,7 @@ static void emit_expr_call(Expr *expr) {
       Expr *expr = vec_get(arg, i);
       int size = get_val_size(expr->val_type, expr->range);
 
-      arg_class_t class = int_vec_get(arg_class, i);
+      arg_class_t class = VEC_GET(arg_class, i);
       switch (class) {
       case ARG_CLASS_X87:
       case ARG_CLASS_MEMORY:
@@ -2236,14 +2239,14 @@ static void emit_stmt(Stmt *stmt, bool leave_value) {
   range_error(stmt->range, "不正な文です: %d", stmt->ty);
 }
 
-static IntVector *classify_param(const Vector *params, int int_reg_idx) {
-  IntVector *class = new_int_vector();
+static ArgClassVector *classify_param(const Vector *params, int int_reg_idx) {
+  ArgClassVector *class = NEW_VECTOR(ArgClassVector);
   int num_int_reg = int_reg_idx;
   int num_sse_reg = 0;
   for (int i = 0; i < vec_len(params); i++) {
     Param *param = vec_get(params, i);
-    int_vec_push(class, classify_arg_type(param->type, param->range,
-                                          &num_int_reg, &num_sse_reg));
+    VEC_PUSH(class, classify_arg_type(param->type, param->range, &num_int_reg,
+                                      &num_sse_reg));
   }
   return class;
 }
@@ -2334,13 +2337,13 @@ static void emit_func(Function *func) {
 
   // 引数をスタックへコピー
   if (func->type->func.param != NULL) {
-    IntVector *param_class =
+    ArgClassVector *param_class =
         classify_param(func->type->func.param, int_reg_idx);
     for (int i = 0; i < vec_len(func->type->func.param); i++) {
       Param *param = vec_get(func->type->func.param, i);
       StackVar *var = param->stack_var;
       assert(var != NULL);
-      arg_class_t class = int_vec_get(param_class, i);
+      arg_class_t class = VEC_GET(param_class, i);
       int size = get_val_size(param->type, param->range);
       int dst_offset = var->offset;
 
