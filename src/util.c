@@ -11,6 +11,24 @@ uint64_t str2hash(const char *str) {
   return hash;
 }
 
+bool is_hex_digit(int c) { return isxdigit(c) != 0; }
+int hex2num(int c) {
+  assert(is_hex_digit(c));
+  if ('0' <= c && c <= '9') {
+    return c - '0';
+  }
+  if ('a' <= c && c <= 'f') {
+    return (c - 'a') + 0xa;
+  }
+  assert('A' <= c && c <= 'F');
+  return (c - 'A') + 0xa;
+}
+bool is_oct_digit(int c) { return '0' <= c && c <= '7'; }
+int oct2num(int c) {
+  assert(is_oct_digit(c));
+  return c - '0';
+}
+
 char *format_string_literal(const char *str) {
   String *buf = new_string();
   str_push(buf, '"');

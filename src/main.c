@@ -681,6 +681,7 @@ int main(int argc, char **argv) {
     }
   }
 
+  ts = phase5_filter(ts);
   ts = phase6_filter(ts);
   ts = phase7_filter(ts);
   if (emit_target & EMIT_TOKEN) {

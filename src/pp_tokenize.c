@@ -62,7 +62,6 @@ static Token *constant(CharIterator *cs);
 static Token *number_constant(CharIterator *cs);
 static Token *character_constant(CharIterator *cs);
 static Token *string_literal(CharIterator *cs);
-static Char c_char(CharIterator *cs);
 
 static void set_predefined_num_macro(const Reader *reader, Map *map, char *name,
                                      const char *num) {
@@ -89,11 +88,12 @@ static Vector *macro_date(PpTokenizer *tokenizer __attribute__((unused))) {
       now = time(NULL);
     }
     localtime_r(&now, &now_tm);
-    strftime(buf, sizeof(buf), "%b %e %Y", &now_tm);
+    strftime(buf, sizeof(buf), "\"%b %e %Y\"", &now_tm);
   }
 
   Vector *rep = new_vector();
-  vec_push(rep, new_token_str(strdup(buf), range_builtin(tokenizer->reader)));
+  vec_push(rep,
+           new_token_pp_str(strdup(buf), range_builtin(tokenizer->reader)));
   return rep;
 }
 
@@ -109,11 +109,12 @@ static Vector *macro_time(PpTokenizer *tokenizer __attribute__((unused))) {
       now = time(NULL);
     }
     localtime_r(&now, &now_tm);
-    strftime(buf, sizeof(buf), "%T", &now_tm);
+    strftime(buf, sizeof(buf), "\"%T\"", &now_tm);
   }
 
   Vector *rep = new_vector();
-  vec_push(rep, new_token_str(strdup(buf), range_builtin(tokenizer->reader)));
+  vec_push(rep,
+           new_token_pp_str(strdup(buf), range_builtin(tokenizer->reader)));
   return rep;
 }
 
@@ -123,7 +124,8 @@ static Vector *macro_file(PpTokenizer *tokenizer) {
   reader_get_position(c.reader, c.start, &filename, NULL, NULL);
 
   Vector *rep = new_vector();
-  vec_push(rep, new_token_str(filename, range_builtin(tokenizer->reader)));
+  vec_push(rep, new_token_pp_str(format("\"%s\"", filename),
+                                 range_builtin(tokenizer->reader)));
   return rep;
 }
 
@@ -305,24 +307,6 @@ static String *read_identifier(CharIterator *cs, const Reader **reader,
   }
 
   return str;
-}
-
-static inline bool is_hex_digit(int c) { return isxdigit(c) != 0; }
-static inline int hex2num(int c) {
-  assert(is_hex_digit(c));
-  if ('0' <= c && c <= '9') {
-    return c - '0';
-  }
-  if ('a' <= c && c <= 'f') {
-    return (c - 'a') + 0xa;
-  }
-  assert('A' <= c && c <= 'F');
-  return (c - 'A') + 0xa;
-}
-static inline bool is_oct_digit(int c) { return '0' <= c && c <= '7'; }
-static inline int oct2num(int c) {
-  assert(is_oct_digit(c));
-  return c - '0';
 }
 
 static bool do_read_token(PpTokenizer *tokenizer, Token **token, bool skip_eol,
@@ -714,6 +698,7 @@ static bool pp_read_if_cond(PpTokenizer *tokenizer) {
   }
 
   TokenIterator *sub_ts = token_iterator_from_vec(tokens);
+  sub_ts = phase5_filter(sub_ts);
   sub_ts = phase6_filter(sub_ts);
   sub_ts = phase7_filter(sub_ts);
   Scope *scope = new_pp_scope(tokenizer->reader);
@@ -886,6 +871,7 @@ static Vector *pp_get_func_arg(Vector *params, Vector *arguments,
 
 static Token *pp_stringize(Vector *arg, const Range *range) {
   String *str = new_string();
+  str_push(str, '"');
   for (int i = 0; i < vec_len(arg); i++) {
     Token *token = vec_get(arg, i);
     if (i == 0) {
@@ -905,9 +891,11 @@ static Token *pp_stringize(Vector *arg, const Range *range) {
     case TK_PP_IDENT:
       str_append(str, token->pp_ident);
       break;
-    case TK_STR:
-    case TK_CHARCONST:
-      str_append(str, reader_get_source(token->range));
+    case TK_PP_CHAR:
+      str_append(str, token->pp_char);
+      break;
+    case TK_PP_STR:
+      str_append(str, token->pp_str);
       break;
     default:
       for (int i = 0; LONG_PUNCT_TOKENS[i].str != NULL; i++) {
@@ -919,8 +907,27 @@ static Token *pp_stringize(Vector *arg, const Range *range) {
       break;
     }
   }
+  str_push(str, '"');
   str_push(str, '\0');
-  return new_token_str(str_get_raw(str), range);
+  return new_token_pp_str(str_get_raw(str), range);
+}
+
+static const char *token_to_str(const Token *token) {
+  if (token->ty <= 255) {
+    return format("%c", token->ty);
+  }
+  if (token->ty == TK_PP_IDENT) {
+    return token->pp_ident;
+  }
+  if (token->ty == TK_PP_NUM) {
+    return token->pp_num;
+  }
+  for (int i = 0; LONG_PUNCT_TOKENS[i].str != NULL; i++) {
+    if (LONG_PUNCT_TOKENS[i].kind == token->ty) {
+      return LONG_PUNCT_TOKENS[i].str;
+    }
+  }
+  range_error(token->range, "結合できないトークンです");
 }
 
 static void pp_glue(Vector *ls, Vector *rs) {
@@ -1258,142 +1265,75 @@ static Token *number_constant(CharIterator *cs) {
 }
 
 static Token *character_constant(CharIterator *cs) {
+  String *s = new_string();
+
   int start;
-  bool is_wide;
   if (cs_consume_str(cs, "L\'", NULL, &start, NULL)) {
-    is_wide = true;
+    str_append(s, "L\'");
   } else if (cs_consume(cs, '\'', NULL, &start, NULL)) {
-    is_wide = false;
+    str_push(s, '\'');
   } else {
     return NULL;
   }
-  Char ch;
-  ch = cs_peek(cs);
-  if (ch.val == '\'' || ch.val == '\0') {
-    reader_error_offset(ch.reader, start, "空の文字リテラルです");
-  }
-  ch = c_char(cs);
-  int end = cs_expect(cs, '\'').end;
 
-  if (is_wide) {
-    return new_token_char(new_number_wchar_t(ch.val),
-                          range_from_reader(ch.reader, start, end));
+  int end;
+  Char ch;
+  while (true) {
+    if (cs_consume(cs, '\\', NULL, NULL, NULL)) {
+      str_push(s, '\\');
+      cs_pop(cs, &ch);
+      str_push(s, ch.val);
+      continue;
+    }
+
+    cs_pop(cs, &ch);
+    if (ch.val == '\0' || ch.val == '\n') {
+      reader_error_offset(ch.reader, ch.start,
+                          "missing terminating ' character");
+    }
+    str_push(s, ch.val);
+    if (ch.val == '\'') {
+      end = ch.end;
+      break;
+    }
   }
-  return new_token_char(new_number_int(ch.val),
-                        range_from_reader(ch.reader, start, end));
+  str_push(s, '\0');
+  return new_token_pp_char(str_get_raw(s),
+                           range_from_reader(ch.reader, start, end));
 }
 
 static Token *string_literal(CharIterator *cs) {
-  const Reader *reader;
+  String *s = new_string();
+
   int start;
-  if (!cs_consume(cs, '"', &reader, &start, NULL)) {
+  if (!cs_consume(cs, '"', NULL, &start, NULL)) {
     return NULL;
   }
+  str_push(s, '"');
 
-  String *str = new_string();
+  int end;
+  Char ch;
   while (true) {
-    Char ch = cs_peek(cs);
-    if (ch.val == '"' || ch.val == '\0') {
+    if (cs_consume(cs, '\\', NULL, NULL, NULL)) {
+      str_push(s, '\\');
+      cs_pop(cs, &ch);
+      str_push(s, ch.val);
+      continue;
+    }
+
+    cs_pop(cs, &ch);
+    if (ch.val == '\0' || ch.val == '\n') {
+      reader_error_offset(ch.reader, ch.start,
+                          "missing terminating '\"' character");
+    }
+    str_push(s, ch.val);
+    if (ch.val == '\"') {
+      end = ch.end;
       break;
     }
-    str_push(str, c_char(cs).val);
   }
-  str_push(str, '\0');
+  str_push(s, '\0');
 
-  int end = cs_expect(cs, '"').end;
-  return new_token_str(str_get_raw(str), range_from_reader(reader, start, end));
-}
-
-static Char c_char(CharIterator *cs) {
-  const Reader *reader;
-  int start;
-
-  if (cs_consume(cs, '\\', &reader, &start, NULL)) {
-    const char ESCAPE_CHARS[] = {'\'', '"', '?', '\\', '\0'};
-    for (int i = 0; ESCAPE_CHARS[i] != '\0'; i++) {
-      int end;
-      if (cs_consume(cs, ESCAPE_CHARS[i], NULL, NULL, &end)) {
-        return (Char){
-            .val = ESCAPE_CHARS[i],
-            .start = start,
-            .end = end,
-            .reader = reader,
-        };
-      }
-    }
-
-    typedef struct {
-      char raw;
-      char meta;
-    } MetaChar;
-
-    MetaChar META_CHARS[] = {
-        {'a', '\a'}, {'b', '\b'}, {'f', '\f'}, {'n', '\n'},
-        {'r', '\r'}, {'t', '\t'}, {'v', '\v'}, {'\0', '\0'},
-    };
-    for (int i = 0; META_CHARS[i].raw != '\0'; i++) {
-      int end;
-      if (cs_consume(cs, META_CHARS[i].raw, NULL, NULL, &end)) {
-        return (Char){
-            .val = META_CHARS[i].meta,
-            .start = start,
-            .end = end,
-            .reader = reader,
-        };
-      }
-    }
-
-    if (cs_consume(cs, 'x', NULL, NULL, NULL)) {
-      int end = cs_peek(cs).end;
-      if (!is_hex_digit(cs_peek(cs).val)) {
-        reader_error_offset(reader, start, "空の16進文字リテラルです");
-      }
-      int val = 0;
-      while (true) {
-        Char ch = cs_peek(cs);
-        if (!is_hex_digit(ch.val)) {
-          break;
-        }
-        val = val * 0x10 + hex2num(ch.val);
-        cs_succ(cs);
-      }
-      return (Char){
-          .val = val,
-          .start = start,
-          .end = end,
-          .reader = reader,
-      };
-    }
-
-    if (is_oct_digit(cs_peek(cs).val)) {
-      int val = 0;
-      int end = cs_peek(cs).end;
-      while (true) {
-        Char ch = cs_peek(cs);
-        if (!is_oct_digit(ch.val)) {
-          break;
-        }
-        end = ch.end;
-        val = val * 010 + oct2num(ch.val);
-        cs_succ(cs);
-      }
-      return (Char){
-          .val = val,
-          .start = start,
-          .end = end,
-          .reader = reader,
-      };
-    }
-
-    reader_error_offset(reader, start, "不明なエスケープシーケンスです");
-  }
-
-  if (cs_consume(cs, '\n', NULL, NULL, NULL)) {
-    reader_error_here(reader,
-                      "改行文字を文字リテラル中に含めることはできません");
-  }
-
-  Char ch;
-  cs_pop(cs, &ch);
-  return ch;
+  return new_token_pp_str(str_get_raw(s),
+                          range_from_reader(ch.reader, start, end));
 }

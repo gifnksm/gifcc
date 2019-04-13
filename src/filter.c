@@ -3,10 +3,13 @@
 #include <string.h>
 #include <strings.h>
 
+static void convert_char(Token *token);
+static void convert_str(Token *token);
 static void convert_number(Token *token);
 static void convert_ident(Token *token);
 static Number read_float(Token *token);
 static Number read_integer(Token *token);
+static int c_char(const char **input, const Range *range);
 
 static bool phase2_next(void *arg, Char *output) {
   CharIterator *cs = arg;
@@ -20,6 +23,30 @@ static bool phase2_next(void *arg, Char *output) {
 
 CharIterator *phase2_filter(CharIterator *cs) {
   return new_char_iterator(phase2_next, cs);
+}
+
+static bool phase5_next(void *arg, Vector *output) {
+  TokenIterator *ts = arg;
+
+  // Translation phase #5
+  // * converts escape sequence in character constants and string literals
+  //   to character set
+  Token *token = ts_pop(ts);
+  if (token == NULL) {
+    return false;
+  }
+  if (token->ty == TK_PP_CHAR) {
+    convert_char(token);
+  }
+  if (token->ty == TK_PP_STR) {
+    convert_str(token);
+  }
+  vec_push(output, token);
+  return true;
+}
+
+TokenIterator *phase5_filter(TokenIterator *ts) {
+  return new_token_iterator(phase5_next, ts);
 }
 
 static bool phase6_next(void *arg, Vector *output) {
@@ -70,6 +97,62 @@ static bool phase7_next(void *arg, Vector *output) {
 
 TokenIterator *phase7_filter(TokenIterator *ts) {
   return new_token_iterator(phase7_next, ts);
+}
+
+static void convert_char(Token *token) {
+  assert(token->ty == TK_PP_CHAR);
+
+  char *input = strdup(token->pp_char);
+  bool is_wide;
+  if (input[0] == 'L') {
+    is_wide = true;
+    input++;
+  } else {
+    is_wide = false;
+  }
+  range_assert(token->range, input[0] == '\'', "invalid character constant");
+  input++;
+  int len = strlen(input) - 1;
+  range_assert(token->range, input[len] == '\'', "invalid character constant");
+  input[len] = '\0';
+
+  token->ty = TK_CHARCONST;
+  token->pp_char = NULL;
+  if (is_wide) {
+    const char *i = input;
+    int c = c_char(&i, token->range);
+    token->char_val = new_number_wchar_t(c);
+  } else {
+    const char *i = input;
+    int c = c_char(&i, token->range);
+    if (*i != '\0') {
+      range_warn(token->range, "multi-character character constatn: %s", i);
+    }
+    token->char_val = new_number_int(c);
+  }
+}
+
+static void convert_str(Token *token) {
+  assert(token->ty == TK_PP_STR);
+
+  char *input = strdup(token->pp_str);
+  range_assert(token->range, input[0] == '"', "invalid string literal");
+  input++;
+  int len = strlen(input) - 1;
+  range_assert(token->range, input[len] == '"', "invalid string literal");
+  input[len] = '\0';
+
+  String *str = new_string();
+  const char *i = input;
+  while (*i != '\0') {
+    int c = c_char(&i, token->range);
+    str_push(str, c);
+  }
+  str_push(str, '\0');
+
+  token->ty = TK_STR;
+  token->pp_str = NULL;
+  token->str = str_get_raw(str);
 }
 
 static void convert_number(Token *token) {
@@ -202,4 +285,71 @@ static Number read_integer(Token *token) {
   }
 
   return new_number(ty, val);
+}
+
+static int c_char(const char **input, const Range *range) {
+  const char *cs = *input;
+
+  if (*cs != '\\') {
+    *input = cs + 1;
+    return *cs;
+  }
+  cs++;
+
+  const char ESCAPE_CHARS[] = {'\'', '"', '?', '\\', '\0'};
+  for (int i = 0; ESCAPE_CHARS[i] != '\0'; i++) {
+    if (*cs == ESCAPE_CHARS[i]) {
+      *input = cs + 1;
+      return ESCAPE_CHARS[i];
+    }
+  }
+
+  typedef struct {
+    char raw;
+    char meta;
+  } MetaChar;
+
+  MetaChar META_CHARS[] = {
+      {'a', '\a'}, {'b', '\b'}, {'f', '\f'}, {'n', '\n'},
+      {'r', '\r'}, {'t', '\t'}, {'v', '\v'}, {'\0', '\0'},
+  };
+  for (int i = 0; META_CHARS[i].raw != '\0'; i++) {
+    if (*cs == META_CHARS[i].raw) {
+      *input = cs + 1;
+      return META_CHARS[i].meta;
+    }
+  }
+
+  if (*cs == 'x') {
+    cs++;
+    if (!is_hex_digit(*cs)) {
+      range_error(range, "\\x used with no following hex digits");
+    }
+    int val = 0;
+    while (true) {
+      if (!is_hex_digit(*cs)) {
+        break;
+      }
+      val = val * 0x10 + hex2num(*cs);
+      cs++;
+    }
+    *input = cs;
+    return val;
+  }
+
+  if (is_oct_digit(*cs)) {
+    int val = 0;
+    while (true) {
+      if (!is_oct_digit(*cs)) {
+        break;
+      }
+
+      val = val * 010 + oct2num(*cs);
+      cs++;
+    }
+    *input = cs;
+    return val;
+  }
+
+  range_error(range, "unknown escape sequence '\\%c'", *cs);
 }
