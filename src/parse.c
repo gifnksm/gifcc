@@ -793,6 +793,7 @@ static bool token_is_type_specifier(Scope *scope, Token *token) {
   case TK_STRUCT:
   case TK_UNION:
   case TK_ENUM:
+  case TK_TYPEOF:
     return true;
   case TK_IDENT:
     return get_typedef(scope, token->ident) != NULL;
@@ -926,6 +927,23 @@ static bool consume_type_specifier(Scope *scope, TokenIterator *ts,
       }
       tspec->signedness = SIGN_UNSIGNED;
       tspec->range = token->range;
+      consumed = true;
+      continue;
+    }
+
+    // NonStandard/GNU: referring to a type with typeof
+    if ((token = ts_consume(ts, TK_TYPEOF)) != NULL) {
+      ts_expect(ts, '(');
+      Type *type;
+      if (token_is_type_name(scope, ts_peek_ahead(ts, 0))) {
+        type = type_name(scope, ts);
+      } else {
+        Expr *expr = unary_expression(ts, scope);
+        type = expr->val_type;
+      }
+      Token *end = ts_expect(ts, ')');
+      tspec->concrete_type = type;
+      tspec->range = range_join(token->range, end->range);
       consumed = true;
       continue;
     }

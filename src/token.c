@@ -38,6 +38,7 @@ const LongToken LONG_IDENT_TOKENS[] = {
     {"inline", TK_INLINE},
     {"_Noreturn", TK_NORETURN},
     {"_Generic", TK_GENERIC},
+    {"typeof", TK_TYPEOF},
     {NULL, '\0'},
 };
 const LongToken LONG_PUNCT_TOKENS[] = {

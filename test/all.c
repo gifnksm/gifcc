@@ -2693,6 +2693,29 @@ static void test88(void) {
   CHECK_INT(0, (bool)NULL);
 }
 
+#define TEST89_PTR(T) typeof(T *)
+#define TEST89_ARRAY(T, N) typeof(T[N])
+
+static void test89(void) {
+  bool x = 3;
+  typeof(x) y = 8;
+  CHECK_INT(1, y);
+
+  CHECK_INT(1, (typeof(x))8);
+
+  typeof(typeof(char *)[4]) s1 = {"abc", "def", "ghi", "jkl"};
+  CHECK_INT(0, strcmp(s1[0], "abc"));
+  CHECK_INT(0, strcmp(s1[1], "def"));
+  CHECK_INT(0, strcmp(s1[2], "ghi"));
+  CHECK_INT(0, strcmp(s1[3], "jkl"));
+
+  TEST89_ARRAY(TEST89_PTR(char), 4) s2 = {"abc", "def", "ghi", "jkl"};
+  CHECK_INT(0, strcmp(s2[0], "abc"));
+  CHECK_INT(0, strcmp(s2[1], "def"));
+  CHECK_INT(0, strcmp(s2[2], "ghi"));
+  CHECK_INT(0, strcmp(s2[3], "jkl"));
+}
+
 int main(int argc, char *argv[]) {
   Test test_list[] = {
       TEST(test01), TEST(test02), TEST(test03), TEST(test04), TEST(test05),
@@ -2712,7 +2735,7 @@ int main(int argc, char *argv[]) {
       TEST(test71), TEST(test72), TEST(test73), TEST(test74), TEST(test75),
       TEST(test76), TEST(test77), TEST(test78), TEST(test79), TEST(test80),
       TEST(test81), TEST(test82), TEST(test83), TEST(test84), TEST(test85),
-      TEST(test86), TEST(test87), TEST(test88), {NULL, NULL},
+      TEST(test86), TEST(test87), TEST(test88), TEST(test89), {NULL, NULL},
   };
   RUN_TEST(argc, argv, test_list);
 }
