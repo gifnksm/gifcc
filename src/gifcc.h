@@ -88,6 +88,7 @@ enum {
   TK_INLINE,        // `inline`
   TK_NORETURN,      // `_Noreturn`
   TK_GENERIC,       // `_Generic`
+  TK_TYPEOF,        // `typeof`
   TK_EOF,           // End of File
 };
 
