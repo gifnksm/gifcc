@@ -1,6 +1,8 @@
 #include "gifcc.h"
 #include <string.h>
 
+typedef DEFINE_VECTOR(CharVector, Char) CharVector;
+
 typedef struct CharIterator {
   cs_next_fn_t *next;
   void *arg;
@@ -15,7 +17,7 @@ CharIterator *new_char_iterator(cs_next_fn_t *next, void *arg) {
   *cs = (CharIterator){
       .next = next,
       .arg = arg,
-      .chars = new_char_vector(),
+      .chars = NEW_VECTOR(CharVector),
       .last = {.val = '\n'},
   };
   return cs;
@@ -23,12 +25,12 @@ CharIterator *new_char_iterator(cs_next_fn_t *next, void *arg) {
 
 bool cs_pop(CharIterator *cs, Char *output) {
   Char ch;
-  if (char_vec_len(cs->chars) == 0) {
+  if (VEC_LEN(cs->chars) == 0) {
     if (!cs->next(cs->arg, &ch)) {
       return false;
     }
   } else {
-    ch = char_vec_remove(cs->chars, 0);
+    ch = VEC_REMOVE(cs->chars, 0);
   }
   cs->last = ch;
   if (output != NULL) {
@@ -41,14 +43,14 @@ void cs_succ(CharIterator *cs) { cs_pop(cs, NULL); }
 
 Char cs_peek(CharIterator *cs) { return cs_peek_ahead(cs, 0); }
 Char cs_peek_ahead(CharIterator *cs, int n) {
-  while (char_vec_len(cs->chars) <= n) {
+  while (VEC_LEN(cs->chars) <= n) {
     Char ch;
     if (!cs->next(cs->arg, &ch)) {
       return CHAR_INVALID;
     }
-    char_vec_push(cs->chars, ch);
+    VEC_PUSH(cs->chars, ch);
   }
-  return char_vec_get(cs->chars, n);
+  return VEC_GET(cs->chars, n);
 }
 
 bool cs_consume(CharIterator *cs, char ch, const Reader **reader, int *start,
