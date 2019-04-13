@@ -178,8 +178,8 @@ static asm_syntax_t asm_syntax;
 static FILE *output_fp = NULL;
 static char *epilogue_label = NULL;
 static Function *func_ctxt = NULL;
-static Vector *break_labels = NULL;
-static Vector *continue_labels = NULL;
+static StrVector *break_labels = NULL;
+static StrVector *continue_labels = NULL;
 static int stack_pos = INVALID_STACK_POS;
 static int retval_pos = INVALID_STACK_POS;
 static int reg_save_area_pos = INVALID_STACK_POS;
@@ -194,7 +194,7 @@ static void emit_assign(Type *type, const Range *range, Expr *dest, Expr *src);
 static void emit_expr(Expr *expr);
 static arg_class_t classify_arg_type(const Type *type, const Range *range,
                                      int *num_int, int *num_sse);
-static ArgClassVector *classify_arg(const Vector *args, int int_reg_idx);
+static ArgClassVector *classify_arg(const ExprVector *args, int int_reg_idx);
 static void emit_expr_num(Expr *expr);
 static void emit_expr_stack_var(Expr *expr);
 static void emit_expr_global_var(Expr *expr);
@@ -229,8 +229,8 @@ static void emit_svar_zero(StackVar *svar);
 static void emit_svar_init(StackVar *svar, int offset, Initializer *init,
                            const Range *range);
 static void emit_gvar_init(Initializer *init, const Range *range,
-                           Vector *gvar_list);
-static void emit_gvar(GlobalVar *gvar, Vector *gvar_list);
+                           GlobalVarVector *gvar_list);
+static void emit_gvar(GlobalVar *gvar, GlobalVarVector *gvar_list);
 
 static bool is_int_reg_type(Type *type) {
   return is_ptr_type(type) || is_integer_type(type);
@@ -619,10 +619,10 @@ static void emit_lval(Expr *expr, Operand reg) {
     return;
   }
   if (expr->ty == EX_COMMA) {
-    Vector *exprs = expr->comma.exprs;
-    for (int i = 0; i < vec_len(exprs); i++) {
-      Expr *op = vec_get(exprs, i);
-      if (i != vec_len(exprs) - 1) {
+    ExprVector *exprs = expr->comma.exprs;
+    for (int i = 0; i < VEC_LEN(exprs); i++) {
+      Expr *op = VEC_GET(exprs, i);
+      if (i != VEC_LEN(exprs) - 1) {
         emit_expr(op);
         int op_size = get_val_size(op->val_type, op->range);
         emit_stack_add(align(op_size, 8));
@@ -837,12 +837,12 @@ static arg_class_t classify_arg_type(const Type *type, const Range *range,
   range_error(range, "不正な型の引数です: %s", format_type(type, false));
 }
 
-static ArgClassVector *classify_arg(const Vector *args, int int_reg_idx) {
+static ArgClassVector *classify_arg(const ExprVector *args, int int_reg_idx) {
   ArgClassVector *class = NEW_VECTOR(ArgClassVector);
   int num_int_reg = int_reg_idx;
   int num_sse_reg = 0;
-  for (int i = 0; i < vec_len(args); i++) {
-    Expr *expr = vec_get(args, i);
+  for (int i = 0; i < VEC_LEN(args); i++) {
+    Expr *expr = VEC_GET(args, i);
     VEC_PUSH(class, classify_arg_type(expr->val_type, expr->range, &num_int_reg,
                                       &num_sse_reg));
   }
@@ -963,14 +963,14 @@ static void emit_expr_call(Expr *expr) {
     ret_size = 0;
     ret_class = ARG_CLASS_INTEGER;
   }
-  Vector *arg = expr->call.argument;
+  ExprVector *args = expr->call.arguments;
   ArgClassVector *arg_class =
-      arg != NULL ? classify_arg(arg, int_reg_idx) : NULL;
+      args != NULL ? classify_arg(args, int_reg_idx) : NULL;
 
   int arg_size = 0;
-  if (arg != NULL && vec_len(arg) > 0) {
-    for (int i = vec_len(arg) - 1; i >= 0; i--) {
-      Expr *expr = vec_get(arg, i);
+  if (args != NULL && VEC_LEN(args) > 0) {
+    for (int i = VEC_LEN(args) - 1; i >= 0; i--) {
+      Expr *expr = VEC_GET(args, i);
       int size = get_val_size(expr->val_type, expr->range);
       arg_class_t class = VEC_GET(arg_class, i);
       if (class == ARG_CLASS_MEMORY || class == ARG_CLASS_X87) {
@@ -986,26 +986,26 @@ static void emit_expr_call(Expr *expr) {
     emit_stack_sub(8);
   }
 
-  if (arg != NULL && vec_len(arg) > 0) {
+  if (args != NULL && VEC_LEN(args) > 0) {
     // メモリ渡しする引数をスタックに積む
-    for (int i = vec_len(arg) - 1; i >= 0; i--) {
+    for (int i = VEC_LEN(args) - 1; i >= 0; i--) {
       arg_class_t class = VEC_GET(arg_class, i);
       if (class == ARG_CLASS_MEMORY || class == ARG_CLASS_X87) {
-        emit_expr(vec_get(arg, i));
+        emit_expr(VEC_GET(args, i));
       }
     }
     // レジスタ渡しする引数をスタックに積む
-    for (int i = vec_len(arg) - 1; i >= 0; i--) {
+    for (int i = VEC_LEN(args) - 1; i >= 0; i--) {
       arg_class_t class = VEC_GET(arg_class, i);
       switch (class) {
       case ARG_CLASS_X87:
       case ARG_CLASS_MEMORY:
         continue;
       case ARG_CLASS_INTEGER:
-        emit_expr(vec_get(arg, i));
+        emit_expr(VEC_GET(args, i));
         continue;
       case ARG_CLASS_SSE:
-        emit_expr(vec_get(arg, i));
+        emit_expr(VEC_GET(args, i));
         continue;
       }
       assert(false);
@@ -1017,10 +1017,10 @@ static void emit_expr_call(Expr *expr) {
     emit_pop(Reg8.r10);
   }
 
-  if (arg && vec_len(arg) > 0) {
+  if (args != NULL && VEC_LEN(args) > 0) {
     // レジスタ渡しする引数をpopしレジスタにセットする
-    for (int i = 0; i < vec_len(arg); i++) {
-      Expr *expr = vec_get(arg, i);
+    for (int i = 0; i < VEC_LEN(args); i++) {
+      Expr *expr = VEC_GET(args, i);
       int size = get_val_size(expr->val_type, expr->range);
 
       arg_class_t class = VEC_GET(arg_class, i);
@@ -1041,7 +1041,7 @@ static void emit_expr_call(Expr *expr) {
         assert(size <= 8);
         emit_pop_xmm(sse_reg_idx);
         sse_reg_idx++;
-        if (functype->func.has_varargs && i >= vec_len(functype->func.param)) {
+        if (functype->func.has_varargs && i >= VEC_LEN(functype->func.params)) {
           num_vararg_sse_reg++;
         }
         continue;
@@ -1144,11 +1144,11 @@ static void emit_expr_arrow(Expr *expr) {
 static void emit_expr_comma(Expr *expr) {
   assert(expr->ty == EX_COMMA);
 
-  Vector *exprs = expr->comma.exprs;
-  for (int i = 0; i < vec_len(exprs); i++) {
-    Expr *op = vec_get(exprs, i);
+  ExprVector *exprs = expr->comma.exprs;
+  for (int i = 0; i < VEC_LEN(exprs); i++) {
+    Expr *op = VEC_GET(exprs, i);
     emit_expr(op);
-    if (i != vec_len(exprs) - 1) {
+    if (i != VEC_LEN(exprs) - 1) {
       int op_size = get_val_size(op->val_type, op->range);
       emit_stack_add(align(op_size, 8));
       continue;
@@ -1984,9 +1984,9 @@ static void emit_stmt(Stmt *stmt, bool leave_value) {
   }
   case ST_COMPOUND: {
     int base_stack_pos = stack_pos;
-    for (int i = 0; i < vec_len(stmt->stmts); i++) {
-      bool is_last = i == vec_len(stmt->stmts) - 1;
-      emit_stmt(vec_get(stmt->stmts, i), leave_value && is_last);
+    for (int i = 0; i < VEC_LEN(stmt->stmts); i++) {
+      bool is_last = i == VEC_LEN(stmt->stmts) - 1;
+      emit_stmt(VEC_GET(stmt->stmts, i), leave_value && is_last);
     }
     if (stmt->val_type->ty == TY_VOID || !leave_value) {
       range_assert(stmt->range, stack_pos == base_stack_pos,
@@ -1999,8 +1999,8 @@ static void emit_stmt(Stmt *stmt, bool leave_value) {
     return;
   }
   case ST_DECL: {
-    for (int i = 0; i < vec_len(stmt->decl); i++) {
-      StackVarDecl *decl = vec_get(stmt->decl, i);
+    for (int i = 0; i < VEC_LEN(stmt->decl); i++) {
+      StackVarDecl *decl = VEC_GET(stmt->decl, i);
       StackVar *svar = decl->stack_var;
       Initializer *init = decl->init;
       emit_svar_zero(svar);
@@ -2039,8 +2039,8 @@ static void emit_stmt(Stmt *stmt, bool leave_value) {
     char *end_label = make_label("switch.end");
     const Reg *r = get_int_reg(stmt->cond->val_type, stmt->cond->range);
     emit_expr(stmt->cond);
-    for (int i = 0; i < vec_len(stmt->cases); i++) {
-      Stmt *case_stmt = vec_get(stmt->cases, i);
+    for (int i = 0; i < VEC_LEN(stmt->cases); i++) {
+      Stmt *case_stmt = VEC_GET(stmt->cases, i);
       assert(case_stmt->ty == ST_CASE);
       emit_op2("mov", Reg8.rax, imm_num(case_stmt->case_val));
       emit_pop(Reg8.rdi);
@@ -2058,9 +2058,9 @@ static void emit_stmt(Stmt *stmt, bool leave_value) {
     } else {
       emit_op1("jmp", imm_symbol(end_label));
     }
-    vec_push(break_labels, end_label);
+    VEC_PUSH(break_labels, end_label);
     emit_stmt(stmt->body, false);
-    vec_pop(break_labels);
+    VEC_POP(break_labels);
     range_assert(stmt->range, stack_pos == base_stack_pos,
                  "stack position mismatch");
     emit_label(end_label);
@@ -2087,13 +2087,13 @@ static void emit_stmt(Stmt *stmt, bool leave_value) {
     emit_op2("cmp", r->rax, imm_int(0));
     emit_op1("je", imm_symbol(end_label));
 
-    vec_push(break_labels, end_label);
-    vec_push(continue_labels, cond_label);
+    VEC_PUSH(break_labels, end_label);
+    VEC_PUSH(continue_labels, cond_label);
     emit_stmt(stmt->body, false);
     range_assert(stmt->range, stack_pos == base_stack_pos,
                  "stack position mismatch");
-    vec_pop(break_labels);
-    vec_pop(continue_labels);
+    VEC_POP(break_labels);
+    VEC_POP(continue_labels);
 
     emit_op1("jmp", imm_symbol(cond_label));
     emit_label(end_label);
@@ -2106,13 +2106,13 @@ static void emit_stmt(Stmt *stmt, bool leave_value) {
     char *end_label = make_label("do_while.end");
     emit_label(loop_label);
 
-    vec_push(break_labels, end_label);
-    vec_push(continue_labels, cond_label);
+    VEC_PUSH(break_labels, end_label);
+    VEC_PUSH(continue_labels, cond_label);
     emit_stmt(stmt->body, false);
     range_assert(stmt->range, stack_pos == base_stack_pos,
                  "stack position mismatch");
-    vec_pop(break_labels);
-    vec_pop(continue_labels);
+    VEC_POP(break_labels);
+    VEC_POP(continue_labels);
 
     emit_label(cond_label);
     const Reg *r = get_int_reg(stmt->cond->val_type, stmt->cond->range);
@@ -2148,11 +2148,11 @@ static void emit_stmt(Stmt *stmt, bool leave_value) {
                    "stack position mismatch");
     }
 
-    vec_push(break_labels, end_label);
-    vec_push(continue_labels, inc_label);
+    VEC_PUSH(break_labels, end_label);
+    VEC_PUSH(continue_labels, inc_label);
     emit_stmt(stmt->body, false);
-    vec_pop(break_labels);
-    vec_pop(continue_labels);
+    VEC_POP(break_labels);
+    VEC_POP(continue_labels);
     range_assert(stmt->range, stack_pos == base_stack_pos,
                  "stack position mismatch");
 
@@ -2176,18 +2176,18 @@ static void emit_stmt(Stmt *stmt, bool leave_value) {
     return;
   }
   case ST_BREAK: {
-    if (vec_len(break_labels) <= 0) {
+    if (VEC_LEN(break_labels) <= 0) {
       range_error(stmt->range,
                   "ループでもswitch文中でもない箇所にbreakがあります");
     }
-    emit_op1("jmp", imm_symbol(vec_last(break_labels)));
+    emit_op1("jmp", imm_symbol(VEC_LAST(break_labels)));
     return;
   }
   case ST_CONTINUE: {
-    if (vec_len(continue_labels) <= 0) {
+    if (VEC_LEN(continue_labels) <= 0) {
       range_error(stmt->range, "ループ中でない箇所にcontinueがあります");
     }
-    emit_op1("jmp", imm_symbol(vec_last(continue_labels)));
+    emit_op1("jmp", imm_symbol(VEC_LAST(continue_labels)));
     return;
   }
   case ST_RETURN: {
@@ -2239,12 +2239,13 @@ static void emit_stmt(Stmt *stmt, bool leave_value) {
   range_error(stmt->range, "不正な文です: %d", stmt->ty);
 }
 
-static ArgClassVector *classify_param(const Vector *params, int int_reg_idx) {
+static ArgClassVector *classify_param(const ParamVector *params,
+                                      int int_reg_idx) {
   ArgClassVector *class = NEW_VECTOR(ArgClassVector);
   int num_int_reg = int_reg_idx;
   int num_sse_reg = 0;
-  for (int i = 0; i < vec_len(params); i++) {
-    Param *param = vec_get(params, i);
+  for (int i = 0; i < VEC_LEN(params); i++) {
+    Param *param = VEC_GET(params, i);
     VEC_PUSH(class, classify_arg_type(param->type, param->range, &num_int_reg,
                                       &num_sse_reg));
   }
@@ -2254,8 +2255,8 @@ static ArgClassVector *classify_param(const Vector *params, int int_reg_idx) {
 static void emit_func(Function *func) {
   epilogue_label = make_label("func.epi");
   func_ctxt = func;
-  break_labels = new_vector();
-  continue_labels = new_vector();
+  break_labels = NEW_VECTOR(StrVector);
+  continue_labels = NEW_VECTOR(StrVector);
   retval_pos = INVALID_STACK_POS;
   reg_save_area_pos = INVALID_STACK_POS;
   reg_gp_offset = INVALID_STACK_POS;
@@ -2273,14 +2274,14 @@ static void emit_func(Function *func) {
 
   // ローカル変数の領域確保
   int stack_size = 0;
-  for (int i = 0; i < vec_len(func->var_list); i++) {
-    StackVar *svar = vec_get(func->var_list, i);
+  for (int i = 0; i < VEC_LEN(func->var_list); i++) {
+    StackVar *svar = VEC_GET(func->var_list, i);
     stack_size = align(stack_size, get_val_align(svar->type, svar->range));
     svar->offset = stack_size;
     stack_size += get_val_size(svar->type, svar->range);
   }
-  for (int i = 0; i < vec_len(func->var_list); i++) {
-    StackVar *svar = vec_get(func->var_list, i);
+  for (int i = 0; i < VEC_LEN(func->var_list); i++) {
+    StackVar *svar = VEC_GET(func->var_list, i);
     svar->offset = align(stack_size, 16) - svar->offset;
 
     const char *filename;
@@ -2336,11 +2337,11 @@ static void emit_func(Function *func) {
   }
 
   // 引数をスタックへコピー
-  if (func->type->func.param != NULL) {
+  if (func->type->func.params != NULL) {
     ArgClassVector *param_class =
-        classify_param(func->type->func.param, int_reg_idx);
-    for (int i = 0; i < vec_len(func->type->func.param); i++) {
-      Param *param = vec_get(func->type->func.param, i);
+        classify_param(func->type->func.params, int_reg_idx);
+    for (int i = 0; i < VEC_LEN(func->type->func.params); i++) {
+      Param *param = VEC_GET(func->type->func.params, i);
       StackVar *var = param->stack_var;
       assert(var != NULL);
       arg_class_t class = VEC_GET(param_class, i);
@@ -2485,10 +2486,10 @@ static void emit_svar_init(StackVar *svar, int offset, Initializer *init,
 
   if (init->members != NULL) {
     assert(init->type->ty == TY_STRUCT || init->type->ty == TY_UNION);
-    assert(vec_len(init->members) <= 1 || init->type->ty == TY_STRUCT);
+    assert(VEC_LEN(init->members) <= 1 || init->type->ty == TY_STRUCT);
 
-    for (int i = 0; i < vec_len(init->members); i++) {
-      MemberInitializer *meminit = vec_get(init->members, i);
+    for (int i = 0; i < VEC_LEN(init->members); i++) {
+      MemberInitializer *meminit = VEC_GET(init->members, i);
       const Member *member = meminit->member;
       emit_svar_init(svar, offset + member->offset, meminit->init, range);
     }
@@ -2498,8 +2499,8 @@ static void emit_svar_init(StackVar *svar, int offset, Initializer *init,
   if (init->elements != NULL) {
     assert(init->type->ty == TY_ARRAY);
     int size = get_val_size(init->type->array.elem, range);
-    for (int i = 0; i < vec_len(init->elements); i++) {
-      Initializer *meminit = vec_get(init->elements, i);
+    for (int i = 0; i < VEC_LEN(init->elements); i++) {
+      Initializer *meminit = VEC_GET(init->elements, i);
       emit_svar_init(svar, offset + i * size, meminit, range);
     }
     return;
@@ -2509,7 +2510,7 @@ static void emit_svar_init(StackVar *svar, int offset, Initializer *init,
 }
 
 static void emit_gvar_init(Initializer *init, const Range *range,
-                           Vector *gvar_list) {
+                           GlobalVarVector *gvar_list) {
   if (init->expr != NULL) {
     Expr *expr = init->expr;
     if (expr->ty == EX_NUM) {
@@ -2549,7 +2550,7 @@ static void emit_gvar_init(Initializer *init, const Range *range,
         gvar->range = compound->range;
         gvar->storage_class.is_static = true;
         gvar->init = compound->compound.init;
-        vec_push(gvar_list, gvar);
+        VEC_PUSH(gvar_list, gvar);
 
         emit("  .quad %s", gvar->name);
         return;
@@ -2571,16 +2572,16 @@ static void emit_gvar_init(Initializer *init, const Range *range,
 
   if (init->members != NULL) {
     assert(init->type->ty == TY_STRUCT || init->type->ty == TY_UNION);
-    assert(vec_len(init->members) <= 1 || init->type->ty == TY_STRUCT);
+    assert(VEC_LEN(init->members) <= 1 || init->type->ty == TY_STRUCT);
     StructBody *body = init->type->struct_body;
     int offset = 0;
-    for (int i = 0; i < vec_len(init->members); i++) {
-      MemberInitializer *meminit = vec_get(init->members, i);
+    for (int i = 0; i < VEC_LEN(init->members); i++) {
+      MemberInitializer *meminit = VEC_GET(init->members, i);
       if (meminit->init == NULL) {
         continue;
       }
       if (i > 0) {
-        Member *member = vec_get(body->member_list, i);
+        Member *member = VEC_GET(body->members, i);
         if (offset < member->offset) {
           emit("  .zero %d", member->offset - offset);
           offset = member->offset;
@@ -2601,8 +2602,8 @@ static void emit_gvar_init(Initializer *init, const Range *range,
 
   if (init->elements != NULL) {
     assert(init->type->ty == TY_ARRAY);
-    for (int i = 0; i < vec_len(init->elements); i++) {
-      Initializer *meminit = vec_get(init->elements, i);
+    for (int i = 0; i < VEC_LEN(init->elements); i++) {
+      Initializer *meminit = VEC_GET(init->elements, i);
       if (meminit == NULL) {
         emit("  .zero %d", get_val_size(init->type->array.elem, range));
         continue;
@@ -2615,7 +2616,7 @@ static void emit_gvar_init(Initializer *init, const Range *range,
   assert(false);
 }
 
-static void emit_gvar(GlobalVar *gvar, Vector *gvar_list) {
+static void emit_gvar(GlobalVar *gvar, GlobalVarVector *gvar_list) {
   Initializer *init = gvar->init;
   if (init == NULL) {
     emit(".bss");
@@ -2649,15 +2650,15 @@ void gen(FILE *fp, TranslationUnit *tunit, asm_syntax_t syntax) {
   }
 
   emit(".text");
-  for (int i = 0; i < vec_len(tunit->func_list); i++) {
-    emit_func(vec_get(tunit->func_list, i));
+  for (int i = 0; i < VEC_LEN(tunit->func_list); i++) {
+    emit_func(VEC_GET(tunit->func_list, i));
   }
-  while (vec_len(tunit->gvar_list) > 0) {
-    GlobalVar *gvar = vec_remove(tunit->gvar_list, 0);
+  while (VEC_LEN(tunit->gvar_list) > 0) {
+    GlobalVar *gvar = VEC_REMOVE(tunit->gvar_list, 0);
     emit_gvar(gvar, tunit->gvar_list);
   }
   emit(".section .rodata");
-  for (int i = 0; i < vec_len(tunit->str_list); i++) {
-    emit_str(vec_get(tunit->str_list, i));
+  for (int i = 0; i < VEC_LEN(tunit->str_list); i++) {
+    emit_str(VEC_GET(tunit->str_list, i));
   }
 }

@@ -53,7 +53,7 @@ void _vec_reserve(void **data, int *cap, size_t elemsize, int len);
     VEC_RESERVE((vec), VEC_LEN(vec) + 1);                                      \
     (vec)->vec_data[(vec)->vec_len++] = elem;                                  \
   }
-#define VEC_POP(vec, elem)                                                     \
+#define VEC_POP(vec)                                                           \
   ({                                                                           \
     assert(VEC_LEN(vec) > 0);                                                  \
     (vec)->vec_data[--(vec)->vec_len];                                         \

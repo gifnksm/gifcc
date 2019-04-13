@@ -143,9 +143,9 @@ static void dump_expr(FILE *fp, Expr *expr, int level) {
   case EX_CALL:
     dump_expr_start(fp, expr, level, "CALL");
     dump_expr(fp, expr->call.callee, level + 1);
-    if (expr->call.argument != NULL) {
-      for (int i = 0; i < vec_len(expr->call.argument); i++) {
-        dump_expr(fp, vec_get(expr->call.argument, i), level + 1);
+    if (expr->call.arguments != NULL) {
+      for (int i = 0; i < VEC_LEN(expr->call.arguments); i++) {
+        dump_expr(fp, VEC_GET(expr->call.arguments, i), level + 1);
       }
     }
     dump_expr_end(fp, expr, level);
@@ -158,8 +158,8 @@ static void dump_expr(FILE *fp, Expr *expr, int level) {
     return;
   case EX_DOT: {
     String *s = new_string();
-    for (int i = 0; i < vec_len(expr->dot.members); i++) {
-      Member *m = vec_get(expr->dot.members, i);
+    for (int i = 0; i < VEC_LEN(expr->dot.members); i++) {
+      Member *m = VEC_GET(expr->dot.members, i);
       if (i > 0) {
         str_push(s, '.');
       }
@@ -173,8 +173,8 @@ static void dump_expr(FILE *fp, Expr *expr, int level) {
   }
   case EX_ARROW: {
     String *s = new_string();
-    for (int i = 0; i < vec_len(expr->arrow.members); i++) {
-      Member *m = vec_get(expr->arrow.members, i);
+    for (int i = 0; i < VEC_LEN(expr->arrow.members); i++) {
+      Member *m = VEC_GET(expr->arrow.members, i);
       if (i > 0) {
         str_push(s, '.');
       }
@@ -277,8 +277,8 @@ static void dump_expr(FILE *fp, Expr *expr, int level) {
     return;
   case EX_COMMA:
     dump_expr_start(fp, expr, level, "[,]");
-    for (int i = 0; i < vec_len(expr->comma.exprs); i++) {
-      Expr *op = vec_get(expr->comma.exprs, i);
+    for (int i = 0; i < VEC_LEN(expr->comma.exprs); i++) {
+      Expr *op = VEC_GET(expr->comma.exprs, i);
       dump_expr(fp, op, level + 1);
     }
     dump_expr_end(fp, expr, level);
@@ -364,15 +364,15 @@ static void dump_stmt(FILE *fp, Stmt *stmt, int level) {
     return;
   case ST_COMPOUND:
     dump_stmt_start(fp, stmt, level, "COMPOUND");
-    for (int i = 0; i < vec_len(stmt->stmts); i++) {
-      dump_stmt(fp, vec_get(stmt->stmts, i), level + 1);
+    for (int i = 0; i < VEC_LEN(stmt->stmts); i++) {
+      dump_stmt(fp, VEC_GET(stmt->stmts, i), level + 1);
     }
     dump_stmt_end(fp, stmt, level);
     return;
   case ST_DECL:
     dump_stmt_start(fp, stmt, level, "DECL");
-    for (int i = 0; i < vec_len(stmt->decl); i++) {
-      StackVarDecl *decl = vec_get(stmt->decl, i);
+    for (int i = 0; i < VEC_LEN(stmt->decl); i++) {
+      StackVarDecl *decl = VEC_GET(stmt->decl, i);
       StackVar *svar = decl->stack_var;
       Initializer *init = decl->init;
       dump_range_start(fp, svar->range);
@@ -496,8 +496,8 @@ static void dump_init(FILE *fp, Initializer *init, const Range *range,
     dump_indent(fp, level);
     dump_type(fp, init->type);
     fprintf(fp, "{\n");
-    for (int i = 0; i < vec_len(init->members); i++) {
-      MemberInitializer *meminit = vec_get(init->members, i);
+    for (int i = 0; i < VEC_LEN(init->members); i++) {
+      MemberInitializer *meminit = VEC_GET(init->members, i);
       dump_range_start(fp, range);
       dump_indent(fp, level + 1);
       fprintf(fp, ".%s = \n", meminit->member->name);
@@ -513,8 +513,8 @@ static void dump_init(FILE *fp, Initializer *init, const Range *range,
     dump_indent(fp, level);
     dump_type(fp, init->type);
     fprintf(fp, "{\n");
-    for (int i = 0; i < vec_len(init->elements); i++) {
-      Initializer *val = vec_get(init->elements, i);
+    for (int i = 0; i < VEC_LEN(init->elements); i++) {
+      Initializer *val = VEC_GET(init->elements, i);
       dump_range_start(fp, range);
       dump_indent(fp, level + 1);
       fprintf(fp, "[%d] = \n", i);
@@ -530,8 +530,8 @@ static void dump_init(FILE *fp, Initializer *init, const Range *range,
 
 static void output_ast(FILE *fp, TranslationUnit *tunit) {
   int level = 0;
-  for (int i = 0; i < vec_len(tunit->func_list); i++) {
-    Function *func = vec_get(tunit->func_list, i);
+  for (int i = 0; i < VEC_LEN(tunit->func_list); i++) {
+    Function *func = VEC_GET(tunit->func_list, i);
 
     dump_range_start(fp, func->range);
     dump_indent(fp, level);
@@ -543,8 +543,8 @@ static void output_ast(FILE *fp, TranslationUnit *tunit) {
     dump_indent(fp, level);
     fprintf(fp, "}\n");
   }
-  for (int i = 0; i < vec_len(tunit->gvar_list); i++) {
-    GlobalVar *gvar = vec_get(tunit->gvar_list, i);
+  for (int i = 0; i < VEC_LEN(tunit->gvar_list); i++) {
+    GlobalVar *gvar = VEC_GET(tunit->gvar_list, i);
 
     dump_range_start(fp, gvar->range);
     dump_indent(fp, level);
