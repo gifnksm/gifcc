@@ -25,9 +25,11 @@ typedef DEFINE_VECTOR(StrVector, const char *) StrVector;
 enum {
   TK_PP_NUM = 256,  // Preprocessor number
   TK_PP_IDENT,      // Preprocessor identifiers
+  TK_PP_CHAR,       // Preprocessor character constant
+  TK_PP_STR,        // preprocessor string literal
   TK_NUM,           // Number
   TK_IDENT,         // identifiers
-  TK_CHARCONST,     // char constant
+  TK_CHARCONST,     // character constant
   TK_STR,           // string literal
   TK_EQEQ,          // `==`
   TK_NOTEQ,         // `!=`
@@ -223,6 +225,8 @@ typedef struct {
   Set *pp_hideset;
   const char *pp_num;
   const char *pp_ident;
+  const char *pp_char;
+  const char *pp_str;
   const char *ident;
   Number num;
   const char *str;
@@ -696,6 +700,10 @@ void complete_output_file(void);
 
 // util.c
 uint64_t str2hash(const char *str);
+bool is_hex_digit(int c);
+int hex2num(int c);
+bool is_oct_digit(int c);
+int oct2num(int c);
 char *format_string_literal(const char *str);
 char *__attribute__((format(printf, 1, 2))) format(const char *fmt, ...);
 
@@ -721,7 +729,6 @@ int reader_get_offset(const Reader *reader);
 void reader_set_position(Reader *reader, const int *line, const char *filename);
 void reader_get_position(const Reader *reader, int offset,
                          const char **filename, int *line, int *column);
-char *reader_get_source(const Range *range);
 #define reader_error_here(reader, fmt, ...)                                    \
   reader_error_offset_raw(reader, reader_get_offset(reader), __FILE__,         \
                           __LINE__, (fmt), ##__VA_ARGS__)
@@ -800,10 +807,9 @@ Token *new_token(int ty, const Range *range);
 Token *token_clone(Token *token, const Range *expanded_from);
 Token *new_token_pp_num(const char *num, const Range *range);
 Token *new_token_pp_ident(const char *ident, const Range *range);
-Token *new_token_char(Number val, const Range *range);
-Token *new_token_str(const char *str, const Range *range);
+Token *new_token_pp_char(const char *ch, const Range *range);
+Token *new_token_pp_str(const char *str, const Range *range);
 const char *token_kind_to_str(int kind);
-const char *token_to_str(const Token *token);
 TokenIterator *new_token_dumper(TokenIterator *ts, FILE *fp);
 
 // token_iter.c
@@ -823,6 +829,7 @@ TokenIterator *new_pp_tokenizer(CharIterator *cs, Reader *reader);
 
 // filter.c
 CharIterator *phase2_filter(CharIterator *cs);
+TokenIterator *phase5_filter(TokenIterator *ts);
 TokenIterator *phase6_filter(TokenIterator *ts);
 TokenIterator *phase7_filter(TokenIterator *ts);
 

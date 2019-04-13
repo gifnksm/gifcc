@@ -79,20 +79,19 @@ Token *new_token_pp_num(const char *num, const Range *range) {
 
 Token *new_token_pp_ident(const char *ident, const Range *range) {
   Token *token = new_token(TK_PP_IDENT, range);
-
   token->pp_ident = ident;
   return token;
 }
 
-Token *new_token_char(Number val, const Range *range) {
-  Token *token = new_token(TK_CHARCONST, range);
-  token->char_val = val;
+Token *new_token_pp_char(const char *ch, const Range *range) {
+  Token *token = new_token(TK_PP_CHAR, range);
+  token->pp_char = ch;
   return token;
 }
 
-Token *new_token_str(const char *str, const Range *range) {
-  Token *token = new_token(TK_STR, range);
-  token->str = str;
+Token *new_token_pp_str(const char *str, const Range *range) {
+  Token *token = new_token(TK_PP_STR, range);
+  token->pp_str = str;
   return token;
 }
 
@@ -110,6 +109,10 @@ const char *token_kind_to_str(int kind) {
     return "PP_IDENT";
   case TK_PP_NUM:
     return "PP_NUM";
+  case TK_PP_CHAR:
+    return "PP_CHAR";
+  case TK_PP_STR:
+    return "PP_STR";
   case TK_NUM:
     return "NUM";
   case TK_IDENT:
@@ -136,27 +139,6 @@ const char *token_kind_to_str(int kind) {
   }
 }
 
-const char *token_to_str(const Token *token) {
-  if (token->ty <= 255) {
-    return format("%c", token->ty);
-  }
-  if (token->ty == TK_PP_IDENT) {
-    return token->pp_ident;
-  }
-  if (token->ty == TK_PP_NUM) {
-    return token->pp_num;
-  }
-  if (token->ty == TK_NUM) {
-    return format_number(token->num);
-  }
-  for (int i = 0; LONG_PUNCT_TOKENS[i].str != NULL; i++) {
-    if (LONG_PUNCT_TOKENS[i].kind == token->ty) {
-      return LONG_PUNCT_TOKENS[i].str;
-    }
-  }
-  range_error(token->range, "結合できないトークンです");
-}
-
 static void dump_token(FILE *fp, const Token *token) {
   fprintf(fp, "%s: %-8s ", format_range_start(token->range),
           token_kind_to_str(token->ty));
@@ -166,6 +148,12 @@ static void dump_token(FILE *fp, const Token *token) {
     break;
   case TK_PP_IDENT:
     fprintf(fp, "%s", token->pp_ident);
+    break;
+  case TK_PP_CHAR:
+    fprintf(fp, "%s", token->pp_char);
+    break;
+  case TK_PP_STR:
+    fprintf(fp, "%s", token->pp_str);
     break;
   case TK_NUM:
     fprintf(fp, "%s", format_number(token->num));
