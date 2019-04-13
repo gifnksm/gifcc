@@ -33,11 +33,6 @@ void _vec_reserve(void **data, int *cap, size_t elemsize, int len);
     assert(VEC_LEN(vec) > (n));                                                \
     (vec)->vec_data[n];                                                        \
   })
-#define VEC_RGET(vec, n)                                                       \
-  ({                                                                           \
-    assert(VEC_LEN(vec) > (n));                                                \
-    (vec)->vec_data[VEC_LEN(vec) - 1 - (n)];                                   \
-  })
 
 #define VEC_SET(vec, n, val)                                                   \
   ({                                                                           \
@@ -47,6 +42,7 @@ void _vec_reserve(void **data, int *cap, size_t elemsize, int len);
 
 #define VEC_FIRST(vec) VEC_GET(vec, 0)
 #define VEC_LAST(vec) VEC_GET(vec, VEC_LEN(vec) - 1)
+#define VEC_RGET(vec, n) VEC_GET(vec, VEC_LEN(vec) - n - 1)
 
 #define VEC_PUSH(vec, elem)                                                    \
   {                                                                            \
@@ -63,8 +59,10 @@ void _vec_reserve(void **data, int *cap, size_t elemsize, int len);
   ({                                                                           \
     assert((n) <= VEC_LEN(vec));                                               \
     VEC_RESERVE((vec), VEC_LEN(vec) + 1);                                      \
-    memmove(&(vec)->vec_data[(n) + 1], &(vec)->vec_data[n],                    \
-            (VEC_LEN(vec) - n) * VEC_ELEM_SIZE(vec));                          \
+    if (n < VEC_LEN(vec) - 1) {                                                \
+      memmove(&(vec)->vec_data[(n) + 1], &(vec)->vec_data[n],                  \
+              (VEC_LEN(vec) - n) * VEC_ELEM_SIZE(vec));                        \
+    }                                                                          \
     (vec)->vec_data[n] = (elem);                                               \
     (vec)->vec_len++;                                                          \
   })
@@ -83,15 +81,16 @@ void _vec_reserve(void **data, int *cap, size_t elemsize, int len);
 #define VEC_APPEND(dst, src)                                                   \
   ({                                                                           \
     VEC_RESERVE((dst), VEC_LEN(dst) + VEC_LEN(src));                           \
-    for (int i = 0; i < VEC_LEN(src); i++) {                                   \
-      VEC_PUSH(dst, VEC_GET(src, i));                                          \
-    }                                                                          \
+    memcpy(&(dst)->vec_data[VEC_LEN(dst)], (src)->vec_data,                    \
+           VEC_LEN(src) * VEC_ELEM_SIZE(src));                                 \
+    (dst)->vec_len += VEC_LEN(src);                                            \
   })
 
 #define VEC_EXTEND(vec, len, elem)                                             \
   ({                                                                           \
+    VEC_RESERVE((vec), len);                                                   \
     while (VEC_LEN(vec) < (len)) {                                             \
-      VEC_PUSH((vec), elem);                                                   \
+      (vec)->vec_data[(vec)->vec_len++] = elem;                                \
     }                                                                          \
   })
 
