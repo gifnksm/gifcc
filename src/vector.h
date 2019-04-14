@@ -26,23 +26,35 @@ void _vec_reserve(void **data, int *cap, size_t elemsize, int len);
     cloned;                                                                    \
   })
 
-#define VEC_LEN(vec) (vec)->vec_len
+#define VEC_LEN(vec) ((vec)->vec_len)
+#define VEC_AS_PTR(vec) ((vec)->vec_data)
+#define VEC_BSEARCH(vec, key, compar)                                          \
+  ((typeof(&(vec)->vec_data[0]))bsearch((key), VEC_AS_PTR(vec), VEC_LEN(vec),  \
+                                        VEC_ELEM_SIZE(vec), (compar)))
 
 #define VEC_GET(vec, n)                                                        \
   ({                                                                           \
     assert(VEC_LEN(vec) > (n));                                                \
     (vec)->vec_data[n];                                                        \
   })
-
 #define VEC_SET(vec, n, val)                                                   \
   ({                                                                           \
     assert(VEC_LEN(vec) > (n));                                                \
     (vec)->vec_data[n] = val;                                                  \
   })
+#define VEC_GET_REF(vec, n)                                                    \
+  ({                                                                           \
+    assert(VEC_LEN(vec) > (n));                                                \
+    &(vec)->vec_data[n];                                                       \
+  })
 
 #define VEC_FIRST(vec) VEC_GET(vec, 0)
 #define VEC_LAST(vec) VEC_GET(vec, VEC_LEN(vec) - 1)
 #define VEC_RGET(vec, n) VEC_GET(vec, VEC_LEN(vec) - n - 1)
+
+#define VEC_FIRST_REF(vec) VEC_GET_REF(vec, 0)
+#define VEC_LAST_REF(vec) VEC_GET_REF(vec, VEC_LEN(vec) - 1)
+#define VEC_RGET_REF(vec, n) VEC_GET_REF(vec, VEC_LEN(vec) - n - 1)
 
 #define VEC_PUSH(vec, elem)                                                    \
   {                                                                            \
