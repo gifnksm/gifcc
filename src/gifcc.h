@@ -15,7 +15,6 @@
 #define NEW(type) ((type *)calloc(1, sizeof(type)))
 #define UNUSED __attribute__((unused))
 
-typedef struct Vector Vector;
 typedef struct Set Set;
 typedef struct Map Map;
 typedef struct String String;
@@ -720,24 +719,6 @@ noreturn void error_raw_v(const char *dbg_file, int dbg_line, const char *fmt,
 static inline int align(int n, int s) {
   return (s != 0) ? ((n + (s - 1)) / s) * s : n;
 }
-
-// vector.c
-Vector *new_vector(void);
-Vector *vec_clone(const Vector *vec);
-int vec_len(const Vector *vec);
-void *vec_first(const Vector *vec);
-void *vec_last(const Vector *vec);
-void *vec_get(const Vector *vec, int n);
-void vec_set(Vector *vec, int n, void *val);
-void *vec_rget(const Vector *vec, int n);
-void vec_push(Vector *vec, void *elem);
-void *vec_pop(Vector *vec);
-void vec_insert(Vector *vec, int n, void *elem);
-void *vec_remove(Vector *vec, int n);
-void vec_append(Vector *dst, Vector *src);
-void vec_extend(Vector *vec, int len);
-void vec_reserve(Vector *vec, int len);
-void vec_clear(Vector *vec);
 
 // string.c
 String *new_string(void);

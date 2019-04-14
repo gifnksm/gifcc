@@ -15,88 +15,50 @@ static void expect(int line, intptr_t expected, intptr_t actual) {
 }
 
 static void test_vector(void) {
-  {
-    Vector *vec = new_vector();
-    expect(__LINE__, 0, vec_len(vec));
+  typedef DEFINE_VECTOR(IntVector, int) IntVector;
 
-    for (intptr_t i = 0; i < 100; i++) {
-      vec_push(vec, (void *)i);
-    }
+  IntVector *vec = NEW_VECTOR(IntVector);
+  expect(__LINE__, 0, VEC_LEN(vec));
 
-    expect(__LINE__, 100, vec_len(vec));
-    expect(__LINE__, 0, (intptr_t)vec_get(vec, 0));
-    expect(__LINE__, 50, (intptr_t)vec_get(vec, 50));
-    expect(__LINE__, 99, (intptr_t)vec_get(vec, 99));
-
-    expect(__LINE__, 8, (intptr_t)vec_remove(vec, 8));
-    expect(__LINE__, 99, vec_len(vec));
-    for (intptr_t i = 0; i < 8; i++) {
-      expect(__LINE__, i, (intptr_t)vec_get(vec, i));
-    }
-    for (intptr_t i = 8; i < 99; i++) {
-      expect(__LINE__, i + 1, (intptr_t)vec_get(vec, i));
-    }
-
-    vec_insert(vec, 8, (void *)100);
-    vec_insert(vec, 0, (void *)200);
-    vec_insert(vec, 101, (void *)300);
-    expect(__LINE__, 102, vec_len(vec));
-    expect(__LINE__, 200, (intptr_t)vec_get(vec, 0));
-    for (intptr_t i = 1; i < 9; i++) {
-      expect(__LINE__, i - 1, (intptr_t)vec_get(vec, i));
-    }
-    expect(__LINE__, 100, (intptr_t)vec_get(vec, 9));
-    for (intptr_t i = 10; i < 101; i++) {
-      expect(__LINE__, i - 1, (intptr_t)vec_get(vec, i));
-    }
-    expect(__LINE__, 300, (intptr_t)vec_get(vec, 101));
+  for (int i = 0; i < 100; i++) {
+    VEC_PUSH(vec, i);
   }
-  {
-    typedef DEFINE_VECTOR(IntVector, int) IntVector;
 
-    IntVector *vec = NEW_VECTOR(IntVector);
-    expect(__LINE__, 0, VEC_LEN(vec));
+  expect(__LINE__, 100, VEC_LEN(vec));
+  expect(__LINE__, 0, VEC_GET(vec, 0));
+  expect(__LINE__, 50, VEC_GET(vec, 50));
+  expect(__LINE__, 99, VEC_GET(vec, 99));
+  expect(__LINE__, 99, VEC_RGET(vec, 0));
+  expect(__LINE__, 49, VEC_RGET(vec, 50));
+  expect(__LINE__, 0, VEC_RGET(vec, 99));
 
-    for (int i = 0; i < 100; i++) {
-      VEC_PUSH(vec, i);
-    }
+  IntVector *cloned = VEC_CLONE(vec);
 
-    expect(__LINE__, 100, VEC_LEN(vec));
-    expect(__LINE__, 0, VEC_GET(vec, 0));
-    expect(__LINE__, 50, VEC_GET(vec, 50));
-    expect(__LINE__, 99, VEC_GET(vec, 99));
-    expect(__LINE__, 99, VEC_RGET(vec, 0));
-    expect(__LINE__, 49, VEC_RGET(vec, 50));
-    expect(__LINE__, 0, VEC_RGET(vec, 99));
-
-    IntVector *cloned = VEC_CLONE(vec);
-
-    expect(__LINE__, 8, VEC_REMOVE(vec, 8));
-    expect(__LINE__, 99, VEC_LEN(vec));
-    for (int i = 0; i < 8; i++) {
-      expect(__LINE__, i, VEC_GET(vec, i));
-    }
-    for (int i = 8; i < 99; i++) {
-      expect(__LINE__, i + 1, VEC_GET(vec, i));
-    }
-    for (int i = 0; i < 100; i++) {
-      expect(__LINE__, i, VEC_GET(cloned, i));
-    }
-
-    VEC_INSERT(vec, 8, 100);
-    VEC_INSERT(vec, 0, 200);
-    VEC_INSERT(vec, 101, 300);
-    expect(__LINE__, 102, VEC_LEN(vec));
-    expect(__LINE__, 200, VEC_GET(vec, 0));
-    for (int i = 1; i < 9; i++) {
-      expect(__LINE__, i - 1, VEC_GET(vec, i));
-    }
-    expect(__LINE__, 100, VEC_GET(vec, 9));
-    for (int i = 10; i < 101; i++) {
-      expect(__LINE__, i - 1, VEC_GET(vec, i));
-    }
-    expect(__LINE__, 300, VEC_GET(vec, 101));
+  expect(__LINE__, 8, VEC_REMOVE(vec, 8));
+  expect(__LINE__, 99, VEC_LEN(vec));
+  for (int i = 0; i < 8; i++) {
+    expect(__LINE__, i, VEC_GET(vec, i));
   }
+  for (int i = 8; i < 99; i++) {
+    expect(__LINE__, i + 1, VEC_GET(vec, i));
+  }
+  for (int i = 0; i < 100; i++) {
+    expect(__LINE__, i, VEC_GET(cloned, i));
+  }
+
+  VEC_INSERT(vec, 8, 100);
+  VEC_INSERT(vec, 0, 200);
+  VEC_INSERT(vec, 101, 300);
+  expect(__LINE__, 102, VEC_LEN(vec));
+  expect(__LINE__, 200, VEC_GET(vec, 0));
+  for (int i = 1; i < 9; i++) {
+    expect(__LINE__, i - 1, VEC_GET(vec, i));
+  }
+  expect(__LINE__, 100, VEC_GET(vec, 9));
+  for (int i = 10; i < 101; i++) {
+    expect(__LINE__, i - 1, VEC_GET(vec, i));
+  }
+  expect(__LINE__, 300, VEC_GET(vec, 101));
 }
 
 static void test_map(void) {
