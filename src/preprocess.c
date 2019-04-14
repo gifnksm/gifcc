@@ -11,31 +11,27 @@ typedef struct Cond {
 } Cond;
 typedef DEFINE_VECTOR(CondVector, Cond *) CondVector;
 
-typedef struct Preprocessor {
-  Map *define_map;
-} Preprocessor;
-
 typedef struct ConditionalInclusionArg {
   CondVector *cond_stack;
-  Preprocessor *pp;
+  Map *define_map;
   TokenIterator *ts;
 } ConditionalInclusionArg;
 
 typedef struct ControlArg {
   Reader *reader;
-  Preprocessor *pp;
+  Map *define_map;
   TokenIterator *ts;
 } ControlArg;
 
 typedef struct ExpandMacroArg {
-  Preprocessor *pp;
+  Map *define_map;
   TokenIterator *ts;
 } ExpandMacroArg;
 
 static bool conditional_inclusion(void *arg, Vector *output);
 static bool pp_cond_fullfilled(CondVector *cond_stack);
 static bool pp_outer_cond_fullfilled(CondVector *cond_stack);
-static bool read_pp_if_cond(Preprocessor *pp, Vector *tokens,
+static bool read_pp_if_cond(Map *define_map, Vector *tokens,
                             const Range *range);
 static Vector *pp_convert_defined(Map *define_map, Vector *tokens);
 static void pp_if(CondVector *cond_stack, bool fullfilled, const Range *range);
@@ -52,9 +48,9 @@ static bool try_include(Reader *reader, const char *base_path,
 
 static bool expand_macro(void *arg, Vector *output);
 
-static Vector *pp_expand_macros(Preprocessor *pp, Vector *tokens,
+static Vector *pp_expand_macros(Map *define_map, Vector *tokens,
                                 TokenIterator *ts);
-static Vector *pp_subst_macros(Preprocessor *pp, const Range *expanded_from,
+static Vector *pp_subst_macros(Map *define_map, const Range *expanded_from,
                                Vector *input, StrVector *params,
                                Vector *arguments, Set *hideset, Vector *output);
 static Vector *pp_get_func_arg(StrVector *params, Vector *arguments,
@@ -70,28 +66,25 @@ static const char *token_to_str(const Token *token);
 static void pp_glue(Vector *ls, Vector *rs);
 
 TokenIterator *new_preprocessor(TokenIterator *ts, Reader *reader) {
-  Preprocessor *pp = NEW(Preprocessor);
-  *pp = (Preprocessor){
-      .define_map = new_map(),
-  };
+  Map *define_map = new_map();
 
   const Range *builtin_range = range_builtin(reader);
-  initialize_predefined_macro(pp->define_map, builtin_range);
+  initialize_predefined_macro(define_map, builtin_range);
 
   ConditionalInclusionArg *cond_arg = NEW(ConditionalInclusionArg);
   cond_arg->cond_stack = NEW_VECTOR(CondVector);
-  cond_arg->pp = pp;
+  cond_arg->define_map = define_map;
   cond_arg->ts = ts;
   ts = new_token_iterator(conditional_inclusion, cond_arg);
 
   ControlArg *ctrl_arg = NEW(ControlArg);
   ctrl_arg->reader = reader;
-  ctrl_arg->pp = pp;
+  ctrl_arg->define_map = define_map;
   ctrl_arg->ts = ts;
   ts = new_token_iterator(control_directive, ctrl_arg);
 
   ExpandMacroArg *expand_arg = NEW(ExpandMacroArg);
-  expand_arg->pp = pp;
+  expand_arg->define_map = define_map;
   expand_arg->ts = ts;
   ts = new_token_iterator(expand_macro, expand_arg);
 
@@ -101,7 +94,7 @@ TokenIterator *new_preprocessor(TokenIterator *ts, Reader *reader) {
 static bool conditional_inclusion(void *arg, Vector *output) {
   ConditionalInclusionArg *cond_arg = arg;
   CondVector *cond_stack = cond_arg->cond_stack;
-  Preprocessor *pp = cond_arg->pp;
+  Map *define_map = cond_arg->define_map;
   TokenIterator *ts = cond_arg->ts;
 
   while (true) {
@@ -115,7 +108,7 @@ static bool conditional_inclusion(void *arg, Vector *output) {
       Vector *tokens = token->pp_if.tokens;
       bool fullfilled = true;
       if (pp_cond_fullfilled(cond_stack)) {
-        fullfilled = read_pp_if_cond(pp, tokens, token->range);
+        fullfilled = read_pp_if_cond(define_map, tokens, token->range);
       }
       pp_if(cond_stack, fullfilled, token->range);
       continue;
@@ -124,20 +117,20 @@ static bool conditional_inclusion(void *arg, Vector *output) {
       Vector *tokens = token->pp_elif.tokens;
       bool fullfilled = true;
       if (pp_outer_cond_fullfilled(cond_stack)) {
-        fullfilled = read_pp_if_cond(pp, tokens, token->range);
+        fullfilled = read_pp_if_cond(define_map, tokens, token->range);
       }
       pp_elif(cond_stack, fullfilled, token->range);
       continue;
     }
     case TK_PP_IFDEF: {
       const char *ident = token->pp_ifdef.ident;
-      bool defined = map_get(pp->define_map, ident) != NULL;
+      bool defined = map_get(define_map, ident) != NULL;
       pp_if(cond_stack, defined, token->range);
       continue;
     }
     case TK_PP_IFNDEF: {
       const char *ident = token->pp_ifndef.ident;
-      bool defined = map_get(pp->define_map, ident) != NULL;
+      bool defined = map_get(define_map, ident) != NULL;
       pp_if(cond_stack, !defined, token->range);
       continue;
     }
@@ -185,7 +178,7 @@ static bool pp_outer_cond_fullfilled(CondVector *cond_stack) {
   return true;
 }
 
-static bool read_pp_if_cond(Preprocessor *pp, Vector *tokens,
+static bool read_pp_if_cond(Map *define_map, Vector *tokens,
                             const Range *range) {
   if (vec_len(tokens) == 0) {
     range_error(range, "expected value in expression");
@@ -197,10 +190,10 @@ static bool read_pp_if_cond(Preprocessor *pp, Vector *tokens,
   vec_push(tokens, eof_token);
 
   // convert `defined(IDENT)` or `defined INDET` into 0 or 1
-  tokens = pp_convert_defined(pp->define_map, tokens);
+  tokens = pp_convert_defined(define_map, tokens);
 
   // expand macros
-  tokens = pp_expand_macros(pp, tokens, NULL);
+  tokens = pp_expand_macros(define_map, tokens, NULL);
 
   for (int i = 0; i < vec_len(tokens); i++) {
     // replace all ident tokens (including keyword ident) into '0'
@@ -303,7 +296,7 @@ static void pp_endif(CondVector *cond_stack, const Range *range) {
 static bool control_directive(void *arg, Vector *output) {
   ControlArg *ctrl_arg = arg;
   Reader *reader = ctrl_arg->reader;
-  Preprocessor *pp = ctrl_arg->pp;
+  Map *define_map = ctrl_arg->define_map;
   TokenIterator *ts = ctrl_arg->ts;
 
   while (true) {
@@ -318,7 +311,7 @@ static bool control_directive(void *arg, Vector *output) {
     }
     case TK_PP_INCLUDE: {
       Vector *tokens = token->pp_include.tokens;
-      tokens = pp_expand_macros(pp, tokens, NULL);
+      tokens = pp_expand_macros(define_map, tokens, NULL);
       if (vec_len(tokens) == 0) {
         range_error(token->range, "expected \"FILENAME\" or <FILENAME>");
       }
@@ -352,12 +345,12 @@ static bool control_directive(void *arg, Vector *output) {
       } else {
         macro = new_obj_macro(replacements);
       }
-      map_put(pp->define_map, ident, macro);
+      map_put(define_map, ident, macro);
       continue;
     }
     case TK_PP_UNDEF: {
       const char *ident = token->pp_undef.ident;
-      map_remove(pp->define_map, ident);
+      map_remove(define_map, ident);
       continue;
     }
     case TK_PP_ERROR: {
@@ -367,7 +360,7 @@ static bool control_directive(void *arg, Vector *output) {
     }
     case TK_PP_LINE: {
       Vector *tokens = token->pp_line.tokens;
-      tokens = pp_expand_macros(pp, tokens, NULL);
+      tokens = pp_expand_macros(define_map, tokens, NULL);
       if (vec_len(tokens) == 0) {
         range_error(token->range,
                     "#line directive requires a positive integer argument");
@@ -459,7 +452,7 @@ static bool try_include(Reader *reader, const char *base_path,
 
 static bool expand_macro(void *arg, Vector *output) {
   ExpandMacroArg *expand_arg = arg;
-  Preprocessor *pp = expand_arg->pp;
+  Map *define_map = expand_arg->define_map;
   TokenIterator *ts = expand_arg->ts;
 
   Token *token = ts_pop(ts);
@@ -469,12 +462,12 @@ static bool expand_macro(void *arg, Vector *output) {
 
   Vector *tokens = new_vector();
   vec_push(tokens, token);
-  tokens = pp_expand_macros(pp, tokens, ts);
+  tokens = pp_expand_macros(define_map, tokens, ts);
   vec_append(output, tokens);
   return true;
 }
 
-static Vector *pp_expand_macros(Preprocessor *pp, Vector *tokens,
+static Vector *pp_expand_macros(Map *define_map, Vector *tokens,
                                 TokenIterator *ts) {
   Vector *expanded = new_vector();
   while (vec_len(tokens) > 0) {
@@ -488,7 +481,7 @@ static Vector *pp_expand_macros(Preprocessor *pp, Vector *tokens,
       continue;
     }
 
-    Macro *macro = map_get(pp->define_map, ident->pp_ident);
+    Macro *macro = map_get(define_map, ident->pp_ident);
     if (macro == NULL) {
       vec_push(expanded, ident);
       continue;
@@ -501,11 +494,11 @@ static Vector *pp_expand_macros(Preprocessor *pp, Vector *tokens,
       Vector *replacement = macro->kind == MACRO_OBJ
                                 ? vec_clone(macro->replacement)
                                 : macro->replacement_func(ident);
-      Vector *exp_tokens =
-          pp_expand_macros(pp,
-                           pp_subst_macros(pp, expanded_from, replacement, NULL,
-                                           NULL, hideset, new_vector()),
-                           ts);
+      Vector *exp_tokens = pp_expand_macros(
+          define_map,
+          pp_subst_macros(define_map, expanded_from, replacement, NULL, NULL,
+                          hideset, new_vector()),
+          ts);
       vec_append(expanded, exp_tokens);
       continue;
     }
@@ -526,16 +519,17 @@ static Vector *pp_expand_macros(Preprocessor *pp, Vector *tokens,
     set_insert(hideset, ident->pp_ident);
     const Range *expanded_from = range_join(ident->range, rparen->range);
     Vector *exp_tokens = pp_expand_macros(
-        pp,
-        pp_subst_macros(pp, expanded_from, vec_clone(macro->replacement),
-                        macro->params, arguments, hideset, new_vector()),
+        define_map,
+        pp_subst_macros(define_map, expanded_from,
+                        vec_clone(macro->replacement), macro->params, arguments,
+                        hideset, new_vector()),
         ts);
     vec_append(expanded, exp_tokens);
   }
   return expanded;
 }
 
-static Vector *pp_subst_macros(Preprocessor *pp, const Range *expanded_from,
+static Vector *pp_subst_macros(Map *define_map, const Range *expanded_from,
                                Vector *input, StrVector *params,
                                Vector *arguments, Set *hideset,
                                Vector *output) {
@@ -599,7 +593,7 @@ static Vector *pp_subst_macros(Preprocessor *pp, const Range *expanded_from,
         vec_append(output, vec_clone(arg));
         continue;
       }
-      vec_append(output, pp_expand_macros(pp, vec_clone(arg), NULL));
+      vec_append(output, pp_expand_macros(define_map, vec_clone(arg), NULL));
       continue;
     }
     vec_push(output, token);
