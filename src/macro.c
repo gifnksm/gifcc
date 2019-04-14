@@ -7,12 +7,12 @@ static void set_predefined_num_macro(Map *define_map,
 static void
 set_predefined_special_macro(Map *define_map, const char *name,
                              special_macro_handler_t *replacement_func);
-static Vector *macro_date(Token *token);
-static Vector *macro_time(Token *token);
-static Vector *macro_file(Token *token);
-static Vector *macro_line(Token *token);
+static TokenVector *macro_date(Token *token);
+static TokenVector *macro_time(Token *token);
+static TokenVector *macro_file(Token *token);
+static TokenVector *macro_line(Token *token);
 
-Macro *new_obj_macro(Vector *replacement) {
+Macro *new_obj_macro(TokenVector *replacement) {
   Macro *macro = NEW(Macro);
   macro->kind = MACRO_OBJ;
   macro->replacement = replacement;
@@ -27,7 +27,7 @@ Macro *new_obj_special_macro(special_macro_handler_t *replacement_func) {
 }
 
 Macro *new_func_macro(StrVector *params, bool has_varargs,
-                      Vector *replacement) {
+                      TokenVector *replacement) {
   Macro *macro = NEW(Macro);
   macro->kind = MACRO_FUNC;
   macro->params = params;
@@ -53,8 +53,8 @@ void initialize_predefined_macro(Map *define_map, const Range *builtin_range) {
 static void set_predefined_num_macro(Map *define_map,
                                      const Range *builtin_range,
                                      const char *name, const char *num) {
-  Vector *replacement = new_vector();
-  vec_push(replacement, new_token_pp_num(num, builtin_range));
+  TokenVector *replacement = NEW_VECTOR(TokenVector);
+  VEC_PUSH(replacement, new_token_pp_num(num, builtin_range));
   map_put(define_map, name, new_obj_macro(replacement));
 }
 
@@ -64,7 +64,7 @@ set_predefined_special_macro(Map *define_map, const char *name,
   map_put(define_map, name, new_obj_special_macro(replacement_func));
 }
 
-static Vector *macro_date(Token *token) {
+static TokenVector *macro_date(Token *token) {
   static char buf[30] = "";
   if (buf[0] == '\0') {
     time_t now;
@@ -79,14 +79,14 @@ static Vector *macro_date(Token *token) {
     strftime(buf, sizeof(buf), "\"%b %e %Y\"", &now_tm);
   }
 
-  Vector *rep = new_vector();
-  vec_push(rep,
+  TokenVector *rep = NEW_VECTOR(TokenVector);
+  VEC_PUSH(rep,
            new_token_pp_str(strdup(buf),
                             range_builtin(range_get_reader(token->range))));
   return rep;
 }
 
-static Vector *macro_time(Token *token) {
+static TokenVector *macro_time(Token *token) {
   static char buf[30] = "";
   if (buf[0] == '\0') {
     time_t now;
@@ -101,30 +101,30 @@ static Vector *macro_time(Token *token) {
     strftime(buf, sizeof(buf), "\"%T\"", &now_tm);
   }
 
-  Vector *rep = new_vector();
-  vec_push(rep,
+  TokenVector *rep = NEW_VECTOR(TokenVector);
+  VEC_PUSH(rep,
            new_token_pp_str(strdup(buf),
                             range_builtin(range_get_reader(token->range))));
   return rep;
 }
 
-static Vector *macro_file(Token *token) {
+static TokenVector *macro_file(Token *token) {
   const char *filename;
   range_get_start(token->range, &filename, NULL, NULL);
 
-  Vector *rep = new_vector();
-  vec_push(rep,
+  TokenVector *rep = NEW_VECTOR(TokenVector);
+  VEC_PUSH(rep,
            new_token_pp_str(format("\"%s\"", filename),
                             range_builtin(range_get_reader(token->range))));
   return rep;
 }
 
-static Vector *macro_line(Token *token) {
+static TokenVector *macro_line(Token *token) {
   int line;
   range_get_start(token->range, NULL, &line, NULL);
 
-  Vector *rep = new_vector();
-  vec_push(rep,
+  TokenVector *rep = NEW_VECTOR(TokenVector);
+  VEC_PUSH(rep,
            new_token_pp_num(format("%d", line),
                             range_builtin(range_get_reader(token->range))));
   return rep;

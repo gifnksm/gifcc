@@ -233,7 +233,9 @@ typedef struct {
 } LongToken;
 
 typedef struct CharVector CharVector;
-typedef struct {
+typedef struct Token Token;
+typedef DEFINE_VECTOR(TokenVector, Token *) TokenVector;
+typedef struct Token {
   int ty;
   const Range *range;
   Set *pp_hideset;
@@ -245,10 +247,10 @@ typedef struct {
     const char *pp_str;
 
     struct {
-      Vector *tokens;
+      TokenVector *tokens;
     } pp_if;
     struct {
-      Vector *tokens;
+      TokenVector *tokens;
     } pp_elif;
     struct {
       const char *ident;
@@ -257,13 +259,13 @@ typedef struct {
       const char *ident;
     } pp_ifndef;
     struct {
-      Vector *tokens;
+      TokenVector *tokens;
     } pp_include;
     struct {
       const char *ident;
       StrVector *params;
       bool has_varargs;
-      Vector *replacements;
+      TokenVector *replacements;
     } pp_define;
     struct {
       const char *ident;
@@ -272,7 +274,7 @@ typedef struct {
       const char *message;
     } pp_error;
     struct {
-      Vector *tokens;
+      TokenVector *tokens;
     } pp_line;
     struct {
       const char *ident;
@@ -285,7 +287,6 @@ typedef struct {
     Number char_val;
   };
 } Token;
-typedef DEFINE_VECTOR(TokenVector, Token *) TokenVector;
 
 typedef enum {
   MACRO_OBJ,
@@ -293,13 +294,13 @@ typedef enum {
   MACRO_OBJ_SPECIAL,
 } macro_t;
 
-typedef Vector *special_macro_handler_t(Token *);
+typedef TokenVector *special_macro_handler_t(Token *);
 
 typedef struct Macro {
   macro_t kind;
   StrVector *params;
   bool has_varargs;
-  Vector *replacement;
+  TokenVector *replacement;
   special_macro_handler_t *replacement_func;
 } Macro;
 
@@ -703,7 +704,7 @@ typedef struct TokenIterator TokenIterator;
 typedef struct Scope Scope;
 
 typedef bool cs_next_fn_t(void *, Char *);
-typedef bool ts_next_fn_t(void *, Vector *);
+typedef bool ts_next_fn_t(void *, TokenVector *);
 
 typedef enum {
   ASM_SYNTAX_INTEL,
@@ -882,19 +883,19 @@ Token *new_token_pp_ident(const char *ident, const Range *range);
 Token *new_token_pp_char(const char *ch, const Range *range);
 Token *new_token_pp_str(const char *str, const Range *range);
 Token *new_token_pp_null(const Range *range);
-Token *new_token_pp_if(Vector *tokens, const Range *range);
-Token *new_token_pp_elif(Vector *tokens, const Range *range);
+Token *new_token_pp_if(TokenVector *tokens, const Range *range);
+Token *new_token_pp_elif(TokenVector *tokens, const Range *range);
 Token *new_token_pp_ifdef(const char *ident, const Range *range);
 Token *new_token_pp_ifndef(const char *ident, const Range *range);
 Token *new_token_pp_else(const Range *range);
 Token *new_token_pp_endif(const Range *range);
-Token *new_token_pp_include(Vector *tokens, const Range *range);
+Token *new_token_pp_include(TokenVector *tokens, const Range *range);
 Token *new_token_pp_define(const char *ident, StrVector *params,
-                           bool has_varargs, Vector *replacements,
+                           bool has_varargs, TokenVector *replacements,
                            const Range *range);
 Token *new_token_pp_undef(const char *ident, const Range *range);
 Token *new_token_pp_error(const char *message, const Range *range);
-Token *new_token_pp_line(Vector *tokens, const Range *range);
+Token *new_token_pp_line(TokenVector *tokens, const Range *range);
 Token *new_token_pp_unknown(const char *ident, const char *rest,
                             const Range *range);
 const char *token_kind_to_str(int kind);
@@ -902,7 +903,7 @@ TokenIterator *new_token_dumper(TokenIterator *ts, FILE *fp);
 
 // token_iter.c
 TokenIterator *new_token_iterator(ts_next_fn_t *next, void *arg);
-TokenIterator *token_iterator_from_vec(Vector *tokens);
+TokenIterator *token_iterator_from_vec(TokenVector *tokens);
 void consume_all_token_iterator(TokenIterator *ts);
 Token *ts_pop(TokenIterator *ts);
 void ts_succ(TokenIterator *ts);
@@ -916,9 +917,10 @@ Token *ts_expect(TokenIterator *ts, int ty);
 TokenIterator *new_pp_tokenizer(CharIterator *cs);
 
 // macro.c
-Macro *new_obj_macro(Vector *replacement);
+Macro *new_obj_macro(TokenVector *replacement);
 Macro *new_obj_special_macro(special_macro_handler_t *replacement_func);
-Macro *new_func_macro(StrVector *params, bool has_varargs, Vector *replacement);
+Macro *new_func_macro(StrVector *params, bool has_varargs,
+                      TokenVector *replacement);
 void initialize_predefined_macro(Map *define_map, const Range *builtin_range);
 
 // preprocess.c

@@ -3,7 +3,7 @@
 typedef struct TokenIterator {
   ts_next_fn_t *next;
   void *arg;
-  Vector *tokens;
+  TokenVector *tokens;
 } TokenIterator;
 
 TokenIterator *new_token_iterator(ts_next_fn_t *next, void *arg) {
@@ -11,22 +11,22 @@ TokenIterator *new_token_iterator(ts_next_fn_t *next, void *arg) {
   *ts = (TokenIterator){
       .next = next,
       .arg = arg,
-      .tokens = new_vector(),
+      .tokens = NEW_VECTOR(TokenVector),
   };
   return ts;
 }
 
-static bool next_vec(void *arg, Vector *output) {
-  Vector *input = arg;
-  if (vec_len(arg) == 0) {
+static bool next_vec(void *arg, TokenVector *output) {
+  TokenVector *input = arg;
+  if (VEC_LEN(input) == 0) {
     return false;
   }
-  vec_append(output, input);
-  vec_clear(input);
+  VEC_APPEND(output, input);
+  VEC_CLEAR(input);
   return true;
 }
 
-TokenIterator *token_iterator_from_vec(Vector *tokens) {
+TokenIterator *token_iterator_from_vec(TokenVector *tokens) {
   return new_token_iterator(next_vec, tokens);
 }
 
@@ -38,25 +38,25 @@ void consume_all_token_iterator(TokenIterator *ts) {
 }
 
 Token *ts_pop(TokenIterator *ts) {
-  while (vec_len(ts->tokens) == 0) {
+  while (VEC_LEN(ts->tokens) == 0) {
     if (!ts->next(ts->arg, ts->tokens)) {
       return NULL;
     }
   }
 
-  return vec_remove(ts->tokens, 0);
+  return VEC_REMOVE(ts->tokens, 0);
 }
 
 void ts_succ(TokenIterator *ts) { (void)ts_pop(ts); }
 
 Token *ts_peek(TokenIterator *ts) { return ts_peek_ahead(ts, 0); }
 Token *ts_peek_ahead(TokenIterator *ts, int n) {
-  while (vec_len(ts->tokens) <= n) {
+  while (VEC_LEN(ts->tokens) <= n) {
     if (!ts->next(ts->arg, ts->tokens)) {
       return NULL;
     }
   }
-  return vec_get(ts->tokens, n);
+  return VEC_GET(ts->tokens, n);
 }
 
 Token *ts_consume(TokenIterator *ts, int ty) {

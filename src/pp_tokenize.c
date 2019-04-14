@@ -1,7 +1,7 @@
 #include "gifcc.h"
 #include <ctype.h>
 
-static bool read_token(CharIterator *cs, Vector *output);
+static bool read_token(CharIterator *cs, TokenVector *output);
 static bool skip_space(CharIterator *cs);
 static bool skip_comment(CharIterator *cs);
 static bool skip_space_or_comment(CharIterator *cs);
@@ -9,8 +9,8 @@ static Token *pp_directive(CharIterator *cs);
 static const char *macro_name(CharIterator *cs, const Range **range);
 static void macro_func_arg(CharIterator *cs, StrVector **params,
                            bool *has_varargs, const Range **range);
-static Vector *normal_tokens(CharIterator *cs, const Range **range);
-static void read_normal_tokens_to_eol(CharIterator *cs, Vector *output,
+static TokenVector *normal_tokens(CharIterator *cs, const Range **range);
+static void read_normal_tokens_to_eol(CharIterator *cs, TokenVector *output,
                                       const Range **range);
 static const char *read_chars_to_eol(CharIterator *cs, const Range **range);
 static Token *normal_token(CharIterator *cs);
@@ -23,7 +23,7 @@ static Token *string_literal(CharIterator *cs);
 static String *read_identifier(CharIterator *cs, const Reader **reader,
                                int *start, int *end);
 
-static bool next(void *arg, Vector *output) {
+static bool next(void *arg, TokenVector *output) {
   CharIterator *cs = arg;
   return read_token(cs, output);
 }
@@ -32,7 +32,7 @@ TokenIterator *new_pp_tokenizer(CharIterator *cs) {
   return new_token_iterator(next, cs);
 }
 
-static bool read_token(CharIterator *cs, Vector *output) {
+static bool read_token(CharIterator *cs, TokenVector *output) {
   Char ch;
   while (true) {
     ch = cs_peek(cs);
@@ -45,7 +45,7 @@ static bool read_token(CharIterator *cs, Vector *output) {
     if (ch.val == '\n') {
       // do nothing
     } else if (ch.val == '#') {
-      vec_push(output, pp_directive(cs));
+      VEC_PUSH(output, pp_directive(cs));
       ch = cs_peek(cs);
     } else {
       read_normal_tokens_to_eol(cs, output, NULL);
@@ -64,7 +64,7 @@ static bool read_token(CharIterator *cs, Vector *output) {
   }
 
   if (ch.val == '\0') {
-    vec_push(output,
+    VEC_PUSH(output,
              new_token(TK_EOF, range_from_reader(ch.reader, ch.start, ch.end)));
   }
   return true;
@@ -154,11 +154,11 @@ static Token *pp_directive(CharIterator *cs) {
   skip_space_or_comment(cs);
 
   if (strcmp(token->pp_ident, "if") == 0) {
-    Vector *tokens = normal_tokens(cs, &range);
+    TokenVector *tokens = normal_tokens(cs, &range);
     return new_token_pp_if(tokens, range);
   }
   if (strcmp(token->pp_ident, "elif") == 0) {
-    Vector *tokens = normal_tokens(cs, &range);
+    TokenVector *tokens = normal_tokens(cs, &range);
     return new_token_pp_elif(tokens, range);
   }
   if (strcmp(token->pp_ident, "ifdef") == 0) {
@@ -180,7 +180,7 @@ static Token *pp_directive(CharIterator *cs) {
     return new_token_pp_endif(range);
   }
   if (strcmp(token->pp_ident, "include") == 0) {
-    Vector *tokens = normal_tokens(cs, &range);
+    TokenVector *tokens = normal_tokens(cs, &range);
     return new_token_pp_include(tokens, range);
   }
   if (strcmp(token->pp_ident, "define") == 0) {
@@ -189,7 +189,7 @@ static Token *pp_directive(CharIterator *cs) {
     bool has_varargs = false;
     macro_func_arg(cs, &params, &has_varargs, &range);
     skip_space_or_comment(cs);
-    Vector *replacements = normal_tokens(cs, &range);
+    TokenVector *replacements = normal_tokens(cs, &range);
     return new_token_pp_define(ident, params, has_varargs, replacements, range);
   }
   if (strcmp(token->pp_ident, "undef") == 0) {
@@ -202,7 +202,7 @@ static Token *pp_directive(CharIterator *cs) {
     return new_token_pp_error(message, range);
   }
   if (strcmp(token->pp_ident, "line") == 0) {
-    Vector *tokens = normal_tokens(cs, &range);
+    TokenVector *tokens = normal_tokens(cs, &range);
     return new_token_pp_line(tokens, range);
   }
 
@@ -281,15 +281,15 @@ static void macro_func_arg(CharIterator *cs, StrVector **params,
   }
 }
 
-static Vector *normal_tokens(CharIterator *cs, const Range **range) {
-  Vector *tokens = new_vector();
+static TokenVector *normal_tokens(CharIterator *cs, const Range **range) {
+  TokenVector *tokens = NEW_VECTOR(TokenVector);
   read_normal_tokens_to_eol(cs, tokens, range);
   return tokens;
 }
 
-static void read_normal_tokens_to_eol(CharIterator *cs, Vector *output,
+static void read_normal_tokens_to_eol(CharIterator *cs, TokenVector *output,
                                       const Range **range) {
-  int old_len = vec_len(output);
+  int old_len = VEC_LEN(output);
   while (true) {
     skip_space_or_comment(cs);
     Char ch = cs_peek(cs);
@@ -300,12 +300,12 @@ static void read_normal_tokens_to_eol(CharIterator *cs, Vector *output,
     if (token == NULL) {
       break;
     }
-    vec_push(output, token);
+    VEC_PUSH(output, token);
   }
 
-  if (range != NULL && vec_len(output) > old_len) {
-    Token *first = vec_get(output, old_len);
-    Token *last = vec_last(output);
+  if (range != NULL && VEC_LEN(output) > old_len) {
+    Token *first = VEC_GET(output, old_len);
+    Token *last = VEC_LAST(output);
     *range = range_join(*range, range_join(first->range, last->range));
   }
 }
