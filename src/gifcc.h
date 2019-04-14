@@ -238,50 +238,52 @@ typedef struct {
   const Range *range;
   Set *pp_hideset;
 
-  const char *pp_num;
-  const char *pp_ident;
-  const char *pp_char;
-  const char *pp_str;
+  union {
+    const char *pp_num;
+    const char *pp_ident;
+    const char *pp_char;
+    const char *pp_str;
 
-  struct {
-    Vector *tokens;
-  } pp_if;
-  struct {
-    Vector *tokens;
-  } pp_elif;
-  struct {
-    const char *ident;
-  } pp_ifdef;
-  struct {
-    const char *ident;
-  } pp_ifndef;
-  struct {
-    Vector *tokens;
-  } pp_include;
-  struct {
-    const char *ident;
-    StrVector *params;
-    bool has_varargs;
-    Vector *replacements;
-  } pp_define;
-  struct {
-    const char *ident;
-  } pp_undef;
-  struct {
-    const char *message;
-  } pp_error;
-  struct {
-    Vector *tokens;
-  } pp_line;
-  struct {
-    const char *ident;
-    const char *rest;
-  } pp_unknown;
+    struct {
+      Vector *tokens;
+    } pp_if;
+    struct {
+      Vector *tokens;
+    } pp_elif;
+    struct {
+      const char *ident;
+    } pp_ifdef;
+    struct {
+      const char *ident;
+    } pp_ifndef;
+    struct {
+      Vector *tokens;
+    } pp_include;
+    struct {
+      const char *ident;
+      StrVector *params;
+      bool has_varargs;
+      Vector *replacements;
+    } pp_define;
+    struct {
+      const char *ident;
+    } pp_undef;
+    struct {
+      const char *message;
+    } pp_error;
+    struct {
+      Vector *tokens;
+    } pp_line;
+    struct {
+      const char *ident;
+      const char *rest;
+    } pp_unknown;
 
-  const char *ident;
-  Number num;
-  const char *str;
-  Number char_val;
+    const char *ident;
+    Number num;
+    const char *str;
+    Number char_val;
+  };
 } Token;
 typedef DEFINE_VECTOR(TokenVector, Token *) TokenVector;
 
