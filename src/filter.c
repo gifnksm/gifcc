@@ -25,6 +25,12 @@ CharIterator *phase2_filter(CharIterator *cs) {
   return new_char_iterator(phase2_next, cs);
 }
 
+TokenIterator *phase4_filter(TokenIterator *ts, Reader *reader) {
+  // Translation phase #4
+  // * preprocessing directives are executed, macro invocations are expanded.
+  return new_preprocessor(ts, reader);
+}
+
 static bool phase5_next(void *arg, Vector *output) {
   TokenIterator *ts = arg;
 
