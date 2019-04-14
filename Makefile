@@ -45,6 +45,10 @@ ifdef COVERAGE
   LDFLAGS += --coverage
 endif
 
+ifdef RELEASE
+  STAGE1_CFLAGS += -O2 -DNDEBUG
+endif
+
 all: stage1
 .PHONY: all
 test: gcc-test stage1-test
