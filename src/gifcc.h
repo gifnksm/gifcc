@@ -783,32 +783,12 @@ int reader_get_offset(const Reader *reader);
 void reader_set_position(Reader *reader, const int *line, const char *filename);
 void reader_get_position(const Reader *reader, int offset,
                          const char **filename, int *line, int *column);
-#define reader_error_here(reader, fmt, ...)                                    \
-  reader_error_offset_raw(reader, reader_get_offset(reader), __FILE__,         \
-                          __LINE__, (fmt), ##__VA_ARGS__)
-#define reader_error_offset(reader, offset, fmt, ...)                          \
-  reader_error_offset_raw((reader), (offset), __FILE__, __LINE__, (fmt),       \
-                          ##__VA_ARGS__)
-noreturn __attribute__((format(printf, 5, 6))) void
-reader_error_offset_raw(const Reader *reader, int offset, const char *dbg_file,
-                        int dbg_line, const char *fmt, ...);
-#define reader_warn_here(reader, fmt, ...)                                     \
-  reader_warn_offset_raw(reader, reader_get_offset(reader), __FILE__,          \
-                         __LINE__, (fmt), ##__VA_ARGS__)
-#define reader_warn_offset(reader, offset, fmt, ...)                           \
-  reader_warn_offset_raw((reader), (offset), __FILE__, __LINE__, (fmt),        \
-                         ##__VA_ARGS__)
-__attribute__((format(printf, 5, 6))) void
-reader_warn_offset_raw(const Reader *reader, int offset, const char *dbg_file,
-                       int dbg_line, const char *fmt, ...);
 
 #define range_error(range, fmt, ...)                                           \
   range_error_raw((range), __FILE__, __LINE__, (fmt), ##__VA_ARGS__)
 noreturn __attribute__((format(printf, 4, 5))) void
 range_error_raw(const Range *range, const char *dbg_file, int dbg_line,
                 const char *fmt, ...);
-noreturn void range_error_raw_v(const Range *range, const char *dbg_file,
-                                int dbg_line, const char *fmt, va_list ap);
 
 #define range_warn(range, fmt, ...)                                            \
   range_warn_raw((range), __FILE__, __LINE__, (fmt), ##__VA_ARGS__)
@@ -816,8 +796,6 @@ __attribute__((format(printf, 4, 5))) void range_warn_raw(const Range *range,
                                                           const char *dbg_file,
                                                           int dbg_line,
                                                           const char *fmt, ...);
-void range_warn_raw_v(const Range *range, const char *dbg_file, int dbg_line,
-                      const char *fmt, va_list ap);
 
 #define range_internal_error(range, fmt, ...)                                  \
   range_error(range, "ICE " fmt, ##__VA_ARGS__)

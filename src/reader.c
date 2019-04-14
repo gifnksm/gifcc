@@ -226,8 +226,6 @@ void reader_add_file(Reader *reader, FILE *fp, const char *filename) {
   (void)switch_file(reader, file);
 }
 
-int reader_get_offset(const Reader *reader) { return reader->offset; }
-
 void reader_set_position(Reader *reader, const int *line,
                          const char *filename) {
   int current_line;
@@ -338,35 +336,14 @@ void reader_get_real_position(const Reader *reader, int offset,
   reader_get_position_inner(reader, offset, true, filename, line, column);
 }
 
-noreturn __attribute__((format(printf, 5, 6))) void
-reader_error_offset_raw(const Reader *reader, int offset, const char *dbg_file,
-                        int dbg_line, const char *fmt, ...) {
-  va_list ap;
-  va_start(ap, fmt);
-  range_error_raw_v(&(Range){.reader = reader, .start = offset, .len = 1},
-                    dbg_file, dbg_line, fmt, ap);
-}
-
-__attribute__((format(printf, 5, 6))) void
-reader_warn_offset_raw(const Reader *reader, int offset, const char *dbg_file,
-                       int dbg_line, const char *fmt, ...) {
-  va_list ap;
-  va_start(ap, fmt);
-  range_warn_raw_v(&(Range){.reader = reader, .start = offset, .len = 1},
-                   dbg_file, dbg_line, fmt, ap);
-}
-
 noreturn __attribute__((format(printf, 4, 5))) void
 range_error_raw(const Range *range, const char *dbg_file, int dbg_line,
                 const char *fmt, ...) {
   va_list ap;
   va_start(ap, fmt);
-  range_error_raw_v(range, dbg_file, dbg_line, fmt, ap);
-}
-
-noreturn void range_error_raw_v(const Range *range, const char *dbg_file,
-                                int dbg_line, const char *fmt, va_list ap) {
   print_message_raw(MESSAGE_ERROR, range, dbg_file, dbg_line, fmt, ap);
+  va_end(ap);
+
   print_source(range);
   print_expanded_message(range, dbg_file, dbg_line);
 
@@ -378,11 +355,9 @@ range_warn_raw(const Range *range, const char *dbg_file, int dbg_line,
                const char *fmt, ...) {
   va_list ap;
   va_start(ap, fmt);
-  range_warn_raw_v(range, dbg_file, dbg_line, fmt, ap);
-}
-void range_warn_raw_v(const Range *range, const char *dbg_file, int dbg_line,
-                      const char *fmt, va_list ap) {
   print_message_raw(MESSAGE_WARN, range, dbg_file, dbg_line, fmt, ap);
+  va_end(ap);
+
   print_source(range);
   print_expanded_message(range, dbg_file, dbg_line);
 }

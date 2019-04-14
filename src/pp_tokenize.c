@@ -48,8 +48,8 @@ static bool read_token(CharIterator *cs, TokenVector *output) {
     }
 
     if (ch.val == '\0') {
-      VEC_PUSH(output, new_token(TK_EOF, range_from_reader(ch.reader, ch.start,
-                                                           ch.end)));
+      const Range *range = range_from_reader(ch.reader, ch.start, ch.end);
+      VEC_PUSH(output, new_token(TK_EOF, range));
       return true;
     }
     if (ch.val == '\n') {
@@ -97,9 +97,11 @@ static bool skip_comment(CharIterator *cs) {
         if (cs_consume_str(cs, "*/", NULL, NULL, NULL)) {
           break;
         }
-        if (cs_peek(cs).val == '\0') {
-          reader_error_here(cs_peek(cs).reader,
-                            "コメントの終端文字列 `*/` がありません");
+
+        Char ch = cs_peek(cs);
+        if (ch.val == '\0') {
+          const Range *range = range_from_reader(ch.reader, ch.start, ch.end);
+          range_error(range, "Unterminated /* comment");
         }
         cs_succ(cs);
       }
@@ -445,8 +447,8 @@ static Token *character_constant(CharIterator *cs) {
 
     cs_pop(cs, &ch);
     if (ch.val == '\0' || ch.val == '\n') {
-      reader_error_offset(ch.reader, ch.start,
-                          "missing terminating ' character");
+      const Range *range = range_from_reader(ch.reader, ch.start, ch.end);
+      range_error(range, "missing terminating ' character");
     }
     str_push(s, ch.val);
     if (ch.val == '\'') {
@@ -480,8 +482,8 @@ static Token *string_literal(CharIterator *cs) {
 
     cs_pop(cs, &ch);
     if (ch.val == '\0' || ch.val == '\n') {
-      reader_error_offset(ch.reader, ch.start,
-                          "missing terminating '\"' character");
+      const Range *range = range_from_reader(ch.reader, ch.start, ch.end);
+      range_error(range, "missing terminating '\"' character");
     }
     str_push(s, ch.val);
     if (ch.val == '\"') {
