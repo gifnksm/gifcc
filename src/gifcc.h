@@ -286,6 +286,22 @@ typedef struct {
 typedef DEFINE_VECTOR(TokenVector, Token *) TokenVector;
 
 typedef enum {
+  MACRO_OBJ,
+  MACRO_FUNC,
+  MACRO_OBJ_SPECIAL,
+} macro_t;
+
+typedef Vector *special_macro_handler_t(Token *);
+
+typedef struct Macro {
+  macro_t kind;
+  StrVector *params;
+  bool has_varargs;
+  Vector *replacement;
+  special_macro_handler_t *replacement_func;
+} Macro;
+
+typedef enum {
   // primary expression
   EX_NUM, // 整数のノードの型
   EX_STACK_VAR,
@@ -896,6 +912,12 @@ Token *ts_expect(TokenIterator *ts, int ty);
 
 // pp_tokenize.c
 TokenIterator *new_pp_tokenizer(CharIterator *cs);
+
+// macro.c
+Macro *new_obj_macro(Vector *replacement);
+Macro *new_obj_special_macro(special_macro_handler_t *replacement_func);
+Macro *new_func_macro(StrVector *params, bool has_varargs, Vector *replacement);
+void initialize_predefined_macro(Map *define_map, const Range *builtin_range);
 
 // preprocess.c
 TokenIterator *new_preprocessor(TokenIterator *ts, Reader *reader);
