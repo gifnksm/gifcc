@@ -33,18 +33,13 @@ TokenIterator *new_pp_tokenizer(CharIterator *cs) {
 }
 
 static bool read_token(CharIterator *cs, TokenVector *output) {
-  Char ch;
   while (true) {
-    ch = cs_peek(cs);
     if (skip_space_or_comment(cs)) {
       continue;
     }
-    if (ch.val == '\0') {
-      break;
-    }
-    if (ch.val == '\n') {
-      // do nothing
-    } else if (ch.val == '#') {
+
+    Char ch = cs_peek(cs);
+    if (ch.val == '#') {
       VEC_PUSH(output, pp_directive(cs));
       ch = cs_peek(cs);
     } else {
@@ -53,21 +48,18 @@ static bool read_token(CharIterator *cs, TokenVector *output) {
     }
 
     if (ch.val == '\0') {
-      break;
+      VEC_PUSH(output, new_token(TK_EOF, range_from_reader(ch.reader, ch.start,
+                                                           ch.end)));
+      return true;
     }
     if (ch.val == '\n') {
       cs_succ(cs);
       return true;
     }
+
     range_error(range_from_reader(ch.reader, ch.start, ch.end),
                 "cannot tokenizer: '%c'", ch.val);
   }
-
-  if (ch.val == '\0') {
-    VEC_PUSH(output,
-             new_token(TK_EOF, range_from_reader(ch.reader, ch.start, ch.end)));
-  }
-  return true;
 }
 
 static bool skip_space(CharIterator *cs) {
@@ -86,18 +78,21 @@ static bool skip_comment(CharIterator *cs) {
   bool skipped = false;
 
   while (true) {
-    if (cs_consume_str(cs, "//", NULL, NULL, NULL)) {
-      while (true) {
-        Char ch = cs_peek(cs);
-        if (ch.val == '\n' || ch.val == '\0') {
-          break;
-        }
-        cs_succ(cs);
-      }
+    Char ch0 = cs_peek(cs);
+    if (ch0.val != '/') {
+      break;
+    }
+
+    Char ch1 = cs_peek_ahead(cs, 1);
+    if (ch1.val == '/') {
+      // single line comment
+      cs_succ_to_eol(cs);
       skipped = true;
       continue;
     }
-    if (cs_consume_str(cs, "/*", NULL, NULL, NULL)) {
+
+    if (ch1.val == '*') {
+      // multi line comment
       while (true) {
         if (cs_consume_str(cs, "*/", NULL, NULL, NULL)) {
           break;
@@ -111,6 +106,7 @@ static bool skip_comment(CharIterator *cs) {
       skipped = true;
       continue;
     }
+
     break;
   }
 
@@ -143,7 +139,6 @@ static Token *pp_directive(CharIterator *cs) {
     return new_token_pp_null(range);
   }
 
-  ch = cs_peek(cs);
   Token *token = normal_token(cs);
   if (token->ty != TK_PP_IDENT) {
     range_error(token->range, "invalid preprocessor directive");

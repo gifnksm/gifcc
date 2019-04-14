@@ -2,52 +2,72 @@
 #include <string.h>
 
 typedef struct CharIterator {
-  cs_next_fn_t *next;
+  cs_next_line_fn_t *next_line;
   void *arg;
   CharVector *chars;
-  Char last;
+  int index;
 } CharIterator;
 
 static const Char CHAR_INVALID = {.val = '\0'};
+static bool load_next_line_if_insufficient(CharIterator *cs, int n);
+static bool load_next_line_if_empty(CharIterator *cs);
 
-CharIterator *new_char_iterator(cs_next_fn_t *next, void *arg) {
+CharIterator *new_char_iterator(cs_next_line_fn_t *next_line, void *arg) {
   CharIterator *cs = NEW(CharIterator);
   *cs = (CharIterator){
-      .next = next,
+      .next_line = next_line,
       .arg = arg,
       .chars = NEW_VECTOR(CharVector),
-      .last = {.val = '\n'},
+      .index = 0,
   };
   return cs;
 }
 
 bool cs_pop(CharIterator *cs, Char *output) {
-  Char ch;
-  if (VEC_LEN(cs->chars) == 0) {
-    if (!cs->next(cs->arg, &ch)) {
-      return false;
-    }
-  } else {
-    ch = VEC_REMOVE(cs->chars, 0);
+  if (!load_next_line_if_empty(cs)) {
+    return false;
   }
-  cs->last = ch;
+
+  Char ch = VEC_GET(cs->chars, cs->index);
+  cs->index++;
   if (output != NULL) {
     *output = ch;
   }
   return true;
 }
 
+bool cs_pop_line(CharIterator *cs, CharVector *output) {
+  if (!load_next_line_if_empty(cs)) {
+    return false;
+  }
+
+  if (output != NULL) {
+    VEC_APPEND(output, cs->chars);
+  }
+  VEC_CLEAR(cs->chars);
+  return true;
+}
+
 void cs_succ(CharIterator *cs) { cs_pop(cs, NULL); }
+void cs_succ_to_eol(CharIterator *cs) {
+  if (!load_next_line_if_empty(cs)) {
+    return;
+  }
+  cs->index = VEC_LEN(cs->chars) - 1;
+}
 
 Char cs_peek(CharIterator *cs) {
-  if (VEC_LEN(cs->chars) == 0) {
-    Char ch;
-    if (!cs->next(cs->arg, &ch)) {
-      return CHAR_INVALID;
-    }
-    VEC_PUSH(cs->chars, ch);
+  if (!load_next_line_if_empty(cs)) {
+    return CHAR_INVALID;
   }
-  return VEC_FIRST(cs->chars);
+  return VEC_GET(cs->chars, cs->index);
+}
+
+Char cs_peek_ahead(CharIterator *cs, int n) {
+  if (!load_next_line_if_insufficient(cs, n)) {
+    return CHAR_INVALID;
+  }
+  return VEC_GET(cs->chars, n + cs->index);
 }
 
 bool cs_consume(CharIterator *cs, char ch, const Reader **reader, int *start,
@@ -76,15 +96,7 @@ bool cs_consume_str(CharIterator *cs, const char *str, const Reader **reader,
   Char ch_start = cs_peek(cs);
   Char ch_end = ch_start;
   for (int i = 0; i < len; i++) {
-    Char ch;
-    if (VEC_LEN(cs->chars) <= i) {
-      if (!cs->next(cs->arg, &ch)) {
-        return false;
-      }
-      VEC_PUSH(cs->chars, ch);
-    } else {
-      ch = VEC_GET(cs->chars, i);
-    }
+    Char ch = cs_peek_ahead(cs, i);
     if (ch.val != str[i]) {
       return false;
     }
@@ -125,4 +137,34 @@ Char cs_expect(CharIterator *cs, char ch) {
   };
 }
 
-bool cs_is_sol(CharIterator *cs) { return cs->last.val == '\n'; }
+static bool load_next_line_if_insufficient(CharIterator *cs, int n) {
+  if (VEC_LEN(cs->chars) == cs->index) {
+    VEC_CLEAR(cs->chars);
+    cs->index = 0;
+  }
+
+  if (VEC_LEN(cs->chars) <= cs->index + n) {
+    if (!cs->next_line(cs->arg, cs->chars)) {
+      return false;
+    }
+  }
+
+  assert(VEC_LEN(cs->chars) > cs->index + n);
+  assert(VEC_LAST(cs->chars).val == '\n' || VEC_LAST(cs->chars).val == '\0');
+
+  return true;
+}
+static bool load_next_line_if_empty(CharIterator *cs) {
+  if (VEC_LEN(cs->chars) == cs->index) {
+    VEC_CLEAR(cs->chars);
+    cs->index = 0;
+
+    if (!cs->next_line(cs->arg, cs->chars)) {
+      return false;
+    }
+  }
+
+  assert(VEC_LAST(cs->chars).val == '\n' || VEC_LAST(cs->chars).val == '\0');
+
+  return true;
+}

@@ -30,7 +30,6 @@ typedef DEFINE_VECTOR(FileOffsetVector, FileOffset *) FileOffsetVector;
 
 typedef struct Reader {
   int offset;
-  bool is_sol;
   FileVector *file_stack;
   FileOffsetVector *file_offset;
 } Reader;
@@ -48,11 +47,9 @@ typedef enum {
   MESSAGE_NOTE,
 } message_t;
 
-static char reader_pop(Reader *reader);
+static Char reader_pop(Reader *reader);
 static FileOffset *switch_file(Reader *reader, File *file);
-static char reader_peek_ahead(Reader *reader, int n);
 static File *peek_file(const Reader *reader);
-static File *peek_file_n(const Reader *reader, int n);
 static FileOffset *get_file_offset(const Reader *reader, int offset);
 static __attribute__((format(printf, 5, 6))) void
 print_message(message_t msg, const Range *range, const char *dbg_file,
@@ -193,7 +190,6 @@ Reader *new_reader(void) {
   Reader *reader = NEW(Reader);
   *reader = (Reader){
       .offset = 0,
-      .is_sol = true,
       .file_stack = NEW_VECTOR(FileVector),
       .file_offset = NEW_VECTOR(FileOffsetVector),
   };
@@ -207,22 +203,20 @@ Reader *new_reader(void) {
   return reader;
 }
 
-static bool next(void *arg, Char *output) {
+static bool next_line(void *arg, CharVector *output) {
   Reader *reader = arg;
-  int offset = reader->offset;
-  char ch = reader_pop(reader);
 
-  *output = (Char){
-      .val = ch,
-      .start = offset,
-      .end = offset + 1,
-      .reader = reader,
-  };
-  return true;
+  while (true) {
+    Char ch = reader_pop(reader);
+    VEC_PUSH(output, ch);
+    if (ch.val == '\n' || ch.val == '\0') {
+      return true;
+    }
+  }
 }
 
 CharIterator *char_iterator_from_reader(Reader *reader) {
-  return new_char_iterator(next, reader);
+  return new_char_iterator(next_line, reader);
 }
 
 void reader_add_file(Reader *reader, FILE *fp, const char *filename) {
@@ -254,55 +248,38 @@ static FileOffset *switch_file(Reader *reader, File *file) {
   fo->file_offset = file != NULL ? file->offset : 0;
   fo->file = file;
   VEC_PUSH(reader->file_offset, fo);
-  reader->is_sol = true;
   return fo;
 }
 
-static File *peek_file(const Reader *reader) { return peek_file_n(reader, 0); }
-static File *peek_file_n(const Reader *reader, int n) {
-  if (n >= VEC_LEN(reader->file_stack)) {
+static File *peek_file(const Reader *reader) {
+  if (VEC_LEN(reader->file_stack) == 0) {
     return NULL;
   }
-  return VEC_RGET(reader->file_stack, n);
+  return VEC_LAST(reader->file_stack);
 }
 
-char reader_peek(Reader *reader) { return reader_peek_ahead(reader, 0); }
+static Char reader_pop(Reader *reader) {
+  Char ch = (Char){
+      .val = '\0',
+      .start = reader->offset,
+      .end = reader->offset + 1,
+      .reader = reader,
+  };
 
-static char reader_peek_ahead(Reader *reader, int n) {
-  int file_idx = 0;
-  int count = n;
-  while (true) {
-    File *file = peek_file_n(reader, file_idx);
-    if (file == NULL) {
-      return '\0';
-    }
-    if (count >= file->size - file->offset) {
-      count -= (file->size - file->offset);
-      file_idx++;
-      continue;
-    }
-    return file->source[file->offset + count];
-  }
-}
-
-static void reader_succ(Reader *reader) {
   File *file = peek_file(reader);
-  assert(file != NULL);
+  if (file == NULL) {
+    return ch;
+  }
 
-  reader->is_sol = file->source[file->offset] == '\n';
+  ch.val = file->source[file->offset];
   reader->offset++;
   file->offset++;
-  if (file->offset >= file->size) {
+
+  if (file->offset == file->size) {
     VEC_POP(reader->file_stack);
     (void)switch_file(reader, peek_file(reader));
   }
-}
 
-static char reader_pop(Reader *reader) {
-  char ch = reader_peek(reader);
-  if (ch != '\0') {
-    reader_succ(reader);
-  }
   return ch;
 }
 
