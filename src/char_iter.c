@@ -39,16 +39,15 @@ bool cs_pop(CharIterator *cs, Char *output) {
 
 void cs_succ(CharIterator *cs) { cs_pop(cs, NULL); }
 
-Char cs_peek(CharIterator *cs) { return cs_peek_ahead(cs, 0); }
-Char cs_peek_ahead(CharIterator *cs, int n) {
-  while (VEC_LEN(cs->chars) <= n) {
+Char cs_peek(CharIterator *cs) {
+  if (VEC_LEN(cs->chars) == 0) {
     Char ch;
     if (!cs->next(cs->arg, &ch)) {
       return CHAR_INVALID;
     }
     VEC_PUSH(cs->chars, ch);
   }
-  return VEC_GET(cs->chars, n);
+  return VEC_FIRST(cs->chars);
 }
 
 bool cs_consume(CharIterator *cs, char ch, const Reader **reader, int *start,
@@ -74,21 +73,32 @@ bool cs_consume(CharIterator *cs, char ch, const Reader **reader, int *start,
 bool cs_consume_str(CharIterator *cs, const char *str, const Reader **reader,
                     int *start, int *end) {
   int len = strlen(str);
+  Char ch_start = cs_peek(cs);
+  Char ch_end = ch_start;
   for (int i = 0; i < len; i++) {
-    Char c = cs_peek_ahead(cs, i);
-    if (c.val != str[i]) {
+    Char ch;
+    if (VEC_LEN(cs->chars) <= i) {
+      if (!cs->next(cs->arg, &ch)) {
+        return false;
+      }
+      VEC_PUSH(cs->chars, ch);
+    } else {
+      ch = VEC_GET(cs->chars, i);
+    }
+    if (ch.val != str[i]) {
       return false;
     }
+    ch_end = ch;
   }
 
   if (reader != NULL) {
-    *reader = cs_peek(cs).reader;
+    *reader = ch_start.reader;
   }
   if (start != NULL) {
-    *start = cs_peek(cs).start;
+    *start = ch_start.start;
   }
   if (end != NULL) {
-    *end = cs_peek_ahead(cs, len - 1).end;
+    *end = ch_end.end;
   }
 
   for (int i = 0; i < len; i++) {

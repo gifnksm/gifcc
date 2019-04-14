@@ -833,7 +833,6 @@ void range_warn_raw_v(const Range *range, const char *dbg_file, int dbg_line,
 CharIterator *new_char_iterator(cs_next_fn_t *next, void *arg);
 bool cs_pop(CharIterator *cs, Char *output);
 void cs_succ(CharIterator *cs);
-Char cs_peek_ahead(CharIterator *cs, int n);
 Char cs_peek(CharIterator *cs);
 bool cs_consume(CharIterator *cs, char ch, const Reader **reader, int *start,
                 int *end);
