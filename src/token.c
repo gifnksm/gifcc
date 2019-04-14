@@ -95,13 +95,77 @@ Token *new_token_pp_str(const char *str, const Range *range) {
   return token;
 }
 
-static const char *quote(const char *s) { return format("`%s`", s); }
+Token *new_token_pp_null(const Range *range) {
+  return new_token(TK_PP_NULL, range);
+}
+Token *new_token_pp_if(Vector *tokens, const Range *range) {
+  Token *token = new_token(TK_PP_IF, range);
+  token->pp_if.tokens = tokens;
+  return token;
+}
+Token *new_token_pp_elif(Vector *tokens, const Range *range) {
+  Token *token = new_token(TK_PP_ELIF, range);
+  token->pp_elif.tokens = tokens;
+  return token;
+}
+Token *new_token_pp_ifdef(const char *ident, const Range *range) {
+  Token *token = new_token(TK_PP_IFDEF, range);
+  token->pp_ifdef.ident = ident;
+  return token;
+}
+Token *new_token_pp_ifndef(const char *ident, const Range *range) {
+  Token *token = new_token(TK_PP_IFNDEF, range);
+  token->pp_ifndef.ident = ident;
+  return token;
+}
+Token *new_token_pp_else(const Range *range) {
+  return new_token(TK_PP_ELSE, range);
+}
+Token *new_token_pp_endif(const Range *range) {
+  return new_token(TK_PP_ENDIF, range);
+}
+
+Token *new_token_pp_include(Vector *tokens, const Range *range) {
+  Token *token = new_token(TK_PP_INCLUDE, range);
+  token->pp_include.tokens = tokens;
+  return token;
+}
+Token *new_token_pp_define(const char *ident, StrVector *params,
+                           bool has_varargs, Vector *replacements,
+                           const Range *range) {
+  Token *token = new_token(TK_PP_DEFINE, range);
+  token->pp_define.ident = ident;
+  token->pp_define.params = params;
+  token->pp_define.has_varargs = has_varargs;
+  token->pp_define.replacements = replacements;
+  return token;
+}
+Token *new_token_pp_undef(const char *ident, const Range *range) {
+  Token *token = new_token(TK_PP_UNDEF, range);
+  token->pp_undef.ident = ident;
+  return token;
+}
+Token *new_token_pp_error(const char *message, const Range *range) {
+  Token *token = new_token(TK_PP_ERROR, range);
+  token->pp_error.message = message;
+  return token;
+}
+Token *new_token_pp_line(Vector *tokens, const Range *range) {
+  Token *token = new_token(TK_PP_LINE, range);
+  token->pp_line.tokens = tokens;
+  return token;
+}
+Token *new_token_pp_unknown(const char *ident, const char *rest,
+                            const Range *range) {
+  Token *token = new_token(TK_PP_UNKNOWN, range);
+  token->pp_unknown.ident = ident;
+  token->pp_unknown.rest = rest;
+  return token;
+}
 
 const char *token_kind_to_str(int kind) {
   if (kind <= 255) {
-    char str[] = " ";
-    str[0] = kind;
-    return quote(str);
+    return format("%c", kind);
   }
 
   switch (kind) {
@@ -113,6 +177,32 @@ const char *token_kind_to_str(int kind) {
     return "PP_CHAR";
   case TK_PP_STR:
     return "PP_STR";
+  case TK_PP_NULL:
+    return "PP_NULL";
+  case TK_PP_IF:
+    return "PP_IF";
+  case TK_PP_ELIF:
+    return "PP_ELIF";
+  case TK_PP_IFDEF:
+    return "PP_IFDEF";
+  case TK_PP_IFNDEF:
+    return "PP_IFNDEF";
+  case TK_PP_ELSE:
+    return "PP_ELSE";
+  case TK_PP_ENDIF:
+    return "PP_ENDIF";
+  case TK_PP_INCLUDE:
+    return "PP_INCLUDE";
+  case TK_PP_DEFINE:
+    return "PP_DEFINE";
+  case TK_PP_UNDEF:
+    return "PP_UNDEF";
+  case TK_PP_ERROR:
+    return "PP_ERROR";
+  case TK_PP_LINE:
+    return "PP_LINE";
+  case TK_PP_UNKNOWN:
+    return "PP_UNKNOWN";
   case TK_NUM:
     return "NUM";
   case TK_IDENT:
@@ -130,7 +220,7 @@ const char *token_kind_to_str(int kind) {
       for (int i = 0; lts[i].str != NULL; i++) {
         const LongToken *tk = &lts[i];
         if (tk->kind == kind) {
-          return quote(tk->str);
+          return tk->str;
         }
       }
     }
@@ -139,8 +229,52 @@ const char *token_kind_to_str(int kind) {
   }
 }
 
+static void dump_tokens(FILE *fp, const Vector *tokens) {
+  for (int i = 0; i < vec_len(tokens); i++) {
+    Token *tk = vec_get(tokens, i);
+    switch (tk->ty) {
+    case TK_PP_NUM:
+      fprintf(fp, " %s", tk->pp_num);
+      break;
+    case TK_PP_IDENT:
+      fprintf(fp, " %s", tk->pp_ident);
+      break;
+    case TK_PP_CHAR:
+      fprintf(fp, " %s", tk->pp_char);
+      break;
+    case TK_PP_STR:
+      fprintf(fp, " %s", tk->pp_str);
+      break;
+    default:
+      fprintf(fp, " %s", token_kind_to_str(tk->ty));
+      break;
+    }
+  }
+}
+
+static void dump_macro_params(FILE *fp, const char *ident, StrVector *params,
+                              bool has_varargs) {
+  fprintf(fp, "%s", ident);
+  if (params == NULL) {
+    return;
+  }
+
+  fprintf(fp, "(");
+  for (int i = 0; i < VEC_LEN(params); i++) {
+    fprintf(fp, "%s%s", (i > 0) ? ", " : "", VEC_GET(params, i));
+  }
+  if (has_varargs) {
+    if (VEC_LEN(params) > 0) {
+      fprintf(fp, ", ...");
+    } else {
+      fprintf(fp, "...");
+    }
+  }
+  fprintf(fp, ")");
+}
+
 static void dump_token(FILE *fp, const Token *token) {
-  fprintf(fp, "%s: %-8s ", format_range_start(token->range),
+  fprintf(fp, "%s: %-16s ", format_range_start(token->range),
           token_kind_to_str(token->ty));
   switch (token->ty) {
   case TK_PP_NUM:
@@ -154,6 +288,38 @@ static void dump_token(FILE *fp, const Token *token) {
     break;
   case TK_PP_STR:
     fprintf(fp, "%s", token->pp_str);
+    break;
+  case TK_PP_IF:
+    dump_tokens(fp, token->pp_if.tokens);
+    break;
+  case TK_PP_ELIF:
+    dump_tokens(fp, token->pp_elif.tokens);
+    break;
+  case TK_PP_IFDEF:
+    fprintf(fp, "%s", token->pp_ifdef.ident);
+    break;
+  case TK_PP_IFNDEF:
+    fprintf(fp, "%s", token->pp_ifndef.ident);
+    break;
+  case TK_PP_INCLUDE:
+    dump_tokens(fp, token->pp_include.tokens);
+    break;
+  case TK_PP_DEFINE:
+    dump_macro_params(fp, token->pp_define.ident, token->pp_define.params,
+                      token->pp_define.has_varargs);
+    dump_tokens(fp, token->pp_define.replacements);
+    break;
+  case TK_PP_UNDEF:
+    fprintf(fp, "%s", token->pp_undef.ident);
+    break;
+  case TK_PP_ERROR:
+    fprintf(fp, "%s", token->pp_error.message);
+    break;
+  case TK_PP_LINE:
+    dump_tokens(fp, token->pp_line.tokens);
+    break;
+  case TK_PP_UNKNOWN:
+    fprintf(fp, "%s %s", token->pp_unknown.ident, token->pp_unknown.rest);
     break;
   case TK_NUM:
     fprintf(fp, "%s", format_number(token->num));

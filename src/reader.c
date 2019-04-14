@@ -104,6 +104,12 @@ const Range *range_add_expanded_from(const Range *range,
 }
 
 const Range *range_join(const Range *a, const Range *b) {
+  if (a == NULL) {
+    return b;
+  }
+  if (b == NULL) {
+    return a;
+  }
   assert(a->start >= 0);
   assert(b->start >= 0);
   assert(a->reader == b->reader);
@@ -150,6 +156,7 @@ const Range *range_join(const Range *a, const Range *b) {
   return range;
 }
 
+const Reader *range_get_reader(const Range *range) { return range->reader; }
 void range_get_start(const Range *range, const char **filename, int *line,
                      int *column) {
   reader_get_position(range->reader, range->start, filename, line, column);

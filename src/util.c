@@ -29,6 +29,11 @@ int oct2num(int c) {
   return c - '0';
 }
 
+bool is_ident_head(int c) {
+  return ('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z') || c == '_';
+}
+bool is_ident_tail(int c) { return is_ident_head(c) || ('0' <= c && c <= '9'); }
+
 char *format_string_literal(const char *str) {
   String *buf = new_string();
   str_push(buf, '"');

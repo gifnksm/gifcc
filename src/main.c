@@ -669,7 +669,7 @@ int main(int argc, char **argv) {
   CharIterator *cs = char_iterator_from_reader(reader);
   cs = phase2_filter(cs);
 
-  TokenIterator *ts = new_pp_tokenizer(cs, reader);
+  TokenIterator *ts = new_pp_tokenizer(cs);
   if (emit_target & EMIT_PP_TOKEN) {
     emit_target ^= EMIT_PP_TOKEN;
     FILE *fp = open_output_file(replace_suffix(output, ".s", ".pp_token"));
@@ -681,6 +681,7 @@ int main(int argc, char **argv) {
     }
   }
 
+  ts = phase4_filter(ts, reader);
   ts = phase5_filter(ts);
   ts = phase6_filter(ts);
   ts = phase7_filter(ts);

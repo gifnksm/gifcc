@@ -1,5 +1,7 @@
 #include "cpp.h"
 
+#
+
 #ifdef FOO
 #error "FOO must not be defined"
 #endif

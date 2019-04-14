@@ -1,8 +1,6 @@
 #include "gifcc.h"
 #include <string.h>
 
-typedef DEFINE_VECTOR(CharVector, Char) CharVector;
-
 typedef struct CharIterator {
   cs_next_fn_t *next;
   void *arg;

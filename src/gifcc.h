@@ -26,7 +26,20 @@ enum {
   TK_PP_NUM = 256,  // Preprocessor number
   TK_PP_IDENT,      // Preprocessor identifiers
   TK_PP_CHAR,       // Preprocessor character constant
-  TK_PP_STR,        // preprocessor string literal
+  TK_PP_STR,        // Preprocessor string literal
+  TK_PP_NULL,       // Preprocessor null directive
+  TK_PP_IF,         // Preprocessor `if` directive
+  TK_PP_ELIF,       // Preprocessor `elif` directive
+  TK_PP_IFDEF,      // Preprocessor `ifdef` directive
+  TK_PP_IFNDEF,     // Preprocessor `ifndef` directive
+  TK_PP_ELSE,       // Preprocessor `else` directive
+  TK_PP_ENDIF,      // Preprocessor `endif` directive
+  TK_PP_INCLUDE,    // Preprocessor `include` directive
+  TK_PP_DEFINE,     // Preprocessor `define` directive
+  TK_PP_UNDEF,      // Preprocessor `undef` directive
+  TK_PP_ERROR,      // Preprocessor `error` directive
+  TK_PP_LINE,       // Preprocessor `line` directive
+  TK_PP_UNKNOWN,    // Preprocessor unknown directive
   TK_NUM,           // Number
   TK_IDENT,         // identifiers
   TK_CHARCONST,     // character constant
@@ -219,14 +232,52 @@ typedef struct {
   int kind;
 } LongToken;
 
+typedef struct CharVector CharVector;
 typedef struct {
   int ty;
   const Range *range;
   Set *pp_hideset;
+
   const char *pp_num;
   const char *pp_ident;
   const char *pp_char;
   const char *pp_str;
+
+  struct {
+    Vector *tokens;
+  } pp_if;
+  struct {
+    Vector *tokens;
+  } pp_elif;
+  struct {
+    const char *ident;
+  } pp_ifdef;
+  struct {
+    const char *ident;
+  } pp_ifndef;
+  struct {
+    Vector *tokens;
+  } pp_include;
+  struct {
+    const char *ident;
+    StrVector *params;
+    bool has_varargs;
+    Vector *replacements;
+  } pp_define;
+  struct {
+    const char *ident;
+  } pp_undef;
+  struct {
+    const char *message;
+  } pp_error;
+  struct {
+    Vector *tokens;
+  } pp_line;
+  struct {
+    const char *ident;
+    const char *rest;
+  } pp_unknown;
+
   const char *ident;
   Number num;
   const char *str;
@@ -628,9 +679,9 @@ typedef struct Char {
   int end;
   const Reader *reader;
 } Char;
+typedef DEFINE_VECTOR(CharVector, Char) CharVector;
 typedef struct CharIterator CharIterator;
 typedef struct TokenIterator TokenIterator;
-typedef struct PpTokenizer PpTokenizer;
 typedef struct Scope Scope;
 
 typedef bool cs_next_fn_t(void *, Char *);
@@ -704,6 +755,8 @@ bool is_hex_digit(int c);
 int hex2num(int c);
 bool is_oct_digit(int c);
 int oct2num(int c);
+bool is_ident_head(int c);
+bool is_ident_tail(int c);
 char *format_string_literal(const char *str);
 char *__attribute__((format(printf, 1, 2))) format(const char *fmt, ...);
 
@@ -716,6 +769,7 @@ const Range *range_builtin(const Reader *reader);
 const Range *range_add_expanded_from(const Range *range,
                                      const Range *expanded_from);
 const Range *range_join(const Range *a, const Range *b);
+const Reader *range_get_reader(const Range *range);
 void range_get_start(const Range *range, const char **filename, int *line,
                      int *column);
 void range_get_end(const Range *range, const char **filename, int *line,
@@ -809,6 +863,22 @@ Token *new_token_pp_num(const char *num, const Range *range);
 Token *new_token_pp_ident(const char *ident, const Range *range);
 Token *new_token_pp_char(const char *ch, const Range *range);
 Token *new_token_pp_str(const char *str, const Range *range);
+Token *new_token_pp_null(const Range *range);
+Token *new_token_pp_if(Vector *tokens, const Range *range);
+Token *new_token_pp_elif(Vector *tokens, const Range *range);
+Token *new_token_pp_ifdef(const char *ident, const Range *range);
+Token *new_token_pp_ifndef(const char *ident, const Range *range);
+Token *new_token_pp_else(const Range *range);
+Token *new_token_pp_endif(const Range *range);
+Token *new_token_pp_include(Vector *tokens, const Range *range);
+Token *new_token_pp_define(const char *ident, StrVector *params,
+                           bool has_varargs, Vector *replacements,
+                           const Range *range);
+Token *new_token_pp_undef(const char *ident, const Range *range);
+Token *new_token_pp_error(const char *message, const Range *range);
+Token *new_token_pp_line(Vector *tokens, const Range *range);
+Token *new_token_pp_unknown(const char *ident, const char *rest,
+                            const Range *range);
 const char *token_kind_to_str(int kind);
 TokenIterator *new_token_dumper(TokenIterator *ts, FILE *fp);
 
@@ -825,10 +895,14 @@ Token *ts_consume2(TokenIterator *ts, int ty1, int ty2);
 Token *ts_expect(TokenIterator *ts, int ty);
 
 // pp_tokenize.c
-TokenIterator *new_pp_tokenizer(CharIterator *cs, Reader *reader);
+TokenIterator *new_pp_tokenizer(CharIterator *cs);
+
+// preprocess.c
+TokenIterator *new_preprocessor(TokenIterator *ts, Reader *reader);
 
 // filter.c
 CharIterator *phase2_filter(CharIterator *cs);
+TokenIterator *phase4_filter(TokenIterator *ts, Reader *reader);
 TokenIterator *phase5_filter(TokenIterator *ts);
 TokenIterator *phase6_filter(TokenIterator *ts);
 TokenIterator *phase7_filter(TokenIterator *ts);
