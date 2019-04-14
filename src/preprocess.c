@@ -11,6 +11,8 @@ typedef struct Cond {
 } Cond;
 typedef DEFINE_VECTOR(CondVector, Cond *) CondVector;
 
+typedef DEFINE_VECTOR(TokenListVector, TokenVector *) TokenListVector;
+
 typedef struct ConditionalInclusionArg {
   CondVector *cond_stack;
   Map *define_map;
@@ -28,42 +30,45 @@ typedef struct ExpandMacroArg {
   TokenIterator *ts;
 } ExpandMacroArg;
 
-static bool conditional_inclusion(void *arg, Vector *output);
+static bool conditional_inclusion(void *arg, TokenVector *output);
 static bool pp_cond_fullfilled(CondVector *cond_stack);
 static bool pp_outer_cond_fullfilled(CondVector *cond_stack);
-static bool read_pp_if_cond(Map *define_map, Vector *tokens,
+static bool read_pp_if_cond(Map *define_map, TokenVector *tokens,
                             const Range *range);
-static Vector *pp_convert_defined(Map *define_map, Vector *tokens);
+static TokenVector *pp_convert_defined(Map *define_map, TokenVector *tokens);
 static void pp_if(CondVector *cond_stack, bool fullfilled, const Range *range);
 static void pp_elif(CondVector *cond_stack, bool fullfilled,
                     const Range *range);
 static void pp_else(CondVector *cond_stack, const Range *range);
 static void pp_endif(CondVector *cond_stack, const Range *range);
 
-static bool control_directive(void *arg, Vector *output);
+static bool control_directive(void *arg, TokenVector *output);
 static void do_include(const Range *range, const char *path,
                        bool include_sourcedir);
 static bool try_include(Reader *reader, const char *base_path,
                         const char *rel_path);
 
-static bool expand_macro(void *arg, Vector *output);
+static bool expand_macro(void *arg, TokenVector *output);
 
-static Vector *pp_expand_macros(Map *define_map, Vector *tokens,
-                                TokenIterator *ts);
-static Vector *pp_subst_macros(Map *define_map, const Range *expanded_from,
-                               Vector *input, StrVector *params,
-                               Vector *arguments, Set *hideset, Vector *output);
-static Vector *pp_get_func_arg(StrVector *params, Vector *arguments,
-                               Token *token);
-static Vector *pp_read_macro_func_arg(Macro *macro, Vector *tokens,
-                                      Token **rparen, TokenIterator *ts);
+static TokenVector *pp_expand_macros(Map *define_map, TokenVector *tokens,
+                                     TokenIterator *ts);
+static TokenVector *pp_subst_macros(Map *define_map, const Range *expanded_from,
+                                    TokenVector *input, StrVector *params,
+                                    TokenListVector *arguments, Set *hideset,
+                                    TokenVector *output);
+static TokenVector *pp_get_func_arg(StrVector *params,
+                                    TokenListVector *arguments, Token *token);
+static TokenListVector *pp_read_macro_func_arg(Macro *macro,
+                                               TokenVector *tokens,
+                                               Token **rparen,
+                                               TokenIterator *ts);
 static bool pp_is_token_in_hideset(Token *token);
-static Vector *pp_hsadd(const Range *expanded_from, Set *hideset,
-                        Vector *output);
+static TokenVector *pp_hsadd(const Range *expanded_from, Set *hideset,
+                             TokenVector *output);
 static Set *pp_hideset_intersection(Token *a, Token *b);
-static Token *pp_stringize(Vector *arg, bool quote);
+static Token *pp_stringize(TokenVector *arg, bool quote);
 static const char *token_to_str(const Token *token);
-static void pp_glue(Vector *ls, Vector *rs);
+static void pp_glue(TokenVector *ls, TokenVector *rs);
 
 TokenIterator *new_preprocessor(TokenIterator *ts, Reader *reader) {
   Map *define_map = new_map();
@@ -91,7 +96,7 @@ TokenIterator *new_preprocessor(TokenIterator *ts, Reader *reader) {
   return ts;
 }
 
-static bool conditional_inclusion(void *arg, Vector *output) {
+static bool conditional_inclusion(void *arg, TokenVector *output) {
   ConditionalInclusionArg *cond_arg = arg;
   CondVector *cond_stack = cond_arg->cond_stack;
   Map *define_map = cond_arg->define_map;
@@ -105,7 +110,7 @@ static bool conditional_inclusion(void *arg, Vector *output) {
 
     switch (token->ty) {
     case TK_PP_IF: {
-      Vector *tokens = token->pp_if.tokens;
+      TokenVector *tokens = token->pp_if.tokens;
       bool fullfilled = true;
       if (pp_cond_fullfilled(cond_stack)) {
         fullfilled = read_pp_if_cond(define_map, tokens, token->range);
@@ -114,7 +119,7 @@ static bool conditional_inclusion(void *arg, Vector *output) {
       continue;
     }
     case TK_PP_ELIF: {
-      Vector *tokens = token->pp_elif.tokens;
+      TokenVector *tokens = token->pp_elif.tokens;
       bool fullfilled = true;
       if (pp_outer_cond_fullfilled(cond_stack)) {
         fullfilled = read_pp_if_cond(define_map, tokens, token->range);
@@ -157,7 +162,7 @@ static bool conditional_inclusion(void *arg, Vector *output) {
     }
     }
 
-    vec_push(output, token);
+    VEC_PUSH(output, token);
     return true;
   }
 }
@@ -178,16 +183,16 @@ static bool pp_outer_cond_fullfilled(CondVector *cond_stack) {
   return true;
 }
 
-static bool read_pp_if_cond(Map *define_map, Vector *tokens,
+static bool read_pp_if_cond(Map *define_map, TokenVector *tokens,
                             const Range *range) {
-  if (vec_len(tokens) == 0) {
+  if (VEC_LEN(tokens) == 0) {
     range_error(range, "expected value in expression");
   }
-  Token *last = vec_last(tokens);
+  Token *last = VEC_LAST(tokens);
   const Range *here = last->range;
   const Reader *reader = range_get_reader(here);
   Token *eof_token = new_token(TK_EOF, here);
-  vec_push(tokens, eof_token);
+  VEC_PUSH(tokens, eof_token);
 
   // convert `defined(IDENT)` or `defined INDET` into 0 or 1
   tokens = pp_convert_defined(define_map, tokens);
@@ -195,9 +200,9 @@ static bool read_pp_if_cond(Map *define_map, Vector *tokens,
   // expand macros
   tokens = pp_expand_macros(define_map, tokens, NULL);
 
-  for (int i = 0; i < vec_len(tokens); i++) {
+  for (int i = 0; i < VEC_LEN(tokens); i++) {
     // replace all ident tokens (including keyword ident) into '0'
-    Token *tk = vec_get(tokens, i);
+    Token *tk = VEC_GET(tokens, i);
     if (tk->ty == TK_PP_IDENT) {
       tk->pp_ident = NULL;
       tk->ty = TK_PP_NUM;
@@ -220,21 +225,21 @@ static bool read_pp_if_cond(Map *define_map, Vector *tokens,
   return val != 0;
 }
 
-static Vector *pp_convert_defined(Map *define_map, Vector *tokens) {
-  Vector *converted = new_vector();
-  while (vec_len(tokens) > 0) {
-    Token *token = vec_remove(tokens, 0);
+static TokenVector *pp_convert_defined(Map *define_map, TokenVector *tokens) {
+  TokenVector *converted = NEW_VECTOR(TokenVector);
+  while (VEC_LEN(tokens) > 0) {
+    Token *token = VEC_REMOVE(tokens, 0);
     if (token->ty != TK_PP_IDENT || strcmp(token->pp_ident, "defined") != 0) {
-      vec_push(converted, token);
+      VEC_PUSH(converted, token);
       continue;
     }
     const Range *def_start = token->range;
 
     bool has_paren = false;
-    token = vec_remove(tokens, 0);
+    token = VEC_REMOVE(tokens, 0);
     if (token->ty == '(') {
       has_paren = true;
-      token = vec_remove(tokens, 0);
+      token = VEC_REMOVE(tokens, 0);
     }
 
     if (token->ty != TK_PP_IDENT) {
@@ -245,12 +250,12 @@ static Vector *pp_convert_defined(Map *define_map, Vector *tokens) {
     Token *num_token =
         new_token_pp_num(num, range_join(def_start, token->range));
     if (has_paren) {
-      token = vec_remove(tokens, 0);
+      token = VEC_REMOVE(tokens, 0);
       if (token->ty != ')') {
         range_error(token->range, "`)` がありません");
       }
     }
-    vec_push(converted, num_token);
+    VEC_PUSH(converted, num_token);
   }
   return converted;
 }
@@ -293,7 +298,7 @@ static void pp_endif(CondVector *cond_stack, const Range *range) {
   VEC_POP(cond_stack);
 }
 
-static bool control_directive(void *arg, Vector *output) {
+static bool control_directive(void *arg, TokenVector *output) {
   ControlArg *ctrl_arg = arg;
   Reader *reader = ctrl_arg->reader;
   Map *define_map = ctrl_arg->define_map;
@@ -310,9 +315,9 @@ static bool control_directive(void *arg, Vector *output) {
       continue;
     }
     case TK_PP_INCLUDE: {
-      Vector *tokens = token->pp_include.tokens;
+      TokenVector *tokens = token->pp_include.tokens;
       tokens = pp_expand_macros(define_map, tokens, NULL);
-      if (vec_len(tokens) == 0) {
+      if (VEC_LEN(tokens) == 0) {
         range_error(token->range, "expected \"FILENAME\" or <FILENAME>");
       }
       Token *filename = pp_stringize(tokens, false);
@@ -338,7 +343,7 @@ static bool control_directive(void *arg, Vector *output) {
       if (has_varargs) {
         VEC_PUSH(params, "__VA_ARGS__");
       }
-      Vector *replacements = token->pp_define.replacements;
+      TokenVector *replacements = token->pp_define.replacements;
       Macro *macro;
       if (params != NULL) {
         macro = new_func_macro(params, has_varargs, replacements);
@@ -359,13 +364,13 @@ static bool control_directive(void *arg, Vector *output) {
       continue;
     }
     case TK_PP_LINE: {
-      Vector *tokens = token->pp_line.tokens;
+      TokenVector *tokens = token->pp_line.tokens;
       tokens = pp_expand_macros(define_map, tokens, NULL);
-      if (vec_len(tokens) == 0) {
+      if (VEC_LEN(tokens) == 0) {
         range_error(token->range,
                     "#line directive requires a positive integer argument");
       }
-      Token *num = vec_get(tokens, 0);
+      Token *num = VEC_GET(tokens, 0);
       if (num->ty != TK_PP_NUM) {
         range_error(num->range,
                     "#line directive requires a positive integer argument");
@@ -381,15 +386,15 @@ static bool control_directive(void *arg, Vector *output) {
       }
       int line = val;
       const char *filename = NULL;
-      if (vec_len(tokens) > 1) {
-        Token *str = vec_get(tokens, 1);
+      if (VEC_LEN(tokens) > 1) {
+        Token *str = VEC_GET(tokens, 1);
         if (str->ty != TK_STR) {
           range_error(str->range, "invalid filename for #line directive");
         }
         filename = str->str;
       }
-      if (vec_len(tokens) > 2) {
-        Token *token = vec_get(tokens, 2);
+      if (VEC_LEN(tokens) > 2) {
+        Token *token = VEC_GET(tokens, 2);
         range_warn(token->range, "extra tokens at end of #line directive");
       }
 
@@ -403,7 +408,7 @@ static bool control_directive(void *arg, Vector *output) {
       break;
     }
 
-    vec_push(output, token);
+    VEC_PUSH(output, token);
     return true;
   }
 }
@@ -450,7 +455,7 @@ static bool try_include(Reader *reader, const char *base_path,
   return false;
 }
 
-static bool expand_macro(void *arg, Vector *output) {
+static bool expand_macro(void *arg, TokenVector *output) {
   ExpandMacroArg *expand_arg = arg;
   Map *define_map = expand_arg->define_map;
   TokenIterator *ts = expand_arg->ts;
@@ -460,30 +465,30 @@ static bool expand_macro(void *arg, Vector *output) {
     return false;
   }
 
-  Vector *tokens = new_vector();
-  vec_push(tokens, token);
+  TokenVector *tokens = NEW_VECTOR(TokenVector);
+  VEC_PUSH(tokens, token);
   tokens = pp_expand_macros(define_map, tokens, ts);
-  vec_append(output, tokens);
+  VEC_APPEND(output, tokens);
   return true;
 }
 
-static Vector *pp_expand_macros(Map *define_map, Vector *tokens,
-                                TokenIterator *ts) {
-  Vector *expanded = new_vector();
-  while (vec_len(tokens) > 0) {
-    Token *ident = vec_remove(tokens, 0);
+static TokenVector *pp_expand_macros(Map *define_map, TokenVector *tokens,
+                                     TokenIterator *ts) {
+  TokenVector *expanded = NEW_VECTOR(TokenVector);
+  while (VEC_LEN(tokens) > 0) {
+    Token *ident = VEC_REMOVE(tokens, 0);
     if (ident->ty != TK_PP_IDENT) {
-      vec_push(expanded, ident);
+      VEC_PUSH(expanded, ident);
       continue;
     }
     if (pp_is_token_in_hideset(ident)) {
-      vec_push(expanded, ident);
+      VEC_PUSH(expanded, ident);
       continue;
     }
 
     Macro *macro = map_get(define_map, ident->pp_ident);
     if (macro == NULL) {
-      vec_push(expanded, ident);
+      VEC_PUSH(expanded, ident);
       continue;
     }
 
@@ -491,119 +496,120 @@ static Vector *pp_expand_macros(Map *define_map, Vector *tokens,
       const Range *expanded_from = ident->range;
       Set *hideset = new_set();
       set_insert(hideset, ident->pp_ident);
-      Vector *replacement = macro->kind == MACRO_OBJ
-                                ? vec_clone(macro->replacement)
-                                : macro->replacement_func(ident);
-      Vector *exp_tokens = pp_expand_macros(
+      TokenVector *replacement = macro->kind == MACRO_OBJ
+                                     ? VEC_CLONE(macro->replacement)
+                                     : macro->replacement_func(ident);
+      TokenVector *exp_tokens = pp_expand_macros(
           define_map,
           pp_subst_macros(define_map, expanded_from, replacement, NULL, NULL,
-                          hideset, new_vector()),
+                          hideset, NEW_VECTOR(TokenVector)),
           ts);
-      vec_append(expanded, exp_tokens);
+      VEC_APPEND(expanded, exp_tokens);
       continue;
     }
 
     assert(macro->kind == MACRO_FUNC);
-    if (vec_len(tokens) == 0 && ts != NULL) {
+    if (VEC_LEN(tokens) == 0 && ts != NULL) {
       Token *token = ts_pop(ts);
-      vec_push(tokens, token);
+      VEC_PUSH(tokens, token);
     }
-    if (vec_len(tokens) == 0 || ((Token *)vec_first(tokens))->ty != '(') {
-      vec_push(expanded, ident);
+    if (VEC_LEN(tokens) == 0 || (VEC_FIRST(tokens))->ty != '(') {
+      VEC_PUSH(expanded, ident);
       continue;
     }
 
     Token *rparen = NULL;
-    Vector *arguments = pp_read_macro_func_arg(macro, tokens, &rparen, ts);
+    TokenListVector *arguments =
+        pp_read_macro_func_arg(macro, tokens, &rparen, ts);
     Set *hideset = pp_hideset_intersection(ident, rparen);
     set_insert(hideset, ident->pp_ident);
     const Range *expanded_from = range_join(ident->range, rparen->range);
-    Vector *exp_tokens = pp_expand_macros(
+    TokenVector *exp_tokens = pp_expand_macros(
         define_map,
         pp_subst_macros(define_map, expanded_from,
-                        vec_clone(macro->replacement), macro->params, arguments,
-                        hideset, new_vector()),
+                        VEC_CLONE(macro->replacement), macro->params, arguments,
+                        hideset, NEW_VECTOR(TokenVector)),
         ts);
-    vec_append(expanded, exp_tokens);
+    VEC_APPEND(expanded, exp_tokens);
   }
   return expanded;
 }
 
-static Vector *pp_subst_macros(Map *define_map, const Range *expanded_from,
-                               Vector *input, StrVector *params,
-                               Vector *arguments, Set *hideset,
-                               Vector *output) {
-  while (vec_len(input) > 0) {
-    Token *token = vec_remove(input, 0);
+static TokenVector *pp_subst_macros(Map *define_map, const Range *expanded_from,
+                                    TokenVector *input, StrVector *params,
+                                    TokenListVector *arguments, Set *hideset,
+                                    TokenVector *output) {
+  while (VEC_LEN(input) > 0) {
+    Token *token = VEC_REMOVE(input, 0);
     if (token->ty == '#') {
-      Token *ident = vec_remove(input, 0);
-      Vector *arg = pp_get_func_arg(params, arguments, ident);
+      Token *ident = VEC_REMOVE(input, 0);
+      TokenVector *arg = pp_get_func_arg(params, arguments, ident);
       if (arg == NULL) {
         range_error(ident->range,
                     "`#` の後がマクロのパラメーターではありません");
       }
-      vec_push(output, pp_stringize(arg, ident->range));
+      VEC_PUSH(output, pp_stringize(arg, ident->range));
       continue;
     }
 
     if (token->ty == TK_HASH_HASH) {
-      Token *ident = vec_remove(input, 0);
-      Vector *arg = pp_get_func_arg(params, arguments, ident);
+      Token *ident = VEC_REMOVE(input, 0);
+      TokenVector *arg = pp_get_func_arg(params, arguments, ident);
       if (arg != NULL) {
         // NonStandard/GNU: , ## __VA_ARGS__
         if (ident->ty == TK_PP_IDENT &&
             strcmp(ident->pp_ident, "__VA_ARGS__") == 0 &&
-            vec_len(output) > 0 && ((Token *)vec_last(output))->ty == ',') {
-          if (vec_len(arg) == 0) {
-            vec_pop(output);
+            VEC_LEN(output) > 0 && (VEC_LAST(output))->ty == ',') {
+          if (VEC_LEN(arg) == 0) {
+            VEC_POP(output);
           } else {
-            vec_append(output, vec_clone(arg));
+            VEC_APPEND(output, VEC_CLONE(arg));
           }
           continue;
         }
 
-        if (vec_len(arg) == 0) {
+        if (VEC_LEN(arg) == 0) {
           continue;
         }
 
-        pp_glue(output, vec_clone(arg));
+        pp_glue(output, VEC_CLONE(arg));
         continue;
       }
 
-      Vector *is = new_vector();
-      vec_push(is, ident);
+      TokenVector *is = NEW_VECTOR(TokenVector);
+      VEC_PUSH(is, ident);
       pp_glue(output, is);
       continue;
     }
 
-    Vector *arg = pp_get_func_arg(params, arguments, token);
+    TokenVector *arg = pp_get_func_arg(params, arguments, token);
     if (arg != NULL) {
-      Token *hash_hash = vec_len(input) > 1 ? vec_get(input, 0) : NULL;
+      Token *hash_hash = VEC_LEN(input) > 1 ? VEC_GET(input, 0) : NULL;
       if (hash_hash != NULL && hash_hash->ty == TK_HASH_HASH) {
-        if (vec_len(arg) == 0) {
-          Token *next = vec_get(input, 0);
-          Vector *arg2 = pp_get_func_arg(params, arguments, next);
+        if (VEC_LEN(arg) == 0) {
+          Token *next = VEC_GET(input, 0);
+          TokenVector *arg2 = pp_get_func_arg(params, arguments, next);
           if (arg2 != NULL) {
-            vec_remove(input, 0);
-            vec_append(output, vec_clone(arg2));
+            VEC_REMOVE(input, 0);
+            VEC_APPEND(output, VEC_CLONE(arg2));
             continue;
           }
           continue;
         }
-        vec_append(output, vec_clone(arg));
+        VEC_APPEND(output, VEC_CLONE(arg));
         continue;
       }
-      vec_append(output, pp_expand_macros(define_map, vec_clone(arg), NULL));
+      VEC_APPEND(output, pp_expand_macros(define_map, VEC_CLONE(arg), NULL));
       continue;
     }
-    vec_push(output, token);
+    VEC_PUSH(output, token);
   }
 
   return pp_hsadd(expanded_from, hideset, output);
 }
 
-static Vector *pp_get_func_arg(StrVector *params, Vector *arguments,
-                               Token *token) {
+static TokenVector *pp_get_func_arg(StrVector *params,
+                                    TokenListVector *arguments, Token *token) {
   if (token->ty != TK_PP_IDENT || params == NULL) {
     return NULL;
   }
@@ -611,7 +617,7 @@ static Vector *pp_get_func_arg(StrVector *params, Vector *arguments,
   for (i = 0; i < VEC_LEN(params); i++) {
     const char *key = VEC_GET(params, i);
     if (strcmp(key, token->pp_ident) == 0) {
-      Vector *arg = vec_get(arguments, i);
+      TokenVector *arg = VEC_GET(arguments, i);
       assert(arg != NULL);
       return arg;
     }
@@ -619,22 +625,24 @@ static Vector *pp_get_func_arg(StrVector *params, Vector *arguments,
   return NULL;
 }
 
-static Vector *pp_read_macro_func_arg(Macro *macro, Vector *tokens,
-                                      Token **rparen, TokenIterator *ts) {
+static TokenListVector *pp_read_macro_func_arg(Macro *macro,
+                                               TokenVector *tokens,
+                                               Token **rparen,
+                                               TokenIterator *ts) {
   assert(macro->kind == MACRO_FUNC);
-  assert(((Token *)vec_first(tokens))->ty == '(');
+  assert(VEC_FIRST(tokens)->ty == '(');
 
-  const Range *range = ((Token *)vec_first(tokens))->range;
+  const Range *range = VEC_FIRST(tokens)->range;
 
-  Vector *arguments = new_vector();
-  Vector *current_arg = NULL;
+  TokenListVector *arguments = NEW_VECTOR(TokenListVector);
+  TokenVector *current_arg = NULL;
   int nest = 0;
   do {
     Token *token;
-    if (vec_len(tokens) == 0 && ts != NULL) {
+    if (VEC_LEN(tokens) == 0 && ts != NULL) {
       token = ts_pop(ts);
     } else {
-      token = vec_remove(tokens, 0);
+      token = VEC_REMOVE(tokens, 0);
     }
     range = range_join(range, token->range);
     if (token->ty == TK_EOF) {
@@ -657,35 +665,35 @@ static Vector *pp_read_macro_func_arg(Macro *macro, Vector *tokens,
     assert(nest > 0);
     if (nest == 1 && token->ty == ',' &&
         (!macro->has_varargs ||
-         vec_len(arguments) < VEC_LEN(macro->params) - 1)) {
+         VEC_LEN(arguments) < VEC_LEN(macro->params) - 1)) {
       if (current_arg == NULL) {
-        current_arg = new_vector();
+        current_arg = NEW_VECTOR(TokenVector);
       }
-      vec_push(arguments, current_arg);
-      current_arg = new_vector();
+      VEC_PUSH(arguments, current_arg);
+      current_arg = NEW_VECTOR(TokenVector);
       continue;
     }
 
     if (current_arg == NULL) {
-      current_arg = new_vector();
+      current_arg = NEW_VECTOR(TokenVector);
     }
-    vec_push(current_arg, token);
+    VEC_PUSH(current_arg, token);
   } while (nest > 0);
 
   if (current_arg != NULL) {
-    vec_push(arguments, current_arg);
+    VEC_PUSH(arguments, current_arg);
   }
-  if (macro->has_varargs && vec_len(arguments) == VEC_LEN(macro->params) - 1) {
-    vec_push(arguments, new_vector());
+  if (macro->has_varargs && VEC_LEN(arguments) == VEC_LEN(macro->params) - 1) {
+    VEC_PUSH(arguments, NEW_VECTOR(TokenVector));
   }
-  if (vec_len(arguments) == 0 && VEC_LEN(macro->params) == 1) {
-    vec_push(arguments, new_vector());
+  if (VEC_LEN(arguments) == 0 && VEC_LEN(macro->params) == 1) {
+    VEC_PUSH(arguments, NEW_VECTOR(TokenVector));
   }
 
-  if (VEC_LEN(macro->params) != vec_len(arguments)) {
+  if (VEC_LEN(macro->params) != VEC_LEN(arguments)) {
     range_error(range,
                 "関数マクロの引数の個数が一致しません, 仮引数: %d, 引数: %d",
-                VEC_LEN(macro->params), vec_len(arguments));
+                VEC_LEN(macro->params), VEC_LEN(arguments));
   }
 
   return arguments;
@@ -699,11 +707,11 @@ static bool pp_is_token_in_hideset(Token *token) {
   return set_contains(token->pp_hideset, token->pp_ident);
 }
 
-static Vector *pp_hsadd(const Range *expanded_from, Set *hideset,
-                        Vector *output) {
-  for (int i = 0; i < vec_len(output); i++) {
-    Token *token = token_clone(vec_get(output, i), expanded_from);
-    vec_set(output, i, token);
+static TokenVector *pp_hsadd(const Range *expanded_from, Set *hideset,
+                             TokenVector *output) {
+  for (int i = 0; i < VEC_LEN(output); i++) {
+    Token *token = token_clone(VEC_GET(output, i), expanded_from);
+    VEC_SET(output, i, token);
 
     for (int j = 0; j < set_size(hideset); j++) {
       const char *key = set_get_by_index(hideset, j);
@@ -723,14 +731,14 @@ static Set *pp_hideset_intersection(Token *a, Token *b) {
   return set_intersection(a->pp_hideset, b->pp_hideset);
 }
 
-static Token *pp_stringize(Vector *arg, bool quote) {
+static Token *pp_stringize(TokenVector *arg, bool quote) {
   const Range *range = NULL;
   String *str = new_string();
   if (quote) {
     str_push(str, '"');
   }
-  for (int i = 0; i < vec_len(arg); i++) {
-    Token *token = vec_get(arg, i);
+  for (int i = 0; i < VEC_LEN(arg); i++) {
+    Token *token = VEC_GET(arg, i);
     range = range_join(range, token->range);
     if (token->ty < 256) {
       str_push(str, token->ty);
@@ -784,9 +792,9 @@ static const char *token_to_str(const Token *token) {
   range_error(token->range, "結合できないトークンです");
 }
 
-static void pp_glue(Vector *ls, Vector *rs) {
-  Token *l = vec_pop(ls);
-  Token *r = vec_remove(rs, 0);
+static void pp_glue(TokenVector *ls, TokenVector *rs) {
+  Token *l = VEC_POP(ls);
+  Token *r = VEC_REMOVE(rs, 0);
 
   String *str = new_string();
   str_append(str, token_to_str(l));
@@ -812,6 +820,6 @@ static void pp_glue(Vector *ls, Vector *rs) {
     range_error(range, "結合できないトークンです: %s", str_raw);
   }
 
-  vec_push(ls, token);
-  vec_append(ls, rs);
+  VEC_PUSH(ls, token);
+  VEC_APPEND(ls, rs);
 }

@@ -31,7 +31,7 @@ TokenIterator *phase4_filter(TokenIterator *ts, Reader *reader) {
   return new_preprocessor(ts, reader);
 }
 
-static bool phase5_next(void *arg, Vector *output) {
+static bool phase5_next(void *arg, TokenVector *output) {
   TokenIterator *ts = arg;
 
   // Translation phase #5
@@ -47,7 +47,7 @@ static bool phase5_next(void *arg, Vector *output) {
   if (token->ty == TK_PP_STR) {
     convert_str(token);
   }
-  vec_push(output, token);
+  VEC_PUSH(output, token);
   return true;
 }
 
@@ -55,7 +55,7 @@ TokenIterator *phase5_filter(TokenIterator *ts) {
   return new_token_iterator(phase5_next, ts);
 }
 
-static bool phase6_next(void *arg, Vector *output) {
+static bool phase6_next(void *arg, TokenVector *output) {
   TokenIterator *ts = arg;
 
   // Translation phase #6:
@@ -73,7 +73,7 @@ static bool phase6_next(void *arg, Vector *output) {
     }
   }
 
-  vec_push(output, token);
+  VEC_PUSH(output, token);
   return true;
 }
 
@@ -81,7 +81,7 @@ TokenIterator *phase6_filter(TokenIterator *ts) {
   return new_token_iterator(phase6_next, ts);
 }
 
-static bool phase7_next(void *arg, Vector *output) {
+static bool phase7_next(void *arg, TokenVector *output) {
   TokenIterator *ts = arg;
 
   // Translation phase #7:
@@ -97,7 +97,7 @@ static bool phase7_next(void *arg, Vector *output) {
     convert_ident(token);
   }
 
-  vec_push(output, token);
+  VEC_PUSH(output, token);
   return true;
 }
 

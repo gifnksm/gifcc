@@ -98,12 +98,12 @@ Token *new_token_pp_str(const char *str, const Range *range) {
 Token *new_token_pp_null(const Range *range) {
   return new_token(TK_PP_NULL, range);
 }
-Token *new_token_pp_if(Vector *tokens, const Range *range) {
+Token *new_token_pp_if(TokenVector *tokens, const Range *range) {
   Token *token = new_token(TK_PP_IF, range);
   token->pp_if.tokens = tokens;
   return token;
 }
-Token *new_token_pp_elif(Vector *tokens, const Range *range) {
+Token *new_token_pp_elif(TokenVector *tokens, const Range *range) {
   Token *token = new_token(TK_PP_ELIF, range);
   token->pp_elif.tokens = tokens;
   return token;
@@ -125,13 +125,13 @@ Token *new_token_pp_endif(const Range *range) {
   return new_token(TK_PP_ENDIF, range);
 }
 
-Token *new_token_pp_include(Vector *tokens, const Range *range) {
+Token *new_token_pp_include(TokenVector *tokens, const Range *range) {
   Token *token = new_token(TK_PP_INCLUDE, range);
   token->pp_include.tokens = tokens;
   return token;
 }
 Token *new_token_pp_define(const char *ident, StrVector *params,
-                           bool has_varargs, Vector *replacements,
+                           bool has_varargs, TokenVector *replacements,
                            const Range *range) {
   Token *token = new_token(TK_PP_DEFINE, range);
   token->pp_define.ident = ident;
@@ -150,7 +150,7 @@ Token *new_token_pp_error(const char *message, const Range *range) {
   token->pp_error.message = message;
   return token;
 }
-Token *new_token_pp_line(Vector *tokens, const Range *range) {
+Token *new_token_pp_line(TokenVector *tokens, const Range *range) {
   Token *token = new_token(TK_PP_LINE, range);
   token->pp_line.tokens = tokens;
   return token;
@@ -229,9 +229,9 @@ const char *token_kind_to_str(int kind) {
   }
 }
 
-static void dump_tokens(FILE *fp, const Vector *tokens) {
-  for (int i = 0; i < vec_len(tokens); i++) {
-    Token *tk = vec_get(tokens, i);
+static void dump_tokens(FILE *fp, const TokenVector *tokens) {
+  for (int i = 0; i < VEC_LEN(tokens); i++) {
+    Token *tk = VEC_GET(tokens, i);
     switch (tk->ty) {
     case TK_PP_NUM:
       fprintf(fp, " %s", tk->pp_num);
@@ -344,14 +344,14 @@ typedef struct {
   TokenIterator *ts;
 } TokenFilterArg;
 
-static bool token_filter(void *arg, Vector *output) {
+static bool token_filter(void *arg, TokenVector *output) {
   TokenFilterArg *tfa = arg;
   Token *token = ts_pop(tfa->ts);
   if (token == NULL) {
     return false;
   }
   dump_token(tfa->fp, token);
-  vec_push(output, token);
+  VEC_PUSH(output, token);
   return true;
 }
 
