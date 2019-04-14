@@ -11,18 +11,31 @@ static Number read_float(Token *token);
 static Number read_integer(Token *token);
 static int c_char(const char **input, const Range *range);
 
-static bool phase2_next(void *arg, Char *output) {
+static bool phase2_next_line(void *arg, CharVector *output) {
   CharIterator *cs = arg;
 
   // Translation phase #2
   // * backslash character (\) immediately followed by a new-line character is
   //   deleted
-  (void)cs_consume_str(cs, "\\\n", NULL, NULL, NULL);
-  return cs_pop(cs, output);
+  while (true) {
+    int old_len = VEC_LEN(output);
+    if (!cs_pop_line(cs, output)) {
+      return false;
+    }
+
+    if (VEC_LEN(output) > old_len + 1) {
+      if (VEC_RGET(output, 1).val == '\\' && VEC_LAST(output).val == '\n') {
+        VEC_POP(output);
+        VEC_POP(output);
+        continue;
+      }
+    }
+    return true;
+  }
 }
 
 CharIterator *phase2_filter(CharIterator *cs) {
-  return new_char_iterator(phase2_next, cs);
+  return new_char_iterator(phase2_next_line, cs);
 }
 
 TokenIterator *phase4_filter(TokenIterator *ts, Reader *reader) {

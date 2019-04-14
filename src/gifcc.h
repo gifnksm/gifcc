@@ -702,7 +702,7 @@ typedef struct CharIterator CharIterator;
 typedef struct TokenIterator TokenIterator;
 typedef struct Scope Scope;
 
-typedef bool cs_next_fn_t(void *, Char *);
+typedef bool cs_next_line_fn_t(void *, CharVector *);
 typedef bool ts_next_fn_t(void *, TokenVector *);
 
 typedef enum {
@@ -830,16 +830,18 @@ void range_warn_raw_v(const Range *range, const char *dbg_file, int dbg_line,
   } while (0)
 
 // char_iter.c
-CharIterator *new_char_iterator(cs_next_fn_t *next, void *arg);
+CharIterator *new_char_iterator(cs_next_line_fn_t *next_line, void *arg);
 bool cs_pop(CharIterator *cs, Char *output);
+bool cs_pop_line(CharIterator *cs, CharVector *output);
 void cs_succ(CharIterator *cs);
+void cs_succ_to_eol(CharIterator *cs);
 Char cs_peek(CharIterator *cs);
+Char cs_peek_ahead(CharIterator *cs, int n);
 bool cs_consume(CharIterator *cs, char ch, const Reader **reader, int *start,
                 int *end);
 bool cs_consume_str(CharIterator *cs, const char *str, const Reader **reader,
                     int *start, int *end);
 Char cs_expect(CharIterator *cs, char ch);
-bool cs_is_sol(CharIterator *cs);
 
 // number.c
 Number new_number(type_t ty, unsigned long long val);
