@@ -32,10 +32,10 @@ typedef struct Macro {
 typedef struct Preprocessor {
   Reader *reader;
   Map *define_map;
-  CondVector *cond_stack;
 } Preprocessor;
 
 typedef struct ConditionalInclusionArg {
+  CondVector *cond_stack;
   Preprocessor *pp;
   TokenIterator *ts;
 } ConditionalInclusionArg;
@@ -109,13 +109,13 @@ TokenIterator *new_preprocessor(TokenIterator *ts, Reader *reader) {
   *pp = (Preprocessor){
       .reader = reader,
       .define_map = new_map(),
-      .cond_stack = NEW_VECTOR(CondVector),
   };
 
   const Range *builtin_range = range_builtin(reader);
   initialize_predefined_macro(pp, builtin_range);
 
   ConditionalInclusionArg *cond_arg = NEW(ConditionalInclusionArg);
+  cond_arg->cond_stack = NEW_VECTOR(CondVector);
   cond_arg->pp = pp;
   cond_arg->ts = ts;
   ts = new_token_iterator(conditional_inclusion, cond_arg);
@@ -249,6 +249,7 @@ static Vector *macro_line(Preprocessor *pp, Token *token) {
 
 static bool conditional_inclusion(void *arg, Vector *output) {
   ConditionalInclusionArg *cond_arg = arg;
+  CondVector *cond_stack = cond_arg->cond_stack;
   Preprocessor *pp = cond_arg->pp;
   TokenIterator *ts = cond_arg->ts;
 
@@ -262,50 +263,50 @@ static bool conditional_inclusion(void *arg, Vector *output) {
     case TK_PP_IF: {
       Vector *tokens = token->pp_if.tokens;
       bool fullfilled = true;
-      if (pp_cond_fullfilled(pp->cond_stack)) {
+      if (pp_cond_fullfilled(cond_stack)) {
         fullfilled = read_pp_if_cond(pp, tokens, token->range);
       }
-      pp_if(pp->cond_stack, fullfilled, token->range);
+      pp_if(cond_stack, fullfilled, token->range);
       continue;
     }
     case TK_PP_ELIF: {
       Vector *tokens = token->pp_elif.tokens;
       bool fullfilled = true;
-      if (pp_outer_cond_fullfilled(pp->cond_stack)) {
+      if (pp_outer_cond_fullfilled(cond_stack)) {
         fullfilled = read_pp_if_cond(pp, tokens, token->range);
       }
-      pp_elif(pp->cond_stack, fullfilled, token->range);
+      pp_elif(cond_stack, fullfilled, token->range);
       continue;
     }
     case TK_PP_IFDEF: {
       const char *ident = token->pp_ifdef.ident;
       bool defined = map_get(pp->define_map, ident) != NULL;
-      pp_if(pp->cond_stack, defined, token->range);
+      pp_if(cond_stack, defined, token->range);
       continue;
     }
     case TK_PP_IFNDEF: {
       const char *ident = token->pp_ifndef.ident;
       bool defined = map_get(pp->define_map, ident) != NULL;
-      pp_if(pp->cond_stack, !defined, token->range);
+      pp_if(cond_stack, !defined, token->range);
       continue;
     }
     case TK_PP_ELSE: {
-      pp_else(pp->cond_stack, token->range);
+      pp_else(cond_stack, token->range);
       continue;
     }
     case TK_PP_ENDIF: {
-      pp_endif(pp->cond_stack, token->range);
+      pp_endif(cond_stack, token->range);
       continue;
     }
     case TK_EOF: {
-      if (VEC_LEN(pp->cond_stack) > 0) {
-        Cond *cond = VEC_LAST(pp->cond_stack);
+      if (VEC_LEN(cond_stack) > 0) {
+        Cond *cond = VEC_LAST(cond_stack);
         range_error(cond->range, "Unterminated conditional directive");
       }
       break;
     }
     default: {
-      if (!pp_cond_fullfilled(pp->cond_stack)) {
+      if (!pp_cond_fullfilled(cond_stack)) {
         continue;
       }
       break;
