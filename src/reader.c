@@ -68,8 +68,8 @@ static void print_source(const Range *range);
 static void print_expanded_message(const Range *range, const char *dbg_file,
                                    int dbg_line);
 static File *new_builtin_file(void);
-static File *new_file(FILE *fp, const char *filename);
-static char *read_whole_file(File *file, FILE *fp);
+static File *new_file(FILE *fp, const char *filename, int stack_idx);
+static char *read_whole_file(File *file, FILE *fp, bool is_root);
 
 const Range *range_from_reader(const Reader *reader, int start, int end) {
   assert(start <= end);
@@ -227,8 +227,8 @@ CharIterator *char_iterator_from_reader(Reader *reader) {
 }
 
 void reader_add_file(Reader *reader, FILE *fp, const char *filename) {
-  File *file = new_file(fp, filename);
-  file->stack_idx = VEC_LEN(reader->file_stack);
+  int stack_idx = VEC_LEN(reader->file_stack);
+  File *file = new_file(fp, filename, stack_idx);
   VEC_PUSH(reader->file_stack, file);
   (void)switch_file(reader, file);
 }
@@ -297,9 +297,7 @@ static FileSlice *get_file_slice(const Reader *reader, int offset) {
     if (fs->global_offset > offset) {
       continue;
     }
-    if (fs->file == NULL) {
-      continue;
-    }
+    assert(fs->file != NULL);
     return fs;
   }
   assert(false);
@@ -323,18 +321,16 @@ static int cmp_line(const void *akey, const void *amem) {
 static void reader_get_position_inner(const Reader *reader, int offset,
                                       bool get_real, const char **filename,
                                       int *line, int *column) {
+  assert(offset <= reader->offset);
+
   const FileSlice *fs = get_file_slice(reader, offset);
   int local_offset = offset - fs->global_offset + fs->file_offset;
 
   Line *line_info;
-  if (local_offset == fs->file->size) {
-    line_info = VEC_LAST_REF(fs->file->lines);
-  } else {
-    Line key = {.start = local_offset, .size = INT_MAX};
-    line_info = VEC_BSEARCH(fs->file->lines, &key, cmp_line);
-    assert(line_info->start <= local_offset &&
-           local_offset < line_info->start + line_info->size);
-  }
+  Line key = {.start = local_offset, .size = INT_MAX};
+  line_info = VEC_BSEARCH(fs->file->lines, &key, cmp_line);
+  assert(line_info->start <= local_offset &&
+         local_offset < line_info->start + line_info->size);
 
   if (filename != NULL) {
     if (get_real || fs->alt_filename == NULL) {
@@ -508,28 +504,30 @@ static File *new_builtin_file(void) {
   return file;
 }
 
-static File *new_file(FILE *fp, const char *filename) {
-  File *file = NEW(File);
+static File *new_file(FILE *fp, const char *filename, int stack_idx) {
+  bool is_root = stack_idx == 0;
 
+  File *file = NEW(File);
   file->source = NULL;
   file->name = filename;
   file->size = 0;
   file->offset = 0;
   file->lines = NEW_VECTOR(LineVector);
+  file->stack_idx = stack_idx;
   VEC_PUSH(file->lines, ((Line){.line = 1, .start = file->offset}));
-  read_whole_file(file, fp);
+  read_whole_file(file, fp, is_root);
   fclose(fp);
 
   return file;
 }
 
-static char *read_whole_file(File *file, FILE *fp) {
+static char *read_whole_file(File *file, FILE *fp, bool is_root) {
   const size_t BUF_SIZE = 10240;
   size_t size = 0;
   char *source = NULL;
 
   while (true) {
-    source = realloc(source, size + BUF_SIZE + 1);
+    source = realloc(source, size + BUF_SIZE + 2);
     size_t nread = fread(&source[size], 1, BUF_SIZE, fp);
     size += nread;
     if (nread < BUF_SIZE) {
@@ -538,6 +536,12 @@ static char *read_whole_file(File *file, FILE *fp) {
       }
       break;
     }
+  }
+
+  if (is_root) {
+    // If the file is root, the file contains null character (\0)
+    source[size] = '\0';
+    size += 1;
   }
 
   file->source = source;
