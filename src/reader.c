@@ -8,12 +8,12 @@
 
 typedef DEFINE_VECTOR(IntVector, int) IntVector;
 
-typedef struct LineOffset {
+typedef struct Line {
   int line;
   int start;
   int size;
-} LineOffset;
-typedef DEFINE_VECTOR(LineOffsetVector, LineOffset) LineOffsetVector;
+} Line;
+typedef DEFINE_VECTOR(LineVector, Line) LineVector;
 
 typedef struct File {
   const char *source;
@@ -21,24 +21,24 @@ typedef struct File {
   int stack_idx;
   int size;
   int offset;
-  LineOffsetVector *line_offset;
+  LineVector *lines;
 } File;
 typedef DEFINE_VECTOR(FileVector, File *) FileVector;
 
-typedef struct FileOffset {
+typedef struct FileSlice {
   int index;
   int global_offset;
   int file_offset;
   int line_bias;
   const char *alt_filename;
   File *file;
-} FileOffset;
-typedef DEFINE_VECTOR(FileOffsetVector, FileOffset) FileOffsetVector;
+} FileSlice;
+typedef DEFINE_VECTOR(FileSliceVector, FileSlice) FileSliceVector;
 
 typedef struct Reader {
   int offset;
   FileVector *file_stack;
-  FileOffsetVector *file_offset;
+  FileSliceVector *file_slices;
 } Reader;
 
 typedef struct Range {
@@ -55,9 +55,9 @@ typedef enum {
 } message_t;
 
 static Char reader_pop(Reader *reader);
-static FileOffset *switch_file(Reader *reader, File *file);
+static FileSlice *switch_file(Reader *reader, File *file);
 static File *peek_file(const Reader *reader);
-static FileOffset *get_file_offset(const Reader *reader, int offset);
+static FileSlice *get_file_slice(const Reader *reader, int offset);
 static __attribute__((format(printf, 5, 6))) void
 print_message(message_t msg, const Range *range, const char *dbg_file,
               int dbg_line, const char *fmt, ...);
@@ -122,8 +122,8 @@ const Range *range_join(const Range *a, const Range *b) {
   const Reader *br = b->reader;
 
   while (true) {
-    File *af = get_file_offset(ar, a->start)->file;
-    File *bf = get_file_offset(br, b->start)->file;
+    File *af = get_file_slice(ar, a->start)->file;
+    File *bf = get_file_slice(br, b->start)->file;
 
     if (af->stack_idx < bf->stack_idx) {
       if (b->expanded_from == NULL) {
@@ -198,7 +198,7 @@ Reader *new_reader(void) {
   *reader = (Reader){
       .offset = 0,
       .file_stack = NEW_VECTOR(FileVector),
-      .file_offset = NEW_VECTOR(FileOffsetVector),
+      .file_slices = NEW_VECTOR(FileSliceVector),
   };
 
   File *file = new_builtin_file();
@@ -239,23 +239,23 @@ void reader_set_position(Reader *reader, const int *line,
   reader_get_position(reader, reader->offset, NULL, &current_line, NULL);
 
   File *file = peek_file(reader);
-  FileOffset *fo = switch_file(reader, file);
+  FileSlice *fs = switch_file(reader, file);
   if (line != NULL) {
-    fo->line_bias = *line - current_line;
+    fs->line_bias = *line - current_line;
   }
-  fo->alt_filename = filename;
+  fs->alt_filename = filename;
 }
 
-static FileOffset *switch_file(Reader *reader, File *file) {
+static FileSlice *switch_file(Reader *reader, File *file) {
   int file_offset = file != NULL ? file->offset : 0;
-  FileOffset fo = {
-      .index = VEC_LEN(reader->file_offset),
+  FileSlice fs = {
+      .index = VEC_LEN(reader->file_slices),
       .global_offset = reader->offset,
       .file_offset = file_offset,
       .file = file,
   };
-  VEC_PUSH(reader->file_offset, fo);
-  return VEC_LAST_REF(reader->file_offset);
+  VEC_PUSH(reader->file_slices, fs);
+  return VEC_LAST_REF(reader->file_slices);
 }
 
 static File *peek_file(const Reader *reader) {
@@ -290,24 +290,24 @@ static Char reader_pop(Reader *reader) {
   return ch;
 }
 
-static FileOffset *get_file_offset(const Reader *reader, int offset) {
-  assert(VEC_LEN(reader->file_offset) > 0);
-  for (int i = VEC_LEN(reader->file_offset) - 1; i >= 0; i--) {
-    FileOffset *fo = VEC_GET_REF(reader->file_offset, i);
-    if (fo->global_offset > offset) {
+static FileSlice *get_file_slice(const Reader *reader, int offset) {
+  assert(VEC_LEN(reader->file_slices) > 0);
+  for (int i = VEC_LEN(reader->file_slices) - 1; i >= 0; i--) {
+    FileSlice *fs = VEC_GET_REF(reader->file_slices, i);
+    if (fs->global_offset > offset) {
       continue;
     }
-    if (fo->file == NULL) {
+    if (fs->file == NULL) {
       continue;
     }
-    return fo;
+    return fs;
   }
   assert(false);
 }
 
-static int cmp_line_offset(const void *akey, const void *amem) {
-  const LineOffset *key = akey;
-  const LineOffset *mem = amem;
+static int cmp_line(const void *akey, const void *amem) {
+  const Line *key = akey;
+  const Line *mem = amem;
   assert(key->size == INT_MAX);
 
   int local_offset = key->start;
@@ -323,34 +323,34 @@ static int cmp_line_offset(const void *akey, const void *amem) {
 static void reader_get_position_inner(const Reader *reader, int offset,
                                       bool get_real, const char **filename,
                                       int *line, int *column) {
-  const FileOffset *fo = get_file_offset(reader, offset);
-  int local_offset = offset - fo->global_offset + fo->file_offset;
+  const FileSlice *fs = get_file_slice(reader, offset);
+  int local_offset = offset - fs->global_offset + fs->file_offset;
 
-  LineOffset *line_offset;
-  if (local_offset == fo->file->size) {
-    line_offset = VEC_LAST_REF(fo->file->line_offset);
+  Line *line_info;
+  if (local_offset == fs->file->size) {
+    line_info = VEC_LAST_REF(fs->file->lines);
   } else {
-    LineOffset key = {.start = local_offset, .size = INT_MAX};
-    line_offset = VEC_BSEARCH(fo->file->line_offset, &key, cmp_line_offset);
-    assert(line_offset->start <= local_offset &&
-           local_offset < line_offset->start + line_offset->size);
+    Line key = {.start = local_offset, .size = INT_MAX};
+    line_info = VEC_BSEARCH(fs->file->lines, &key, cmp_line);
+    assert(line_info->start <= local_offset &&
+           local_offset < line_info->start + line_info->size);
   }
 
   if (filename != NULL) {
-    if (get_real || fo->alt_filename == NULL) {
-      *filename = fo->file->name;
+    if (get_real || fs->alt_filename == NULL) {
+      *filename = fs->file->name;
     } else {
-      *filename = fo->alt_filename;
+      *filename = fs->alt_filename;
     }
   }
   if (line != NULL) {
-    *line = line_offset->line;
+    *line = line_info->line;
     if (!get_real) {
-      *line += fo->line_bias;
+      *line += fs->line_bias;
     }
   }
   if (column != NULL) {
-    *column = local_offset - line_offset->start + 1;
+    *column = local_offset - line_info->start + 1;
   }
 }
 
@@ -429,15 +429,15 @@ static void print_source(const Range *range) {
   int start = range->start;
   int len = range->len;
   while (len > 0) {
-    FileOffset *fo = get_file_offset(reader, start);
-    FileOffset *next_fo = fo->index < VEC_LEN(reader->file_offset) - 1
-                              ? VEC_GET_REF(reader->file_offset, fo->index + 1)
-                              : NULL;
-    int file_end = next_fo != NULL
-                       ? next_fo->global_offset
-                       : fo->global_offset + (fo->file->size - fo->file_offset);
-    int sf = start - fo->global_offset;
-    int ef = file_end - fo->global_offset;
+    FileSlice *fs = get_file_slice(reader, start);
+    FileSlice *next_fs = fs->index < VEC_LEN(reader->file_slices) - 1
+                             ? VEC_GET_REF(reader->file_slices, fs->index + 1)
+                             : NULL;
+    int file_end = next_fs != NULL
+                       ? next_fs->global_offset
+                       : fs->global_offset + (fs->file->size - fs->file_offset);
+    int sf = start - fs->global_offset;
+    int ef = file_end - fs->global_offset;
     int file_len = ef - sf;
     if (file_len > len) {
       file_len = len;
@@ -454,9 +454,9 @@ static void print_source(const Range *range) {
     assert(strcmp(start_filename, end_filename) == 0);
 
     for (int line = start_line; line <= end_line; line++) {
-      int sl = VEC_GET(fo->file->line_offset, line - 1).start;
-      int el = VEC_GET(fo->file->line_offset, line).start;
-      const char *line_str = &fo->file->source[sl];
+      int sl = VEC_GET(fs->file->lines, line - 1).start;
+      int el = VEC_GET(fs->file->lines, line).start;
+      const char *line_str = &fs->file->source[sl];
       int line_len = el - sl;
       int sc = (line == start_line) ? start_column : 0;
       int ec = (line == end_line) ? end_column : line_len;
@@ -503,8 +503,8 @@ static File *new_builtin_file(void) {
   file->name = "<builtin>";
   file->offset = 0;
   file->size = 1;
-  file->line_offset = NEW_VECTOR(LineOffsetVector);
-  VEC_PUSH(file->line_offset, ((LineOffset){.line = 1, .start = 0, .size = 1}));
+  file->lines = NEW_VECTOR(LineVector);
+  VEC_PUSH(file->lines, ((Line){.line = 1, .start = 0, .size = 1}));
   return file;
 }
 
@@ -515,8 +515,8 @@ static File *new_file(FILE *fp, const char *filename) {
   file->name = filename;
   file->size = 0;
   file->offset = 0;
-  file->line_offset = NEW_VECTOR(LineOffsetVector);
-  VEC_PUSH(file->line_offset, ((LineOffset){.line = 1, .start = file->offset}));
+  file->lines = NEW_VECTOR(LineVector);
+  VEC_PUSH(file->lines, ((Line){.line = 1, .start = file->offset}));
   read_whole_file(file, fp);
   fclose(fp);
 
@@ -546,14 +546,13 @@ static char *read_whole_file(File *file, FILE *fp) {
   for (size_t i = 0; i < size; i++) {
     if (source[i] == '\n') {
       int line_start = i + 1;
-      LineOffset *last = VEC_LAST_REF(file->line_offset);
+      Line *last = VEC_LAST_REF(file->lines);
       last->size = line_start - last->start;
-      LineOffset next = {.line = VEC_LEN(file->line_offset) + 1,
-                         .start = i + 1};
-      VEC_PUSH(file->line_offset, next);
+      Line next = {.line = VEC_LEN(file->lines) + 1, .start = i + 1};
+      VEC_PUSH(file->lines, next);
     }
   }
-  LineOffset *last = VEC_LAST_REF(file->line_offset);
+  Line *last = VEC_LAST_REF(file->lines);
   last->size = size - last->start;
 
   return source;
