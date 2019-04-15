@@ -330,9 +330,6 @@ static const char *read_chars_to_eol(CharIterator *cs, const Range **range) {
 
 static Token *normal_token(CharIterator *cs) {
   Token *token = NULL;
-  if ((token = punctuator(cs)) != NULL) {
-    return token;
-  }
   if ((token = constant(cs)) != NULL) {
     return token;
   }
@@ -340,6 +337,9 @@ static Token *normal_token(CharIterator *cs) {
     return token;
   }
   if ((token = identifier(cs)) != NULL) {
+    return token;
+  }
+  if ((token = punctuator(cs)) != NULL) {
     return token;
   }
   return NULL;
