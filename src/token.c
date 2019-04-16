@@ -94,6 +94,9 @@ Token *new_token_pp_str(const char *str, const Range *range) {
   token->pp_str = str;
   return token;
 }
+Token *new_token_pp_space(const Range *range) {
+  return new_token(TK_PP_SPACE, range);
+}
 
 Token *new_token_pp_null(const Range *range) {
   return new_token(TK_PP_NULL, range);
@@ -162,6 +165,7 @@ Token *new_token_pp_unknown(const char *ident, const char *rest,
   token->pp_unknown.rest = rest;
   return token;
 }
+Token *new_token_eof(const Range *range) { return new_token(TK_EOF, range); }
 
 const char *token_kind_to_str(int kind) {
   if (kind <= 255) {
@@ -177,6 +181,8 @@ const char *token_kind_to_str(int kind) {
     return "PP_CHAR";
   case TK_PP_STR:
     return "PP_STR";
+  case TK_PP_SPACE:
+    return "PP_SPACE";
   case TK_PP_NULL:
     return "PP_NULL";
   case TK_PP_IF:
@@ -234,19 +240,22 @@ static void dump_tokens(FILE *fp, const TokenVector *tokens) {
     Token *tk = VEC_GET(tokens, i);
     switch (tk->ty) {
     case TK_PP_NUM:
-      fprintf(fp, " %s", tk->pp_num);
+      fprintf(fp, "%s", tk->pp_num);
       break;
     case TK_PP_IDENT:
-      fprintf(fp, " %s", tk->pp_ident);
+      fprintf(fp, "%s", tk->pp_ident);
       break;
     case TK_PP_CHAR:
-      fprintf(fp, " %s", tk->pp_char);
+      fprintf(fp, "%s", tk->pp_char);
       break;
     case TK_PP_STR:
-      fprintf(fp, " %s", tk->pp_str);
+      fprintf(fp, "%s", tk->pp_str);
+      break;
+    case TK_PP_SPACE:
+      fprintf(fp, " ");
       break;
     default:
-      fprintf(fp, " %s", token_kind_to_str(tk->ty));
+      fprintf(fp, "%s", token_kind_to_str(tk->ty));
       break;
     }
   }
@@ -307,6 +316,7 @@ static void dump_token(FILE *fp, const Token *token) {
   case TK_PP_DEFINE:
     dump_macro_params(fp, token->pp_define.ident, token->pp_define.params,
                       token->pp_define.has_varargs);
+    fprintf(fp, " ");
     dump_tokens(fp, token->pp_define.replacements);
     break;
   case TK_PP_UNDEF:
@@ -359,4 +369,53 @@ TokenIterator *new_token_dumper(TokenIterator *ts, FILE *fp) {
   TokenFilterArg *arg = NEW(TokenFilterArg);
   *arg = (TokenFilterArg){.fp = fp, .ts = ts};
   return new_token_iterator(token_filter, arg);
+}
+
+void trim_spaces(TokenVector *tokens) {
+  while (VEC_LEN(tokens) > 0 && VEC_FIRST(tokens)->ty == TK_PP_SPACE) {
+    VEC_REMOVE(tokens, 0);
+  }
+  while (VEC_LEN(tokens) > 0 && VEC_LAST(tokens)->ty == TK_PP_SPACE) {
+    VEC_POP(tokens);
+  }
+}
+
+void trim_surrounding_spaces(TokenVector *tokens, int ty) {
+  int i = 0;
+  while (i < VEC_LEN(tokens)) {
+    if (VEC_GET(tokens, i)->ty == ty) {
+      while (i + 1 < VEC_LEN(tokens) &&
+             VEC_GET(tokens, i + 1)->ty == TK_PP_SPACE) {
+        VEC_REMOVE(tokens, i + 1);
+      }
+
+      while (i > 0 && VEC_GET(tokens, i - 1)->ty == TK_PP_SPACE) {
+        VEC_REMOVE(tokens, i - 1);
+        i--;
+      }
+
+      assert(VEC_GET(tokens, i)->ty == ty);
+    }
+    i++;
+  }
+}
+
+Token *token_consume_skip_space(TokenIterator *ts, int ty) {
+  int i = 0;
+  while (true) {
+    Token *next = ts_peek_ahead(ts, i);
+    if (next->ty == TK_PP_SPACE) {
+      i++;
+      continue;
+    }
+
+    if (next->ty != ty) {
+      return NULL;
+    }
+
+    for (int j = 0; j < i; j++) {
+      ts_pop(ts);
+    }
+    return ts_pop(ts);
+  }
 }

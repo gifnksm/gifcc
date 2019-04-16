@@ -85,7 +85,7 @@ static void test01(void) {
 #define CAT2(a, b) a##b
 #define CAT(a, b) CAT2(a, b)
 #define AB(x) CAT(x, y)
-#define STR(x, y) #x
+#define STR(x, y) #x #y
 static void test02(void) {
   static int xy = 800;
   CHECK_INT(800, CAT(A, B)(x));
@@ -99,7 +99,20 @@ static void test02(void) {
     ST
 #endif
       , R)(hogehoge, x);
-  CHECK_INT(0, strcmp(x, "hogehoge"));
+  CHECK_INT(0, strcmp(x, "hogehogex"));
+
+  // clang-format off
+  const char *y = CAT2(
+#if 0
+    3
+    4
+    5
+#else
+      ST
+#endif
+    , R)(1 2 3 4+5     (  , ) , x+y     );
+  // clang-format on
+  CHECK_INT(0, strcmp(y, "1 2 3 4+5 ( , )x+y"));
 }
 
 static void test03(void) {

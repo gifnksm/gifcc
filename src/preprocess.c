@@ -191,7 +191,7 @@ static bool read_pp_if_cond(Map *define_map, TokenVector *tokens,
   Token *last = VEC_LAST(tokens);
   const Range *here = last->range;
   const Reader *reader = range_get_reader(here);
-  Token *eof_token = new_token(TK_EOF, here);
+  Token *eof_token = new_token_eof(here);
   VEC_PUSH(tokens, eof_token);
 
   // convert `defined(IDENT)` or `defined INDET` into 0 or 1
@@ -239,6 +239,9 @@ static TokenVector *pp_convert_defined(Map *define_map, TokenVector *tokens) {
     token = VEC_REMOVE(tokens, 0);
     if (token->ty == '(') {
       has_paren = true;
+      token = VEC_REMOVE(tokens, 0);
+    }
+    if (token->ty == TK_PP_SPACE) {
       token = VEC_REMOVE(tokens, 0);
     }
 
@@ -509,9 +512,19 @@ static TokenVector *pp_expand_macros(Map *define_map, TokenVector *tokens,
     }
 
     assert(macro->kind == MACRO_FUNC);
-    if (VEC_LEN(tokens) == 0 && ts != NULL) {
-      Token *token = ts_pop(ts);
-      VEC_PUSH(tokens, token);
+    while (true) {
+      if (VEC_LEN(tokens) == 0 && ts != NULL) {
+        Token *token = ts_pop(ts);
+        VEC_PUSH(tokens, token);
+      }
+      if (VEC_LEN(tokens) == 0) {
+        break;
+      }
+      if (VEC_FIRST(tokens)->ty == TK_PP_SPACE) {
+        VEC_REMOVE(tokens, 0);
+        continue;
+      }
+      break;
     }
     if (VEC_LEN(tokens) == 0 || (VEC_FIRST(tokens))->ty != '(') {
       VEC_PUSH(expanded, ident);
@@ -696,6 +709,10 @@ static TokenListVector *pp_read_macro_func_arg(Macro *macro,
                 VEC_LEN(macro->params), VEC_LEN(arguments));
   }
 
+  for (int i = 0; i < VEC_LEN(arguments); i++) {
+    trim_spaces(VEC_GET(arguments, i));
+  }
+
   return arguments;
 }
 
@@ -757,6 +774,9 @@ static Token *pp_stringize(TokenVector *arg, bool quote) {
     case TK_PP_STR:
       str_append(str, token->pp_str);
       break;
+    case TK_PP_SPACE:
+      str_append(str, " ");
+      break;
     default:
       for (int i = 0; LONG_PUNCT_TOKENS[i].str != NULL; i++) {
         if (LONG_PUNCT_TOKENS[i].kind == token->ty) {
@@ -783,6 +803,9 @@ static const char *token_to_str(const Token *token) {
   }
   if (token->ty == TK_PP_NUM) {
     return token->pp_num;
+  }
+  if (token->ty == TK_PP_SPACE) {
+    return " ";
   }
   for (int i = 0; LONG_PUNCT_TOKENS[i].str != NULL; i++) {
     if (LONG_PUNCT_TOKENS[i].kind == token->ty) {
