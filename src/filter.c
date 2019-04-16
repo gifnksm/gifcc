@@ -80,7 +80,7 @@ static bool phase6_next(void *arg, TokenVector *output) {
 
   if (token->ty == TK_STR) {
     Token *next;
-    while ((next = ts_consume(ts, TK_STR)) != NULL) {
+    while ((next = token_consume_skip_space(ts, TK_STR)) != NULL) {
       token->str = format("%s%s", token->str, next->str);
       token->range = range_join(token->range, next->range);
     }
@@ -99,9 +99,14 @@ static bool phase7_next(void *arg, TokenVector *output) {
 
   // Translation phase #7:
   // * convert pp tokens into tokens
+  // * white-space characters separating tokens are no longer significant
   Token *token = ts_pop(ts);
   if (token == NULL) {
     return false;
+  }
+  if (token->ty == TK_PP_SPACE) {
+    // drop token
+    return true;
   }
   if (token->ty == TK_PP_NUM) {
     convert_number(token);

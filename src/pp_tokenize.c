@@ -39,7 +39,8 @@ static bool read_token(CharIterator *cs, TokenVector *output) {
     }
 
     Char ch = cs_peek(cs);
-    if (ch.val == '#') {
+    bool is_pp_directive = ch.val == '#';
+    if (is_pp_directive) {
       VEC_PUSH(output, pp_directive(cs));
       ch = cs_peek(cs);
     } else {
@@ -49,10 +50,14 @@ static bool read_token(CharIterator *cs, TokenVector *output) {
 
     if (ch.val == '\0') {
       const Range *range = range_from_reader(ch.reader, ch.start, ch.end);
-      VEC_PUSH(output, new_token(TK_EOF, range));
+      VEC_PUSH(output, new_token_eof(range));
       return true;
     }
     if (ch.val == '\n') {
+      if (!is_pp_directive) {
+        const Range *range = range_from_reader(ch.reader, ch.start, ch.end);
+        VEC_PUSH(output, new_token_pp_space(range));
+      }
       cs_succ(cs);
       return true;
     }
@@ -186,7 +191,12 @@ static Token *pp_directive(CharIterator *cs) {
     bool has_varargs = false;
     macro_func_arg(cs, &params, &has_varargs, &range);
     skip_space_or_comment(cs);
+
     TokenVector *replacements = normal_tokens(cs, &range);
+    trim_spaces(replacements);
+    trim_surrounding_spaces(replacements, '#');
+    trim_surrounding_spaces(replacements, TK_HASH_HASH);
+
     return new_token_pp_define(ident, params, has_varargs, replacements, range);
   }
   if (strcmp(token->pp_ident, "undef") == 0) {
@@ -288,14 +298,21 @@ static void read_normal_tokens_to_eol(CharIterator *cs, TokenVector *output,
                                       const Range **range) {
   int old_len = VEC_LEN(output);
   while (true) {
-    skip_space_or_comment(cs);
-    Char ch = cs_peek(cs);
-    if (ch.val == '\n' || ch.val == '\0') {
+    Char ch1 = cs_peek(cs);
+    bool has_space = skip_space_or_comment(cs);
+    Char ch2 = cs_peek(cs);
+    if (ch2.val == '\n' || ch2.val == '\0') {
       break;
     }
-    Token *token = normal_token(cs);
-    if (token == NULL) {
-      break;
+    Token *token;
+    if (has_space) {
+      token = new_token_pp_space(
+          range_from_reader(ch1.reader, ch1.start, ch2.start));
+    } else {
+      token = normal_token(cs);
+      if (token == NULL) {
+        break;
+      }
     }
     VEC_PUSH(output, token);
   }

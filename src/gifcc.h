@@ -26,6 +26,7 @@ enum {
   TK_PP_IDENT,      // Preprocessor identifiers
   TK_PP_CHAR,       // Preprocessor character constant
   TK_PP_STR,        // Preprocessor string literal
+  TK_PP_SPACE,      // Preprocessor white space
   TK_PP_NULL,       // Preprocessor null directive
   TK_PP_IF,         // Preprocessor `if` directive
   TK_PP_ELIF,       // Preprocessor `elif` directive
@@ -842,6 +843,7 @@ Token *new_token_pp_num(const char *num, const Range *range);
 Token *new_token_pp_ident(const char *ident, const Range *range);
 Token *new_token_pp_char(const char *ch, const Range *range);
 Token *new_token_pp_str(const char *str, const Range *range);
+Token *new_token_pp_space(const Range *range);
 Token *new_token_pp_null(const Range *range);
 Token *new_token_pp_if(TokenVector *tokens, const Range *range);
 Token *new_token_pp_elif(TokenVector *tokens, const Range *range);
@@ -858,8 +860,12 @@ Token *new_token_pp_error(const char *message, const Range *range);
 Token *new_token_pp_line(TokenVector *tokens, const Range *range);
 Token *new_token_pp_unknown(const char *ident, const char *rest,
                             const Range *range);
+Token *new_token_eof(const Range *range);
 const char *token_kind_to_str(int kind);
 TokenIterator *new_token_dumper(TokenIterator *ts, FILE *fp);
+void trim_spaces(TokenVector *tokens);
+void trim_surrounding_spaces(TokenVector *tokens, int ty);
+Token *token_consume_skip_space(TokenIterator *ts, int ty);
 
 // token_iter.c
 TokenIterator *new_token_iterator(ts_next_fn_t *next, void *arg);
