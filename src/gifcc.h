@@ -712,6 +712,8 @@ typedef enum {
 } asm_syntax_t;
 
 #define error(fmt, ...) error_raw(__FILE__, __LINE__, (fmt), ##__VA_ARGS__)
+#define internal_error(fmt, ...) error("ICE " fmt, ##__VA_ARGS__)
+#define unreachable() internal_error("UNREACHABLE")
 noreturn __attribute__((format(printf, 3, 4))) void
 error_raw(const char *dbg_file, int dbg_line, const char *fmt, ...);
 noreturn void error_raw_v(const char *dbg_file, int dbg_line, const char *fmt,
