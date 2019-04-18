@@ -63,7 +63,7 @@ Number new_number(type_t ty, unsigned long long val) {
   case TY_BUILTIN:
     break;
   }
-  assert(false);
+  internal_error("Invalid number type: %d", ty);
 }
 
 Number new_number_float(type_t ty, long double val) {
@@ -128,7 +128,7 @@ Number new_number_float(type_t ty, long double val) {
   case TY_BUILTIN:
     break;
   }
-  assert(false);
+  internal_error("Invalid number type: %d", ty);
 }
 
 Number new_number_int(int val) { return new_number(TY_S_INT, val); }
@@ -238,5 +238,5 @@ const char *format_number(Number num) {
   case TY_BUILTIN:
     break;
   }
-  assert(false);
+  internal_error("Invalid number type: %d", num.type);
 }

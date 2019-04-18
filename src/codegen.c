@@ -292,7 +292,7 @@ static Operand get_int_arg_reg(const Reg *r, int idx) {
   default:
     break;
   }
-  assert(false);
+  internal_error("Invalid int reg index: %d", idx);
 }
 
 static const SseOp *get_sse_op(Type *type, const Range *range) {
@@ -353,7 +353,7 @@ static char *num2str(Number num) {
   case TY_BUILTIN:
     break;
   }
-  assert(false);
+  internal_error("Invalid number type: %d", num.type);
 }
 
 static Operand sized_addr2(RegSize size, Operand reg, int offset) {
@@ -1227,7 +1227,8 @@ static void emit_expr_cond(Expr *expr) {
   stack_pos = cond_stack_pos;
   emit_label(else_label);
   emit_expr(expr->cond.else_expr);
-  assert(stack_pos == end_stack_pos);
+  range_assert(expr->range, stack_pos == end_stack_pos,
+               "stack position mismatch");
 
   emit_label(end_label);
 }
@@ -1561,6 +1562,7 @@ static void emit_expr_builtin_va_arg(Expr *expr) {
 static void emit_expr_builtin_va_end(Expr *expr) {
   assert(expr->ty == EX_BUILTIN_VA_END);
   // nothing to do
+  (void)expr;
 }
 static void emit_expr_builtin_va_copy(Expr *expr) {
   assert(expr->ty == EX_BUILTIN_VA_COPY);

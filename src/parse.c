@@ -730,7 +730,7 @@ static Type *arith_converted(Scope *scope, Expr **e1, Expr **e2) {
     ty = new_type(TY_U_LLONG, EMPTY_TYPE_QUALIFIER);
     break;
   default:
-    assert(false);
+    range_internal_error(r1, "Invalid number type: %d", ty1->ty);
   }
 
   *e1 = new_expr_cast(scope, ty, *e1, r1);
@@ -1740,7 +1740,7 @@ static Expr *new_expr_unary(Scope *scope, int op, Expr *operand,
     val_type = integer_promoted(scope, &operand);
     break;
   default:
-    assert(false);
+    range_internal_error(range, "invalid unop type: %d", op);
   }
   }
 
@@ -1962,7 +1962,7 @@ static Expr *new_expr_binop(Scope *scope, int op, Expr *lhs, Expr *rhs,
     return expr;
   }
   default:
-    assert(false);
+    range_internal_error(range, "invalid binop type: %d", op);
   }
 
   Expr *expr = new_expr(op, val_type, range);
@@ -3031,7 +3031,7 @@ static Designator *designator(TokenIterator *ts, Scope *scope) {
     return desig;
   }
 
-  assert(false);
+  unreachable();
 }
 
 static DesignatorVector *designation(TokenIterator *ts, Scope *scope) {
