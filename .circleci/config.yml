@@ -23,6 +23,17 @@ jobs:
           paths:
             - target/stage1
             - src/include_path.h
+  stage1-release-build:
+    docker:
+      - image: gifnksm/gifcc-build:archlinux
+    steps:
+      - checkout
+      - run: make stage1 RELEASE=1
+      - save_cache:
+          key: stage1-{{ .Environment.CIRCLE_SHA1 }}
+          paths:
+            - target/stage1
+            - src/include_path.h
   stage2-build:
     docker:
       - image: gifnksm/gifcc-build:archlinux
@@ -78,6 +89,21 @@ jobs:
           key: stage1-test-{{ .Environment.CIRCLE_SHA1 }}
           paths:
             - target/stage1
+  stage1-release-test:
+    docker:
+      - image: gifnksm/gifcc-build:archlinux
+    steps:
+      - checkout
+      - restore_cache:
+          key: stage1-{{ .Environment.CIRCLE_SHA1 }}
+      - run: touch target/stage*/*
+      - run: GIFCC_TIME=0 make stage1-test-full RELEASE=1
+      - store_test_results:
+          path: target/test-results
+      - save_cache:
+          key: stage1-release-test-{{ .Environment.CIRCLE_SHA1 }}
+          paths:
+            - target/stage1
   stage2-test:
     docker:
       - image: gifnksm/gifcc-build:archlinux
@@ -116,6 +142,17 @@ jobs:
       - checkout
       - restore_cache:
           key: stage1-test-{{ .Environment.CIRCLE_SHA1 }}
+      - restore_cache:
+          key: stage2-test-{{ .Environment.CIRCLE_SHA1 }}
+      - run: ./scripts/diff_asm stage1 stage2
+
+  compare-stage1-release-stage2:
+    docker:
+      - image: gifnksm/gifcc-build:archlinux
+    steps:
+      - checkout
+      - restore_cache:
+          key: stage1-release-test-{{ .Environment.CIRCLE_SHA1 }}
       - restore_cache:
           key: stage2-test-{{ .Environment.CIRCLE_SHA1 }}
       - run: ./scripts/diff_asm stage1 stage2
@@ -165,6 +202,7 @@ workflows:
   commit:
     jobs:
       - stage1-build
+      - stage1-release-build
       - stage2-build:
           requires:
             - stage1-build
@@ -175,6 +213,9 @@ workflows:
       - stage1-test:
           requires:
             - stage1-build
+      - stage1-release-test:
+          requires:
+            - stage1-release-build
       - stage2-test:
           requires:
             - stage2-build
@@ -184,6 +225,10 @@ workflows:
       - compare-stage1-stage2:
           requires:
             - stage1-test
+            - stage2-test
+      - compare-stage1-release-stage2:
+          requires:
+            - stage1-release-test
             - stage2-test
       - compare-stage2-stage3:
           requires:
