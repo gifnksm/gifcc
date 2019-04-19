@@ -1222,7 +1222,9 @@ static void emit_expr_cond(Expr *expr) {
   int cond_stack_pos = stack_pos;
   emit_expr(expr->cond.then_expr);
   emit_op1("jmp", imm_symbol(end_label));
+#ifndef NDEBUG
   int end_stack_pos = stack_pos;
+#endif
 
   stack_pos = cond_stack_pos;
   emit_label(else_label);
@@ -1965,7 +1967,9 @@ static void emit_stmt(Stmt *stmt, bool leave_value) {
     return;
   }
   case ST_EXPR: {
+#ifndef NDEBUG
     int base_stack_pos = stack_pos;
+#endif
     emit_expr(stmt->expr);
 
     // 式の評価結果としてスタックに一つの値が残っている
@@ -1978,14 +1982,18 @@ static void emit_stmt(Stmt *stmt, bool leave_value) {
       range_assert(stmt->range, stack_pos == base_stack_pos,
                    "stack position mismatch");
     } else {
+#ifndef NDEBUG
       int size = get_val_size(stmt->val_type, stmt->range);
+#endif
       range_assert(stmt->range, stack_pos - align(size, 8) == base_stack_pos,
                    "stack position mismatch");
     }
     return;
   }
   case ST_COMPOUND: {
+#ifndef NDEBUG
     int base_stack_pos = stack_pos;
+#endif
     for (int i = 0; i < VEC_LEN(stmt->stmts); i++) {
       bool is_last = i == VEC_LEN(stmt->stmts) - 1;
       emit_stmt(VEC_GET(stmt->stmts, i), leave_value && is_last);
@@ -1994,7 +2002,9 @@ static void emit_stmt(Stmt *stmt, bool leave_value) {
       range_assert(stmt->range, stack_pos == base_stack_pos,
                    "stack position mismatch");
     } else {
+#ifndef NDEBUG
       int size = get_val_size(stmt->val_type, stmt->range);
+#endif
       range_assert(stmt->range, stack_pos - align(size, 8) == base_stack_pos,
                    "stack position mismatch");
     }
@@ -2011,7 +2021,9 @@ static void emit_stmt(Stmt *stmt, bool leave_value) {
     return;
   }
   case ST_IF: {
+#ifndef NDEBUG
     int base_stack_pos = stack_pos;
+#endif
     char *else_label = make_label("if.else");
     char *end_label = make_label("if.end");
     const Reg *r = get_int_reg(stmt->cond->val_type, stmt->cond->range);
@@ -2037,7 +2049,9 @@ static void emit_stmt(Stmt *stmt, bool leave_value) {
     return;
   }
   case ST_SWITCH: {
+#ifndef NDEBUG
     int base_stack_pos = stack_pos;
+#endif
     char *end_label = make_label("switch.end");
     const Reg *r = get_int_reg(stmt->cond->val_type, stmt->cond->range);
     emit_expr(stmt->cond);
@@ -2076,7 +2090,9 @@ static void emit_stmt(Stmt *stmt, bool leave_value) {
     return;
   }
   case ST_WHILE: {
+#ifndef NDEBUG
     int base_stack_pos = stack_pos;
+#endif
     char *cond_label = make_label("while.cond");
     char *end_label = make_label("while.end");
 
@@ -2102,7 +2118,9 @@ static void emit_stmt(Stmt *stmt, bool leave_value) {
     return;
   }
   case ST_DO_WHILE: {
+#ifndef NDEBUG
     int base_stack_pos = stack_pos;
+#endif
     char *loop_label = make_label("do_while.loop");
     char *cond_label = make_label("do_while.cond");
     char *end_label = make_label("do_while.end");
@@ -2130,7 +2148,9 @@ static void emit_stmt(Stmt *stmt, bool leave_value) {
     return;
   }
   case ST_FOR: {
+#ifndef NDEBUG
     int base_stack_pos = stack_pos;
+#endif
     char *cond_label = make_label("for.cond");
     char *inc_label = make_label("for.inc");
     char *end_label = make_label("for.end");
@@ -2193,7 +2213,9 @@ static void emit_stmt(Stmt *stmt, bool leave_value) {
     return;
   }
   case ST_RETURN: {
+#ifndef NDEBUG
     int base_stack_pos = stack_pos;
+#endif
     if (stmt->expr != NULL) {
       Type *ret_type = func_ctxt->type->func.ret;
       emit_expr(stmt->expr);

@@ -803,12 +803,16 @@ __attribute__((format(printf, 4, 5))) void range_warn_raw(const Range *range,
 #define range_internal_error(range, fmt, ...)                                  \
   range_error(range, "ICE " fmt, ##__VA_ARGS__)
 
+#ifndef NDEBUG
 #define range_assert(range, cond, fmt, ...)                                    \
   do {                                                                         \
     if (!(cond)) {                                                             \
       range_internal_error((range), "`%s` " fmt, #cond, ##__VA_ARGS__);        \
     }                                                                          \
   } while (0)
+#else
+#define range_assert(range, cond, fmt, ...)
+#endif
 
 // char_iter.c
 CharIterator *new_char_iterator(cs_next_line_fn_t *next_line, void *arg);
