@@ -1,7 +1,9 @@
 #include "gifcc.h"
+#include <errno.h>
 #include <limits.h>
 #include <string.h>
 #include <strings.h>
+#include <wchar.h>
 
 static void convert_char(Token *token);
 static void convert_str(Token *token);
@@ -9,7 +11,8 @@ static void convert_number(Token *token);
 static void convert_ident(Token *token);
 static Number read_float(Token *token);
 static Number read_integer(Token *token);
-static int c_char(const char **input, const Range *range);
+static int read_char(const char **input, const Range *range);
+static wchar_t read_wchar(const char **input, const Range *range);
 
 static bool phase2_next_line(void *arg, CharVector *output) {
   CharIterator *cs = arg;
@@ -127,32 +130,32 @@ static void convert_char(Token *token) {
   assert(token->ty == TK_PP_CHAR);
 
   char *input = strdup(token->pp_char);
-  bool is_wide;
-  if (input[0] == 'L') {
-    is_wide = true;
-    input++;
-  } else {
-    is_wide = false;
-  }
-  range_assert(token->range, input[0] == '\'', "invalid character constant");
-  input++;
+
+  char *sep = strchr(input, '\'');
+  range_assert(token->range, sep != NULL, "invalid character constant");
+  *sep = '\0';
+  const char *prefix = input;
+  input = sep + 1;
+
   int len = strlen(input) - 1;
   range_assert(token->range, input[len] == '\'', "invalid character constant");
   input[len] = '\0';
 
   token->ty = TK_CHARCONST;
   token->pp_char = NULL;
-  if (is_wide) {
+  if (strcmp(prefix, "L") == 0) {
     const char *i = input;
-    int c = c_char(&i, token->range);
+    wchar_t c = read_wchar(&i, token->range);
     token->char_val = new_number_wchar_t(c);
-  } else {
+  } else if (strcmp(prefix, "") == 0) {
     const char *i = input;
-    int c = c_char(&i, token->range);
+    int c = read_char(&i, token->range);
     if (*i != '\0') {
       range_warn(token->range, "multi-character character constatn: %s", i);
     }
     token->char_val = new_number_int(c);
+  } else {
+    range_internal_error(token->range, "invalid character constant prefix");
   }
 }
 
@@ -169,7 +172,7 @@ static void convert_str(Token *token) {
   String *str = new_string();
   const char *i = input;
   while (*i != '\0') {
-    int c = c_char(&i, token->range);
+    int c = read_char(&i, token->range);
     str_push(str, c);
   }
   str_push(str, '\0');
@@ -311,7 +314,7 @@ static Number read_integer(Token *token) {
   return new_number(ty, val);
 }
 
-static int c_char(const char **input, const Range *range) {
+static int read_char(const char **input, const Range *range) {
   const char *cs = *input;
 
   if (*cs != '\\') {
@@ -320,58 +323,92 @@ static int c_char(const char **input, const Range *range) {
   }
   cs++;
 
-  const char ESCAPE_CHARS[] = {'\'', '"', '?', '\\', '\0'};
-  for (int i = 0; ESCAPE_CHARS[i] != '\0'; i++) {
-    if (*cs == ESCAPE_CHARS[i]) {
-      *input = cs + 1;
-      return ESCAPE_CHARS[i];
-    }
-  }
-
-  typedef struct {
+  struct {
     char raw;
     char meta;
-  } MetaChar;
-
-  MetaChar META_CHARS[] = {
-      {'a', '\a'}, {'b', '\b'}, {'f', '\f'}, {'n', '\n'},
-      {'r', '\r'}, {'t', '\t'}, {'v', '\v'}, {'\0', '\0'},
+  } ESCAPE_CHARS[] = {
+      {'\'', '\''}, {'"', '"'},  {'?', '?'},  {'\\', '\\'},
+      {'a', '\a'},  {'b', '\b'}, {'f', '\f'}, {'n', '\n'},
+      {'r', '\r'},  {'t', '\t'}, {'v', '\v'}, {'\0', '\0'},
   };
-  for (int i = 0; META_CHARS[i].raw != '\0'; i++) {
-    if (*cs == META_CHARS[i].raw) {
+
+  for (int i = 0; ESCAPE_CHARS[i].raw != '\0'; i++) {
+    if (*cs == ESCAPE_CHARS[i].raw) {
       *input = cs + 1;
-      return META_CHARS[i].meta;
+      return ESCAPE_CHARS[i].meta;
     }
   }
 
   if (*cs == 'x') {
     cs++;
-    if (!is_hex_digit(*cs)) {
+    char *endptr = NULL;
+    long val = strtol(cs, &endptr, 16);
+    if (cs == endptr) {
       range_error(range, "\\x used with no following hex digits");
     }
-    int val = 0;
-    while (true) {
-      if (!is_hex_digit(*cs)) {
-        break;
-      }
-      val = val * 0x10 + hex2num(*cs);
-      cs++;
-    }
-    *input = cs;
+    *input = endptr;
     return val;
   }
 
   if (is_oct_digit(*cs)) {
-    int val = 0;
-    while (true) {
-      if (!is_oct_digit(*cs)) {
-        break;
-      }
+    char *endptr = NULL;
+    long val = strtol(cs, &endptr, 8);
+    assert(cs != endptr);
+    *input = endptr;
+    return val;
+  }
 
-      val = val * 010 + oct2num(*cs);
-      cs++;
+  range_error(range, "unknown escape sequence '\\%c'", *cs);
+}
+
+static wchar_t read_wchar(const char **input, const Range *range) {
+  const char *cs = *input;
+
+  if (*cs != '\\') {
+    wchar_t val;
+    mbstate_t state;
+    memset(&state, 0, sizeof(state));
+    size_t len = mbrtowc(&val, cs, strlen(cs), &state);
+    if ((ssize_t)len < 0) {
+      range_error(range, "%s", strerror(errno));
     }
-    *input = cs;
+    *input = cs + len;
+    return val;
+  }
+  cs++;
+
+  struct {
+    char raw;
+    wchar_t meta;
+  } ESCAPE_CHARS[] = {
+      {'\'', L'\''}, {'"', L'"'},  {'?', L'?'},  {'\\', L'\\'},
+      {'a', L'\a'},  {'b', L'\b'}, {'f', L'\f'}, {'n', L'\n'},
+      {'r', L'\r'},  {'t', L'\t'}, {'v', L'\v'}, {'\0', L'\0'},
+  };
+
+  for (int i = 0; ESCAPE_CHARS[i].raw != '\0'; i++) {
+    if (*cs == ESCAPE_CHARS[i].raw) {
+      *input = cs + 1;
+      return ESCAPE_CHARS[i].meta;
+    }
+  }
+
+  if (*cs == 'x') {
+    cs++;
+    char *endptr = NULL;
+    long val = strtol(cs, &endptr, 16);
+    if (cs == endptr) {
+      range_error(range, "\\x used with no following hex digits");
+    }
+    *input = endptr;
+    return val;
+  }
+
+  if (is_oct_digit(*cs)) {
+    char *endptr = NULL;
+    long val = strtol(cs, &endptr, 8);
+    assert(cs != endptr);
+    *input = endptr;
     return val;
   }
 

@@ -3,6 +3,7 @@
 #include <getopt.h>
 #include <inttypes.h>
 #include <libgen.h>
+#include <locale.h>
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -586,6 +587,8 @@ struct option longopts[] = {
 };
 
 int main(int argc, char **argv) {
+  setlocale(LC_ALL, "");
+
   asm_syntax_t asm_syntax = ASM_SYNTAX_INTEL;
   output_t emit_target = 0;
   const char *output = NULL;
