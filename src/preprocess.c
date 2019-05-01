@@ -200,9 +200,8 @@ static bool read_pp_if_cond(Map *define_map, TokenVector *tokens,
   // expand macros
   tokens = pp_expand_macros(define_map, tokens, NULL);
 
-  for (int i = 0; i < VEC_LEN(tokens); i++) {
+  VEC_FOREACH (Token *tk, tokens) {
     // replace all ident tokens (including keyword ident) into '0'
-    Token *tk = VEC_GET(tokens, i);
     if (tk->ty == TK_PP_IDENT) {
       tk->pp_ident = NULL;
       tk->ty = TK_PP_NUM;
@@ -626,9 +625,8 @@ static TokenVector *pp_get_func_arg(StrVector *params,
   if (token->ty != TK_PP_IDENT || params == NULL) {
     return NULL;
   }
-  int i;
-  for (i = 0; i < VEC_LEN(params); i++) {
-    const char *key = VEC_GET(params, i);
+
+  VEC_FOREACH_IDX (const char *key, i, params) {
     if (strcmp(key, token->pp_ident) == 0) {
       TokenVector *arg = VEC_GET(arguments, i);
       assert(arg != NULL);
@@ -709,9 +707,7 @@ static TokenListVector *pp_read_macro_func_arg(Macro *macro,
                 VEC_LEN(macro->params), VEC_LEN(arguments));
   }
 
-  for (int i = 0; i < VEC_LEN(arguments); i++) {
-    trim_spaces(VEC_GET(arguments, i));
-  }
+  VEC_FOREACH (TokenVector *arg, arguments) { trim_spaces(arg); }
 
   return arguments;
 }
@@ -754,8 +750,7 @@ static Token *pp_stringize(TokenVector *arg, bool quote) {
   if (quote) {
     str_push(str, '"');
   }
-  for (int i = 0; i < VEC_LEN(arg); i++) {
-    Token *token = VEC_GET(arg, i);
+  VEC_FOREACH (Token *token, arg) {
     range = range_join(range, token->range);
     if (token->ty < 256) {
       str_push(str, token->ty);

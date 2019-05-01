@@ -763,9 +763,7 @@ static void walk_expr(Expr *expr) {
   case EX_CALL:
     walk_expr(expr->call.callee);
     if (expr->call.arguments != NULL) {
-      for (int i = 0; i < VEC_LEN(expr->call.arguments); i++) {
-        walk_expr(VEC_GET(expr->call.arguments, i));
-      }
+      VEC_FOREACH (Expr *arg, expr->call.arguments) { walk_expr(arg); }
     }
     return;
   case EX_POST_INC:
@@ -931,10 +929,7 @@ static void walk_expr(Expr *expr) {
     assert(false);
     return;
   case EX_COMMA:
-    for (int i = 0; i < VEC_LEN(expr->comma.exprs); i++) {
-      Expr *op = VEC_GET(expr->comma.exprs, i);
-      walk_expr(op);
-    }
+    VEC_FOREACH (Expr *op, expr->comma.exprs) { walk_expr(op); }
     return;
   case EX_COND:
     walk_expr(expr->cond.cond);
@@ -981,13 +976,10 @@ static void walk_stmt(Stmt *stmt) {
     walk_expr(stmt->expr);
     return;
   case ST_COMPOUND:
-    for (int i = 0; i < VEC_LEN(stmt->stmts); i++) {
-      walk_stmt(VEC_GET(stmt->stmts, i));
-    }
+    VEC_FOREACH (Stmt *s, stmt->stmts) { walk_stmt(s); }
     return;
   case ST_DECL:
-    for (int i = 0; i < VEC_LEN(stmt->decl); i++) {
-      StackVarDecl *decl = VEC_GET(stmt->decl, i);
+    VEC_FOREACH (StackVarDecl *decl, stmt->decl) {
       walk_initializer(decl->init);
     }
     return;
@@ -998,9 +990,7 @@ static void walk_stmt(Stmt *stmt) {
     return;
   case ST_SWITCH:
     walk_expr(stmt->cond);
-    for (int i = 0; i < VEC_LEN(stmt->cases); i++) {
-      walk_stmt(VEC_GET(stmt->cases, i));
-    }
+    VEC_FOREACH (Stmt *s, stmt->cases) { walk_stmt(s); }
     if (stmt->default_case != NULL) {
       walk_stmt(stmt->default_case);
     }
@@ -1058,15 +1048,13 @@ static void walk_initializer(Initializer *init) {
   }
 
   if (init->members != NULL) {
-    for (int i = 0; i < VEC_LEN(init->members); i++) {
-      MemberInitializer *meminit = VEC_GET(init->members, i);
+    VEC_FOREACH (MemberInitializer *meminit, init->members) {
       walk_initializer(meminit->init);
     }
   }
 
   if (init->elements != NULL) {
-    for (int i = 0; i < VEC_LEN(init->elements); i++) {
-      Initializer *eleminit = VEC_GET(init->elements, i);
+    VEC_FOREACH (Initializer *eleminit, init->elements) {
       walk_initializer(eleminit);
     }
   }
@@ -1087,13 +1075,7 @@ static void walk_str(StringLiteral *str __attribute__((unused))) {
 void sema_expr(Expr *expr) { walk_expr(expr); }
 
 void sema(TranslationUnit *tunit) {
-  for (int i = 0; i < VEC_LEN(tunit->func_list); i++) {
-    walk_func(VEC_GET(tunit->func_list, i));
-  }
-  for (int i = 0; i < VEC_LEN(tunit->gvar_list); i++) {
-    walk_gvar(VEC_GET(tunit->gvar_list, i));
-  }
-  for (int i = 0; i < VEC_LEN(tunit->str_list); i++) {
-    walk_str(VEC_GET(tunit->str_list, i));
-  }
+  VEC_FOREACH (Function *func, tunit->func_list) { walk_func(func); }
+  VEC_FOREACH (GlobalVar *gvar, tunit->gvar_list) { walk_gvar(gvar); }
+  VEC_FOREACH (StringLiteral *str, tunit->str_list) { walk_str(str); }
 }

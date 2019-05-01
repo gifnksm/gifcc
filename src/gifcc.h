@@ -960,10 +960,7 @@ static inline char *get_label(Function *func, const char *name) {
 
 static inline int get_members_offset(MemberVector *members) {
   int offset = 0;
-  for (int i = 0; i < VEC_LEN(members); i++) {
-    Member *member = VEC_GET(members, i);
-    offset += member->offset;
-  }
+  VEC_FOREACH (Member *member, members) { offset += member->offset; }
   return offset;
 }
 

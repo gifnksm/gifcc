@@ -145,8 +145,8 @@ static void dump_expr(FILE *fp, Expr *expr, int level) {
     dump_expr_start(fp, expr, level, "CALL");
     dump_expr(fp, expr->call.callee, level + 1);
     if (expr->call.arguments != NULL) {
-      for (int i = 0; i < VEC_LEN(expr->call.arguments); i++) {
-        dump_expr(fp, VEC_GET(expr->call.arguments, i), level + 1);
+      VEC_FOREACH (Expr *arg, expr->call.arguments) {
+        dump_expr(fp, arg, level + 1);
       }
     }
     dump_expr_end(fp, expr, level);
@@ -159,8 +159,7 @@ static void dump_expr(FILE *fp, Expr *expr, int level) {
     return;
   case EX_DOT: {
     String *s = new_string();
-    for (int i = 0; i < VEC_LEN(expr->dot.members); i++) {
-      Member *m = VEC_GET(expr->dot.members, i);
+    VEC_FOREACH_IDX (Member *m, i, expr->dot.members) {
       if (i > 0) {
         str_push(s, '.');
       }
@@ -174,8 +173,7 @@ static void dump_expr(FILE *fp, Expr *expr, int level) {
   }
   case EX_ARROW: {
     String *s = new_string();
-    for (int i = 0; i < VEC_LEN(expr->arrow.members); i++) {
-      Member *m = VEC_GET(expr->arrow.members, i);
+    VEC_FOREACH_IDX (Member *m, i, expr->arrow.members) {
       if (i > 0) {
         str_push(s, '.');
       }
@@ -278,10 +276,7 @@ static void dump_expr(FILE *fp, Expr *expr, int level) {
     return;
   case EX_COMMA:
     dump_expr_start(fp, expr, level, "[,]");
-    for (int i = 0; i < VEC_LEN(expr->comma.exprs); i++) {
-      Expr *op = VEC_GET(expr->comma.exprs, i);
-      dump_expr(fp, op, level + 1);
-    }
+    VEC_FOREACH (Expr *op, expr->comma.exprs) { dump_expr(fp, op, level + 1); }
     dump_expr_end(fp, expr, level);
     return;
 
@@ -365,15 +360,12 @@ static void dump_stmt(FILE *fp, Stmt *stmt, int level) {
     return;
   case ST_COMPOUND:
     dump_stmt_start(fp, stmt, level, "COMPOUND");
-    for (int i = 0; i < VEC_LEN(stmt->stmts); i++) {
-      dump_stmt(fp, VEC_GET(stmt->stmts, i), level + 1);
-    }
+    VEC_FOREACH (Stmt *s, stmt->stmts) { dump_stmt(fp, s, level + 1); }
     dump_stmt_end(fp, stmt, level);
     return;
   case ST_DECL:
     dump_stmt_start(fp, stmt, level, "DECL");
-    for (int i = 0; i < VEC_LEN(stmt->decl); i++) {
-      StackVarDecl *decl = VEC_GET(stmt->decl, i);
+    VEC_FOREACH (StackVarDecl *decl, stmt->decl) {
       StackVar *svar = decl->stack_var;
       Initializer *init = decl->init;
       dump_range_start(fp, svar->range);
@@ -497,8 +489,7 @@ static void dump_init(FILE *fp, Initializer *init, const Range *range,
     dump_indent(fp, level);
     dump_type(fp, init->type);
     fprintf(fp, "{\n");
-    for (int i = 0; i < VEC_LEN(init->members); i++) {
-      MemberInitializer *meminit = VEC_GET(init->members, i);
+    VEC_FOREACH (MemberInitializer *meminit, init->members) {
       dump_range_start(fp, range);
       dump_indent(fp, level + 1);
       fprintf(fp, ".%s = \n", meminit->member->name);
@@ -514,8 +505,7 @@ static void dump_init(FILE *fp, Initializer *init, const Range *range,
     dump_indent(fp, level);
     dump_type(fp, init->type);
     fprintf(fp, "{\n");
-    for (int i = 0; i < VEC_LEN(init->elements); i++) {
-      Initializer *val = VEC_GET(init->elements, i);
+    VEC_FOREACH_IDX (Initializer *val, i, init->elements) {
       dump_range_start(fp, range);
       dump_indent(fp, level + 1);
       fprintf(fp, "[%d] = \n", i);
@@ -531,9 +521,7 @@ static void dump_init(FILE *fp, Initializer *init, const Range *range,
 
 static void output_ast(FILE *fp, TranslationUnit *tunit) {
   int level = 0;
-  for (int i = 0; i < VEC_LEN(tunit->func_list); i++) {
-    Function *func = VEC_GET(tunit->func_list, i);
-
+  VEC_FOREACH (Function *func, tunit->func_list) {
     dump_range_start(fp, func->range);
     dump_indent(fp, level);
     fprintf(fp, "FUNCTION ");
@@ -544,9 +532,8 @@ static void output_ast(FILE *fp, TranslationUnit *tunit) {
     dump_indent(fp, level);
     fprintf(fp, "}\n");
   }
-  for (int i = 0; i < VEC_LEN(tunit->gvar_list); i++) {
-    GlobalVar *gvar = VEC_GET(tunit->gvar_list, i);
 
+  VEC_FOREACH (GlobalVar *gvar, tunit->gvar_list) {
     dump_range_start(fp, gvar->range);
     dump_indent(fp, level);
     fprintf(fp, "GLOBAL ");

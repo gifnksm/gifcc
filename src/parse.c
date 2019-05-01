@@ -341,8 +341,7 @@ static Initializer *new_initializer(Type *type) {
   case TY_STRUCT: {
     init->members = NEW_VECTOR(MemberInitializerVector);
     StructBody *body = type->struct_body;
-    for (int i = 0; i < VEC_LEN(body->members); i++) {
-      Member *member = VEC_GET(body->members, i);
+    VEC_FOREACH (Member *member, body->members) {
       MemberInitializer *meminit = new_member_initializer(member);
       VEC_PUSH(init->members, meminit);
     }
@@ -1389,8 +1388,7 @@ static Expr *new_expr_str(Scope *scope, const char *val, const Range *range) {
                      new_number_int(strlen(val)), EMPTY_TYPE_QUALIFIER);
 
   StringLiteral *lit = NULL;
-  for (int i = 0; i < VEC_LEN(scope->global_ctxt->str_list); i++) {
-    StringLiteral *l = VEC_GET(scope->global_ctxt->str_list, i);
+  VEC_FOREACH (StringLiteral *l, scope->global_ctxt->str_list) {
     if (strcmp(l->val, val) == 0) {
       lit = l;
       break;
@@ -1421,8 +1419,7 @@ static Expr *new_expr_generic(Scope *scope, Expr *control,
   control = coerce_array2ptr(scope, control);
 
   Expr *default_expr = NULL;
-  for (int i = 0; i < VEC_LEN(assoc_list); i++) {
-    GenericAssociation *assoc = VEC_GET(assoc_list, i);
+  VEC_FOREACH (GenericAssociation *assoc, assoc_list) {
     if (assoc->type == NULL) {
       if (default_expr != NULL) {
         range_error(assoc->range, "duplicate default generic association");
