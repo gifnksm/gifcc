@@ -504,6 +504,14 @@ typedef struct StringLiteral {
 } StringLiteral;
 typedef DEFINE_VECTOR(StringLiteralVector, StringLiteral *) StringLiteralVector;
 
+typedef struct GenericAssociation {
+  const Range *range;
+  Type *type;
+  Expr *expr;
+} GenericAssociation;
+typedef DEFINE_VECTOR(GenericAssociationVector,
+                      GenericAssociation *) GenericAssociationVector;
+
 typedef DEFINE_VECTOR(ExprVector, Expr *) ExprVector;
 typedef Expr *builtin_func_handler_t(Expr *callee, ExprVector *argument,
                                      const Range *range);
@@ -935,6 +943,37 @@ bool is_ptr_type(Type *ty);
 bool is_array_type(Type *ty);
 bool is_func_type(Type *ty);
 char *format_type(const Type *type, bool detail);
+
+// expr.c
+Expr *new_expr_num(Number val, const Range *range);
+Expr *new_expr_stack_var(StackVar *svar, const Range *range);
+Expr *new_expr_global_var(Type *val_type, const char *name, GlobalVar *gvar,
+                          const Range *range);
+Expr *new_expr_builtin_func(const char *name, builtin_func_handler_t *handler,
+                            const Range *range);
+Expr *new_expr_str(StringLiteral *lit, const Range *range);
+Expr *new_expr_stmt(Stmt *stmt, const Range *range);
+Expr *new_expr_generic(Expr *control, GenericAssociationVector *assoc_list);
+Expr *new_expr_call(Expr *callee, ExprVector *arguments, const Range *range);
+Expr *new_expr_builtin_va_start(Expr *callee, ExprVector *arguments,
+                                const Range *range);
+Expr *new_expr_builtin_va_arg(Expr *callee, ExprVector *arguments,
+                              const Range *range);
+Expr *new_expr_builtin_va_end(Expr *callee, ExprVector *arguments,
+                              const Range *range);
+Expr *new_expr_builtin_va_copy(Expr *callee, ExprVector *arguments,
+                               const Range *range);
+Expr *new_expr_postfix(int ty, Expr *operand, const Range *range);
+Expr *new_expr_cast(Type *val_type, Expr *operand, const Range *range);
+Expr *new_expr_compound(Type *val_type, StackVar *svar, Initializer *init,
+                        const Range *range);
+Expr *new_expr_unary(int op, Expr *operand, const Range *range);
+Expr *new_expr_binop(int op, Expr *lhs, Expr *rhs, const Range *range);
+Expr *new_expr_cond(Expr *cond, Expr *then_expr, Expr *else_expr,
+                    const Range *range);
+Expr *new_expr_index(Expr *array, Expr *index, const Range *range);
+Expr *new_expr_dot(Expr *operand, const char *name, const Range *range);
+Expr *new_expr_arrow(Expr *operand, const char *name, const Range *range);
 
 // parse.c
 Scope *new_pp_scope(const Reader *reader);
