@@ -620,8 +620,7 @@ static void emit_lval(Expr *expr, Operand reg) {
   }
   if (expr->ty == EX_COMMA) {
     ExprVector *exprs = expr->comma.exprs;
-    for (int i = 0; i < VEC_LEN(exprs); i++) {
-      Expr *op = VEC_GET(exprs, i);
+    VEC_FOREACH_IDX (Expr *op, i, exprs) {
       if (i != VEC_LEN(exprs) - 1) {
         emit_expr(op);
         int op_size = get_val_size(op->val_type, op->range);
@@ -841,8 +840,7 @@ static ArgClassVector *classify_arg(const ExprVector *args, int int_reg_idx) {
   ArgClassVector *class = NEW_VECTOR(ArgClassVector);
   int num_int_reg = int_reg_idx;
   int num_sse_reg = 0;
-  for (int i = 0; i < VEC_LEN(args); i++) {
-    Expr *expr = VEC_GET(args, i);
+  VEC_FOREACH (Expr *expr, args) {
     VEC_PUSH(class, classify_arg_type(expr->val_type, expr->range, &num_int_reg,
                                       &num_sse_reg));
   }
@@ -969,8 +967,7 @@ static void emit_expr_call(Expr *expr) {
 
   int arg_size = 0;
   if (args != NULL && VEC_LEN(args) > 0) {
-    for (int i = VEC_LEN(args) - 1; i >= 0; i--) {
-      Expr *expr = VEC_GET(args, i);
+    VEC_FOREACH_REVERSE_IDX (Expr *expr, i, args) {
       int size = get_val_size(expr->val_type, expr->range);
       arg_class_t class = VEC_GET(arg_class, i);
       if (class == ARG_CLASS_MEMORY || class == ARG_CLASS_X87) {
@@ -988,15 +985,13 @@ static void emit_expr_call(Expr *expr) {
 
   if (args != NULL && VEC_LEN(args) > 0) {
     // メモリ渡しする引数をスタックに積む
-    for (int i = VEC_LEN(args) - 1; i >= 0; i--) {
-      arg_class_t class = VEC_GET(arg_class, i);
+    VEC_FOREACH_REVERSE_IDX (arg_class_t class, i, arg_class) {
       if (class == ARG_CLASS_MEMORY || class == ARG_CLASS_X87) {
         emit_expr(VEC_GET(args, i));
       }
     }
     // レジスタ渡しする引数をスタックに積む
-    for (int i = VEC_LEN(args) - 1; i >= 0; i--) {
-      arg_class_t class = VEC_GET(arg_class, i);
+    VEC_FOREACH_REVERSE_IDX (arg_class_t class, i, arg_class) {
       switch (class) {
       case ARG_CLASS_X87:
       case ARG_CLASS_MEMORY:
@@ -1019,8 +1014,7 @@ static void emit_expr_call(Expr *expr) {
 
   if (args != NULL && VEC_LEN(args) > 0) {
     // レジスタ渡しする引数をpopしレジスタにセットする
-    for (int i = 0; i < VEC_LEN(args); i++) {
-      Expr *expr = VEC_GET(args, i);
+    VEC_FOREACH_IDX (Expr *expr, i, args) {
       int size = get_val_size(expr->val_type, expr->range);
 
       arg_class_t class = VEC_GET(arg_class, i);
@@ -1145,8 +1139,7 @@ static void emit_expr_comma(Expr *expr) {
   assert(expr->ty == EX_COMMA);
 
   ExprVector *exprs = expr->comma.exprs;
-  for (int i = 0; i < VEC_LEN(exprs); i++) {
-    Expr *op = VEC_GET(exprs, i);
+  VEC_FOREACH_IDX (Expr *op, i, exprs) {
     emit_expr(op);
     if (i != VEC_LEN(exprs) - 1) {
       int op_size = get_val_size(op->val_type, op->range);
@@ -1994,9 +1987,9 @@ static void emit_stmt(Stmt *stmt, bool leave_value) {
 #ifndef NDEBUG
     int base_stack_pos = stack_pos;
 #endif
-    for (int i = 0; i < VEC_LEN(stmt->stmts); i++) {
+    VEC_FOREACH_IDX (Stmt *s, i, stmt->stmts) {
       bool is_last = i == VEC_LEN(stmt->stmts) - 1;
-      emit_stmt(VEC_GET(stmt->stmts, i), leave_value && is_last);
+      emit_stmt(s, leave_value && is_last);
     }
     if (stmt->val_type->ty == TY_VOID || !leave_value) {
       range_assert(stmt->range, stack_pos == base_stack_pos,
@@ -2011,8 +2004,7 @@ static void emit_stmt(Stmt *stmt, bool leave_value) {
     return;
   }
   case ST_DECL: {
-    for (int i = 0; i < VEC_LEN(stmt->decl); i++) {
-      StackVarDecl *decl = VEC_GET(stmt->decl, i);
+    VEC_FOREACH (StackVarDecl *decl, stmt->decl) {
       StackVar *svar = decl->stack_var;
       Initializer *init = decl->init;
       emit_svar_zero(svar);
@@ -2055,8 +2047,7 @@ static void emit_stmt(Stmt *stmt, bool leave_value) {
     char *end_label = make_label("switch.end");
     const Reg *r = get_int_reg(stmt->cond->val_type, stmt->cond->range);
     emit_expr(stmt->cond);
-    for (int i = 0; i < VEC_LEN(stmt->cases); i++) {
-      Stmt *case_stmt = VEC_GET(stmt->cases, i);
+    VEC_FOREACH (Stmt *case_stmt, stmt->cases) {
       assert(case_stmt->ty == ST_CASE);
       emit_op2("mov", Reg8.rax, imm_num(case_stmt->case_val));
       emit_pop(Reg8.rdi);
@@ -2268,8 +2259,7 @@ static ArgClassVector *classify_param(const ParamVector *params,
   ArgClassVector *class = NEW_VECTOR(ArgClassVector);
   int num_int_reg = int_reg_idx;
   int num_sse_reg = 0;
-  for (int i = 0; i < VEC_LEN(params); i++) {
-    Param *param = VEC_GET(params, i);
+  VEC_FOREACH (Param *param, params) {
     VEC_PUSH(class, classify_arg_type(param->type, param->range, &num_int_reg,
                                       &num_sse_reg));
   }
@@ -2298,14 +2288,12 @@ static void emit_func(Function *func) {
 
   // ローカル変数の領域確保
   int stack_size = 0;
-  for (int i = 0; i < VEC_LEN(func->var_list); i++) {
-    StackVar *svar = VEC_GET(func->var_list, i);
+  VEC_FOREACH (StackVar *svar, func->var_list) {
     stack_size = align(stack_size, get_val_align(svar->type, svar->range));
     svar->offset = stack_size;
     stack_size += get_val_size(svar->type, svar->range);
   }
-  for (int i = 0; i < VEC_LEN(func->var_list); i++) {
-    StackVar *svar = VEC_GET(func->var_list, i);
+  VEC_FOREACH (StackVar *svar, func->var_list) {
     svar->offset = align(stack_size, 16) - svar->offset;
 
     const char *filename;
@@ -2364,8 +2352,7 @@ static void emit_func(Function *func) {
   if (func->type->func.params != NULL) {
     ArgClassVector *param_class =
         classify_param(func->type->func.params, int_reg_idx);
-    for (int i = 0; i < VEC_LEN(func->type->func.params); i++) {
-      Param *param = VEC_GET(func->type->func.params, i);
+    VEC_FOREACH_IDX (Param *param, i, func->type->func.params) {
       StackVar *var = param->stack_var;
       assert(var != NULL);
       arg_class_t class = VEC_GET(param_class, i);
@@ -2512,8 +2499,7 @@ static void emit_svar_init(StackVar *svar, int offset, Initializer *init,
     assert(init->type->ty == TY_STRUCT || init->type->ty == TY_UNION);
     assert(VEC_LEN(init->members) <= 1 || init->type->ty == TY_STRUCT);
 
-    for (int i = 0; i < VEC_LEN(init->members); i++) {
-      MemberInitializer *meminit = VEC_GET(init->members, i);
+    VEC_FOREACH (MemberInitializer *meminit, init->members) {
       const Member *member = meminit->member;
       emit_svar_init(svar, offset + member->offset, meminit->init, range);
     }
@@ -2523,9 +2509,8 @@ static void emit_svar_init(StackVar *svar, int offset, Initializer *init,
   if (init->elements != NULL) {
     assert(init->type->ty == TY_ARRAY);
     int size = get_val_size(init->type->array.elem, range);
-    for (int i = 0; i < VEC_LEN(init->elements); i++) {
-      Initializer *meminit = VEC_GET(init->elements, i);
-      emit_svar_init(svar, offset + i * size, meminit, range);
+    VEC_FOREACH_IDX (Initializer *eleminit, i, init->elements) {
+      emit_svar_init(svar, offset + i * size, eleminit, range);
     }
     return;
   }
@@ -2599,8 +2584,7 @@ static void emit_gvar_init(Initializer *init, const Range *range,
     assert(VEC_LEN(init->members) <= 1 || init->type->ty == TY_STRUCT);
     StructBody *body = init->type->struct_body;
     int offset = 0;
-    for (int i = 0; i < VEC_LEN(init->members); i++) {
-      MemberInitializer *meminit = VEC_GET(init->members, i);
+    VEC_FOREACH_IDX (MemberInitializer *meminit, i, init->members) {
       if (meminit->init == NULL) {
         continue;
       }
@@ -2626,8 +2610,7 @@ static void emit_gvar_init(Initializer *init, const Range *range,
 
   if (init->elements != NULL) {
     assert(init->type->ty == TY_ARRAY);
-    for (int i = 0; i < VEC_LEN(init->elements); i++) {
-      Initializer *meminit = VEC_GET(init->elements, i);
+    VEC_FOREACH (Initializer *meminit, init->elements) {
       if (meminit == NULL) {
         emit("  .zero %d", get_val_size(init->type->array.elem, range));
         continue;
@@ -2674,15 +2657,11 @@ void gen(FILE *fp, TranslationUnit *tunit, asm_syntax_t syntax) {
   }
 
   emit(".text");
-  for (int i = 0; i < VEC_LEN(tunit->func_list); i++) {
-    emit_func(VEC_GET(tunit->func_list, i));
-  }
-  while (VEC_LEN(tunit->gvar_list) > 0) {
-    GlobalVar *gvar = VEC_REMOVE(tunit->gvar_list, 0);
+  VEC_FOREACH (Function *func, tunit->func_list) { emit_func(func); }
+  VEC_FOREACH (GlobalVar *gvar, tunit->gvar_list) {
     emit_gvar(gvar, tunit->gvar_list);
   }
+
   emit(".section .rodata");
-  for (int i = 0; i < VEC_LEN(tunit->str_list); i++) {
-    emit_str(VEC_GET(tunit->str_list, i));
-  }
+  VEC_FOREACH (StringLiteral *str, tunit->str_list) { emit_str(str); }
 }

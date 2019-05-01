@@ -107,3 +107,17 @@ void _vec_reserve(void **data, int *cap, size_t elemsize, int len);
   })
 
 #define VEC_CLEAR(vec) ({ (vec)->vec_len = 0; })
+
+#define VEC_FOREACH_IDX(item, idx, vec)                                        \
+  for (int _keep = true, idx = 0; _keep && idx < VEC_LEN(vec);                 \
+       _keep = !_keep, idx++)                                                  \
+    for (item = VEC_GET(vec, idx); _keep; _keep = !_keep)
+
+#define VEC_FOREACH(item, vec) VEC_FOREACH_IDX (item, _idx, vec)
+
+#define VEC_FOREACH_REVERSE_IDX(item, idx, vec)                                \
+  for (int _keep = true, idx = VEC_LEN(vec) - 1; _keep && idx >= 0;            \
+       _keep = !_keep, idx--)                                                  \
+    for (item = VEC_GET(vec, idx); _keep; _keep = !_keep)
+
+#define VEC_FOREACH_REVERSE(item, vec) VEC_FOREACH_REVERSE_IDX (item, _idx, vec)
