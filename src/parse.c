@@ -155,8 +155,8 @@ static bool register_tag(Scope *scope, const char *tag, Type *type);
 static Type *get_tag(Scope *scope, const char *tag);
 static bool register_typedef(Scope *scope, const char *name, Type *type);
 static Type *get_typedef(Scope *scope, const char *name);
-static Type *integer_promoted(Scope *scope, Expr **e);
-static Type *arith_converted(Scope *scope, Expr **e1, Expr **e2);
+static Type *integer_promoted(Expr **e);
+static Type *arith_converted(Expr **e1, Expr **e2);
 static bool token_is_storage_class_specifier(Token *token);
 static bool consume_storage_class_specifier(TokenIterator *ts,
                                             StorageClassSpecifier *scs);
@@ -171,46 +171,44 @@ static bool consume_function_specifier(TokenIterator *ts,
                                        FunctionSpecifier *fs);
 static noreturn void binop_type_error_raw(int ty, Expr *lhs, Expr *rhs,
                                           const char *dbg_file, int dbg_line);
-static Expr *coerce_array2ptr(Scope *scope, Expr *expr);
-static Expr *coerce_func2ptr(Scope *scope, Expr *expr);
-static Expr *coerce_expr2cond(Scope *scope, Expr *expr);
+static Expr *coerce_array2ptr(Expr *expr);
+static Expr *coerce_func2ptr(Expr *expr);
+static Expr *coerce_expr2cond(Expr *expr);
 static bool is_null_ptr_const(Expr *expr);
 static Expr *new_expr(int ty, Type *val_type, const Range *range);
 static Expr *new_expr_num(Number val, const Range *range);
+static Expr *new_expr_stack_var(StackVar *svar, const Range *range);
+static Expr *new_expr_global_var(Type *val_type, const char *name,
+                                 GlobalVar *gvar, const Range *range);
+static Expr *new_expr_builtin_func(const char *name,
+                                   builtin_func_handler_t *handler,
+                                   const Range *range);
 static Expr *new_expr_ident(Scope *scope, Token *ident);
 static Expr *new_expr_str(Scope *scope, const char *val, const Range *range);
 static Expr *new_expr_stmt(Stmt *stmt, const Range *range);
-static Expr *new_expr_generic(Scope *scope, Expr *control,
+static Expr *new_expr_generic(Expr *control,
                               GenericAssociationVector *assoc_list);
-static Expr *new_expr_call(Scope *scope, Expr *callee, ExprVector *arguments,
+static Expr *new_expr_call(Expr *callee, ExprVector *arguments,
                            const Range *range);
-static Expr *new_expr_builtin_va_start(Scope *scope, Expr *callee,
-                                       ExprVector *arguments,
+static Expr *new_expr_builtin_va_start(Expr *callee, ExprVector *arguments,
                                        const Range *range);
-static Expr *new_expr_builtin_va_arg(Scope *scope, Expr *callee,
-                                     ExprVector *arguments, const Range *range);
-static Expr *new_expr_builtin_va_end(Scope *scope, Expr *callee,
-                                     ExprVector *arguments, const Range *range);
-static Expr *new_expr_builtin_va_copy(Scope *scope, Expr *callee,
-                                      ExprVector *arguments,
+static Expr *new_expr_builtin_va_arg(Expr *callee, ExprVector *arguments,
+                                     const Range *range);
+static Expr *new_expr_builtin_va_end(Expr *callee, ExprVector *arguments,
+                                     const Range *range);
+static Expr *new_expr_builtin_va_copy(Expr *callee, ExprVector *arguments,
                                       const Range *range);
-static Expr *new_expr_postfix(Scope *scope, int ty, Expr *operand,
-                              const Range *range);
-static Expr *new_expr_cast(Scope *scope, Type *val_type, Expr *operand,
-                           const Range *range);
+static Expr *new_expr_postfix(int ty, Expr *operand, const Range *range);
+static Expr *new_expr_cast(Type *val_type, Expr *operand, const Range *range);
 static Expr *new_expr_compound(Scope *scope, Type *val_type, Initializer *init,
                                const Range *range);
-static Expr *new_expr_unary(Scope *scope, int op, Expr *operand,
-                            const Range *range);
-static Expr *new_expr_binop(Scope *scope, int op, Expr *lhs, Expr *rhs,
-                            const Range *range);
-static Expr *new_expr_cond(Scope *scope, Expr *cond, Expr *then_expr,
-                           Expr *else_expr, const Range *range);
-static Expr *new_expr_index(Scope *scope, Expr *array, Expr *index,
-                            const Range *range);
-static Expr *new_expr_dot(Scope *scope, Expr *operand, const char *name,
-                          const Range *range);
-static Expr *new_expr_arrow(Scope *scope, Expr *operand, const char *name,
+static Expr *new_expr_unary(int op, Expr *operand, const Range *range);
+static Expr *new_expr_binop(int op, Expr *lhs, Expr *rhs, const Range *range);
+static Expr *new_expr_cond(Expr *cond, Expr *then_expr, Expr *else_expr,
+                           const Range *range);
+static Expr *new_expr_index(Expr *array, Expr *index, const Range *range);
+static Expr *new_expr_dot(Expr *operand, const char *name, const Range *range);
+static Expr *new_expr_arrow(Expr *operand, const char *name,
                             const Range *range);
 static Stmt *new_stmt(int ty, Type *val_type, const Range *range);
 static Stmt *new_stmt_null(const Range *range);
@@ -233,15 +231,14 @@ static Stmt *new_stmt_return(Scope *scope, Expr *expr, const Range *range);
 static Stmt *new_stmt_compound(StmtVector *stmts, const Range *range);
 static Stmt *new_stmt_decl(StackVarDeclVector *decl, const Range *range);
 
-static Expr *builtin_va_start_handler(Scope *scope, Expr *callee,
-                                      ExprVector *arguments,
+static Expr *builtin_va_start_handler(Expr *callee, ExprVector *arguments,
                                       const Range *range);
-static Expr *builtin_va_arg_handler(Scope *scope, Expr *callee,
-                                    ExprVector *arguments, const Range *range);
-static Expr *builtin_va_end_handler(Scope *scope, Expr *callee,
-                                    ExprVector *arguments, const Range *range);
-static Expr *builtin_va_copy_handler(Scope *scope, Expr *callee,
-                                     ExprVector *arguments, const Range *range);
+static Expr *builtin_va_arg_handler(Expr *callee, ExprVector *arguments,
+                                    const Range *range);
+static Expr *builtin_va_end_handler(Expr *callee, ExprVector *arguments,
+                                    const Range *range);
+static Expr *builtin_va_copy_handler(Expr *callee, ExprVector *arguments,
+                                     const Range *range);
 
 // expression
 static Expr *primary_expression(TokenIterator *ts, Scope *scope);
@@ -620,7 +617,7 @@ static Type *get_typedef(Scope *scope, const char *name) {
   return NULL;
 }
 
-static Type *integer_promoted(Scope *scope, Expr **e) {
+static Type *integer_promoted(Expr **e) {
   if (!is_integer_type((*e)->val_type)) {
     return NULL;
   }
@@ -633,7 +630,7 @@ static Type *integer_promoted(Scope *scope, Expr **e) {
   case TY_S_SHORT:
   case TY_U_SHORT:
   case TY_ENUM:
-    *e = new_expr_cast(scope, new_type(TY_S_INT, EMPTY_TYPE_QUALIFIER), *e,
+    *e = new_expr_cast(new_type(TY_S_INT, EMPTY_TYPE_QUALIFIER), *e,
                        (*e)->range);
     break;
   case TY_S_INT:
@@ -657,7 +654,7 @@ static Type *integer_promoted(Scope *scope, Expr **e) {
   return (*e)->val_type;
 }
 
-static Type *arith_converted(Scope *scope, Expr **e1, Expr **e2) {
+static Type *arith_converted(Expr **e1, Expr **e2) {
   Type *ty1 = (*e1)->val_type;
   Type *ty2 = (*e2)->val_type;
   const Range *r1 = (*e1)->range;
@@ -677,13 +674,13 @@ static Type *arith_converted(Scope *scope, Expr **e1, Expr **e2) {
       assert(ty1->ty == TY_FLOAT || ty2->ty == TY_FLOAT);
       type = new_type(TY_FLOAT, EMPTY_TYPE_QUALIFIER);
     }
-    *e1 = new_expr_cast(scope, type, *e1, r1);
-    *e2 = new_expr_cast(scope, type, *e2, r2);
+    *e1 = new_expr_cast(type, *e1, r1);
+    *e2 = new_expr_cast(type, *e2, r2);
     return type;
   }
 
-  ty1 = integer_promoted(scope, e1);
-  ty2 = integer_promoted(scope, e2);
+  ty1 = integer_promoted(e1);
+  ty2 = integer_promoted(e2);
 
   bool is_signed1 = is_signed_int_type(ty1, r1);
   bool is_signed2 = is_signed_int_type(ty2, r2);
@@ -692,13 +689,13 @@ static Type *arith_converted(Scope *scope, Expr **e1, Expr **e2) {
 
   if (rank1 < rank2) {
     // revert argument order
-    return arith_converted(scope, e2, e1);
+    return arith_converted(e2, e1);
   }
 
   if ((is_signed1 ^ is_signed2) == 0) {
     // both operands have signed type or both have unsigned type
     if (rank1 > rank2) {
-      *e2 = new_expr_cast(scope, ty1, *e2, r2);
+      *e2 = new_expr_cast(ty1, *e2, r2);
       return ty1;
     }
     assert(is_sametype(ty1, ty2));
@@ -707,14 +704,14 @@ static Type *arith_converted(Scope *scope, Expr **e1, Expr **e2) {
 
   if (!is_signed1) {
     // unsigned operand has rank greater or equal to another
-    *e2 = new_expr_cast(scope, ty1, *e2, r2);
+    *e2 = new_expr_cast(ty1, *e2, r2);
     return ty1;
   }
 
   assert(is_signed1 && !is_signed2);
   if (get_val_size(ty1, r1) > get_val_size(ty2, r2)) {
     // signed type can represent all of the value of unsigned type
-    *e2 = new_expr_cast(scope, ty1, *e2, r2);
+    *e2 = new_expr_cast(ty1, *e2, r2);
     return ty1;
   }
 
@@ -733,8 +730,8 @@ static Type *arith_converted(Scope *scope, Expr **e1, Expr **e2) {
     range_internal_error(r1, "Invalid number type: %d", ty1->ty);
   }
 
-  *e1 = new_expr_cast(scope, ty, *e1, r1);
-  *e2 = new_expr_cast(scope, ty, *e2, r2);
+  *e1 = new_expr_cast(ty, *e1, r1);
+  *e2 = new_expr_cast(ty, *e2, r2);
   return ty;
 }
 
@@ -1266,22 +1263,22 @@ static noreturn void binop_type_error_raw(int ty, Expr *lhs, Expr *rhs,
                   format_type(rhs->val_type, false));
 }
 
-static Expr *coerce_array2ptr(Scope *scope, Expr *expr) {
+static Expr *coerce_array2ptr(Expr *expr) {
   if (is_array_type(expr->val_type)) {
-    return new_expr_unary(scope, EX_ADDRESS, expr, expr->range);
+    return new_expr_unary(EX_ADDRESS, expr, expr->range);
   }
   return expr;
 }
-static Expr *coerce_func2ptr(Scope *scope, Expr *expr) {
+static Expr *coerce_func2ptr(Expr *expr) {
   if (is_func_type(expr->val_type)) {
-    return new_expr_unary(scope, EX_ADDRESS, expr, expr->range);
+    return new_expr_unary(EX_ADDRESS, expr, expr->range);
   }
   return expr;
 }
-static Expr *coerce_expr2cond(Scope *scope, Expr *expr) {
+static Expr *coerce_expr2cond(Expr *expr) {
   return new_expr_binop(
-      scope, EX_NOTEQ, expr,
-      new_expr_cast(scope, expr->val_type,
+      EX_NOTEQ, expr,
+      new_expr_cast(expr->val_type,
                     new_expr_num(new_number_int(0), expr->range), expr->range),
       expr->range);
 }
@@ -1317,77 +1314,70 @@ static Expr *new_expr_num(Number val, const Range *range) {
   return expr;
 }
 
+static Expr *new_expr_stack_var(StackVar *svar, const Range *range) {
+  Expr *expr = new_expr(EX_STACK_VAR, svar->type, range);
+  expr->stack_var.def = svar;
+  expr->stack_var.offset = 0;
+  return expr;
+}
+
+static Expr *new_expr_global_var(Type *val_type, const char *name,
+                                 GlobalVar *gvar, const Range *range) {
+  Expr *expr = new_expr(EX_GLOBAL_VAR, val_type, range);
+  expr->global_var.name = name;
+  expr->global_var.def = gvar;
+  expr->global_var.offset = 0;
+  return expr;
+}
+
+static Expr *new_expr_builtin_func(const char *name,
+                                   builtin_func_handler_t *handler,
+                                   const Range *range) {
+  Type *type = new_type(TY_BUILTIN, EMPTY_TYPE_QUALIFIER);
+  Expr *expr = new_expr(EX_BUILTIN_FUNC, type, range);
+  expr->builtin_func.name = name;
+  expr->builtin_func.handler = handler;
+  return expr;
+}
+
 static Expr *new_expr_ident(Scope *scope, Token *ident) {
   assert(ident->ty == TK_IDENT);
   const char *name = ident->ident;
   const Range *range = ident->range;
 
-  int ty;
-  Type *type;
   if (strcmp(name, "__func__") == 0) {
     if (scope->func_ctxt == NULL) {
       range_error(range, "関数外で__func__が使用されました");
     }
     return new_expr_str(scope, scope->func_ctxt->name, range);
   }
+
   Decl *decl = get_decl(scope, name);
-  StackVar *svar = NULL;
-  GlobalVar *gvar = NULL;
-  Number *num_val = NULL;
-  builtin_func_handler_t *builtin_func = NULL;
-  if (decl != NULL) {
-    switch (decl->kind) {
-    case DECL_STACK_VAR:
-      ty = EX_STACK_VAR;
-      type = decl->type;
-      svar = decl->stack_var;
-      break;
-    case DECL_GLOBAL_VAR:
-      ty = EX_GLOBAL_VAR;
-      type = decl->type;
-      gvar = decl->global_var;
-      break;
-    case DECL_NUMBER:
-      ty = EX_NUM;
-      type = decl->type;
-      num_val = decl->num_val;
-      break;
-    case DECL_BUILTIN_FUNC:
-      ty = EX_BUILTIN_FUNC;
-      type = new_type(TY_BUILTIN, EMPTY_TYPE_QUALIFIER);
-      builtin_func = decl->builtin_func;
-      break;
-    }
-  } else {
+  if (decl == NULL) {
     range_warn(range, "未定義の識別子です: %s", name);
-    ty = EX_GLOBAL_VAR;
-    type = new_type(TY_S_INT, EMPTY_TYPE_QUALIFIER);
-    gvar = register_global_var(scope, ident, type, ident->range,
-                               EMPTY_STORAGE_CLASS_SPECIFIER);
+    Type *type = new_type(TY_S_INT, EMPTY_TYPE_QUALIFIER);
+    GlobalVar *gvar = register_global_var(scope, ident, type, ident->range,
+                                          EMPTY_STORAGE_CLASS_SPECIFIER);
+    return new_expr_global_var(type, name, gvar, range);
   }
 
-  Expr *expr = new_expr(ty, type, range);
-  switch (ty) {
-  case EX_STACK_VAR:
-    expr->stack_var.def = svar;
-    expr->stack_var.offset = 0;
-    break;
-  case EX_GLOBAL_VAR:
-    expr->global_var.name = gvar != NULL ? gvar->name : name;
-    expr->global_var.def = gvar;
-    expr->global_var.offset = 0;
-    break;
-  case EX_NUM:
-    expr->num = *num_val;
-    break;
-  case EX_BUILTIN_FUNC:
-    expr->builtin_func.name = name;
-    expr->builtin_func.handler = builtin_func;
-    break;
-  default:
-    assert(false);
+  switch (decl->kind) {
+  case DECL_STACK_VAR: {
+    return new_expr_stack_var(decl->stack_var, range);
   }
-  return expr;
+  case DECL_GLOBAL_VAR: {
+    GlobalVar *gvar = decl->global_var;
+    return new_expr_global_var(decl->type, gvar != NULL ? gvar->name : name,
+                               gvar, range);
+  }
+  case DECL_NUMBER: {
+    return new_expr_num(*decl->num_val, range);
+  }
+  case DECL_BUILTIN_FUNC: {
+    return new_expr_builtin_func(name, decl->builtin_func, range);
+  }
+  }
+  range_internal_error(range, "invalid decl kind: %d", decl->kind);
 }
 
 static Expr *new_expr_str(Scope *scope, const char *val, const Range *range) {
@@ -1421,10 +1411,10 @@ static Expr *new_expr_stmt(Stmt *stmt, const Range *range) {
   return expr;
 }
 
-static Expr *new_expr_generic(Scope *scope, Expr *control,
+static Expr *new_expr_generic(Expr *control,
                               GenericAssociationVector *assoc_list) {
-  control = coerce_func2ptr(scope, control);
-  control = coerce_array2ptr(scope, control);
+  control = coerce_func2ptr(control);
+  control = coerce_array2ptr(control);
 
   Expr *default_expr = NULL;
   VEC_FOREACH (GenericAssociation *assoc, assoc_list) {
@@ -1448,13 +1438,13 @@ static Expr *new_expr_generic(Scope *scope, Expr *control,
   return default_expr;
 }
 
-static Expr *new_expr_call(Scope *scope, Expr *callee, ExprVector *arguments,
+static Expr *new_expr_call(Expr *callee, ExprVector *arguments,
                            const Range *range) {
   if (callee->ty == EX_BUILTIN_FUNC) {
-    return callee->builtin_func.handler(scope, callee, arguments, range);
+    return callee->builtin_func.handler(callee, arguments, range);
   }
 
-  callee = coerce_array2ptr(scope, callee);
+  callee = coerce_array2ptr(callee);
 
   Type *func_type;
   Type *ret_type;
@@ -1474,8 +1464,8 @@ static Expr *new_expr_call(Scope *scope, Expr *callee, ExprVector *arguments,
   int narg = 0;
   if (arguments != NULL) {
     for (int i = 0; i < VEC_LEN(arguments); i++) {
-      VEC_SET(arguments, i, coerce_array2ptr(scope, VEC_GET(arguments, i)));
-      VEC_SET(arguments, i, coerce_func2ptr(scope, VEC_GET(arguments, i)));
+      VEC_SET(arguments, i, coerce_array2ptr(VEC_GET(arguments, i)));
+      VEC_SET(arguments, i, coerce_func2ptr(VEC_GET(arguments, i)));
     }
     narg = VEC_LEN(arguments);
   }
@@ -1493,15 +1483,15 @@ static Expr *new_expr_call(Scope *scope, Expr *callee, ExprVector *arguments,
   for (int i = 0; i < nparam; i++) {
     Param *param = VEC_GET(params, i);
     Expr *arg = VEC_GET(arguments, i);
-    VEC_SET(arguments, i, new_expr_cast(scope, param->type, arg, arg->range));
+    VEC_SET(arguments, i, new_expr_cast(param->type, arg, arg->range));
   }
   // default argument promotion
   for (int i = nparam; i < narg; i++) {
     Expr *arg = VEC_GET(arguments, i);
     if (is_integer_type(arg->val_type)) {
-      integer_promoted(scope, &arg);
+      integer_promoted(&arg);
     } else if (arg->val_type->ty == TY_FLOAT) {
-      arg = new_expr_cast(scope, new_type(TY_DOUBLE, EMPTY_TYPE_QUALIFIER), arg,
+      arg = new_expr_cast(new_type(TY_DOUBLE, EMPTY_TYPE_QUALIFIER), arg,
                           arg->range);
     } else {
       // do nothing
@@ -1515,8 +1505,7 @@ static Expr *new_expr_call(Scope *scope, Expr *callee, ExprVector *arguments,
   return expr;
 }
 
-static Expr *new_expr_builtin_va_start(Scope *scope,
-                                       Expr *callee __attribute__((unused)),
+static Expr *new_expr_builtin_va_start(Expr *callee __attribute__((unused)),
                                        ExprVector *arguments,
                                        const Range *range) {
   int narg = arguments != NULL ? VEC_LEN(arguments) : 0;
@@ -1530,8 +1519,8 @@ static Expr *new_expr_builtin_va_start(Scope *scope,
   Expr *ap = VEC_GET(arguments, 0);
   Expr *last = VEC_GET(arguments, 1);
 
-  ap = coerce_array2ptr(scope, ap);
-  ap = coerce_func2ptr(scope, ap);
+  ap = coerce_array2ptr(ap);
+  ap = coerce_func2ptr(ap);
 
   Type *type = new_type(TY_VOID, EMPTY_TYPE_QUALIFIER);
   Expr *expr = new_expr(EX_BUILTIN_VA_START, type, range);
@@ -1540,8 +1529,7 @@ static Expr *new_expr_builtin_va_start(Scope *scope,
   return expr;
 }
 
-static Expr *new_expr_builtin_va_arg(Scope *scope __attribute__((unused)),
-                                     Expr *callee __attribute__((unused)),
+static Expr *new_expr_builtin_va_arg(Expr *callee __attribute__((unused)),
                                      ExprVector *arguments
                                      __attribute__((unused)),
                                      const Range *range) {
@@ -1556,8 +1544,8 @@ static Expr *new_expr_builtin_va_arg(Scope *scope __attribute__((unused)),
   Expr *ap = VEC_GET(arguments, 0);
   Expr *type_expr = VEC_GET(arguments, 1);
 
-  ap = coerce_array2ptr(scope, ap);
-  ap = coerce_func2ptr(scope, ap);
+  ap = coerce_array2ptr(ap);
+  ap = coerce_func2ptr(ap);
 
   if (!is_ptr_type(type_expr->val_type)) {
     range_error(range, "ポインタ型ではありません: %s",
@@ -1570,8 +1558,7 @@ static Expr *new_expr_builtin_va_arg(Scope *scope __attribute__((unused)),
   return expr;
 }
 
-static Expr *new_expr_builtin_va_end(Scope *scope __attribute__((unused)),
-                                     Expr *callee __attribute__((unused)),
+static Expr *new_expr_builtin_va_end(Expr *callee __attribute__((unused)),
                                      ExprVector *arguments
                                      __attribute__((unused)),
                                      const Range *range) {
@@ -1585,8 +1572,8 @@ static Expr *new_expr_builtin_va_end(Scope *scope __attribute__((unused)),
 
   Expr *ap = VEC_GET(arguments, 0);
 
-  ap = coerce_array2ptr(scope, ap);
-  ap = coerce_func2ptr(scope, ap);
+  ap = coerce_array2ptr(ap);
+  ap = coerce_func2ptr(ap);
 
   Type *type = new_type(TY_VOID, EMPTY_TYPE_QUALIFIER);
   Expr *expr = new_expr(EX_BUILTIN_VA_END, type, range);
@@ -1594,8 +1581,7 @@ static Expr *new_expr_builtin_va_end(Scope *scope __attribute__((unused)),
   return expr;
 }
 
-static Expr *new_expr_builtin_va_copy(Scope *scope __attribute__((unused)),
-                                      Expr *callee __attribute__((unused)),
+static Expr *new_expr_builtin_va_copy(Expr *callee __attribute__((unused)),
                                       ExprVector *arguments
                                       __attribute__((unused)),
                                       const Range *range) {
@@ -1610,38 +1596,36 @@ static Expr *new_expr_builtin_va_copy(Scope *scope __attribute__((unused)),
   Expr *dest = VEC_GET(arguments, 0);
   Expr *src = VEC_GET(arguments, 1);
 
-  dest = coerce_array2ptr(scope, dest);
-  dest = coerce_func2ptr(scope, dest);
+  dest = coerce_array2ptr(dest);
+  dest = coerce_func2ptr(dest);
 
-  src = coerce_array2ptr(scope, src);
-  src = coerce_func2ptr(scope, src);
+  src = coerce_array2ptr(src);
+  src = coerce_func2ptr(src);
 
   Type *type = new_type(TY_VOID, EMPTY_TYPE_QUALIFIER);
   Expr *expr = new_expr(EX_BUILTIN_VA_COPY, type, range);
   Expr *idx = new_expr_num(new_number_int(0), expr->range);
-  expr->builtin_va_copy.dest = new_expr_index(scope, dest, idx, dest->range);
-  expr->builtin_va_copy.src = new_expr_index(scope, src, idx, src->range);
+  expr->builtin_va_copy.dest = new_expr_index(dest, idx, dest->range);
+  expr->builtin_va_copy.src = new_expr_index(src, idx, src->range);
   return expr;
 }
 
-static Expr *new_expr_postfix(Scope *scope, int ty, Expr *operand,
-                              const Range *range) {
-  operand = coerce_array2ptr(scope, operand);
-  operand = coerce_func2ptr(scope, operand);
+static Expr *new_expr_postfix(int ty, Expr *operand, const Range *range) {
+  operand = coerce_array2ptr(operand);
+  operand = coerce_func2ptr(operand);
 
   Expr *expr = new_expr(ty, operand->val_type, range);
   expr->unop.operand = operand;
   return expr;
 }
 
-static Expr *new_expr_cast(Scope *scope, Type *val_type, Expr *operand,
-                           const Range *range) {
-  operand = coerce_array2ptr(scope, operand);
-  operand = coerce_func2ptr(scope, operand);
+static Expr *new_expr_cast(Type *val_type, Expr *operand, const Range *range) {
+  operand = coerce_array2ptr(operand);
+  operand = coerce_func2ptr(operand);
 
   Expr *expr = new_expr(EX_CAST, val_type, range);
   if (val_type->ty == TY_BOOL) {
-    expr->unop.operand = coerce_expr2cond(scope, operand);
+    expr->unop.operand = coerce_expr2cond(operand);
   } else {
     expr->unop.operand = operand;
   }
@@ -1667,12 +1651,11 @@ static Expr *new_expr_compound(Scope *scope, Type *val_type, Initializer *init,
   return expr;
 }
 
-static Expr *new_expr_unary(Scope *scope, int op, Expr *operand,
-                            const Range *range) {
+static Expr *new_expr_unary(int op, Expr *operand, const Range *range) {
   if (op != EX_ADDRESS) {
     // & 以外は array, func は ptr とみなす
-    operand = coerce_array2ptr(scope, operand);
-    operand = coerce_func2ptr(scope, operand);
+    operand = coerce_array2ptr(operand);
+    operand = coerce_func2ptr(operand);
   }
 
   Type *val_type;
@@ -1715,15 +1698,15 @@ static Expr *new_expr_unary(Scope *scope, int op, Expr *operand,
                   format_type(operand->val_type, false));
     }
     if (is_integer_type(operand->val_type)) {
-      val_type = integer_promoted(scope, &operand);
+      val_type = integer_promoted(&operand);
     } else {
       val_type = operand->val_type;
     }
     break;
   case EX_LOG_NOT: {
     return new_expr_binop(
-        scope, EX_EQEQ, operand,
-        new_expr_cast(scope, operand->val_type,
+        EX_EQEQ, operand,
+        new_expr_cast(operand->val_type,
                       new_expr_num(new_number_int(0), operand->range),
                       operand->range),
         operand->range);
@@ -1734,7 +1717,7 @@ static Expr *new_expr_unary(Scope *scope, int op, Expr *operand,
                   "不正な型の値に対する演算です: 整数型ではありません: %s",
                   format_type(operand->val_type, false));
     }
-    val_type = integer_promoted(scope, &operand);
+    val_type = integer_promoted(&operand);
     break;
   default:
     range_internal_error(range, "invalid unop type: %d", op);
@@ -1746,12 +1729,11 @@ static Expr *new_expr_unary(Scope *scope, int op, Expr *operand,
   return expr;
 }
 
-static Expr *new_expr_binop(Scope *scope, int op, Expr *lhs, Expr *rhs,
-                            const Range *range) {
-  lhs = coerce_array2ptr(scope, lhs);
-  lhs = coerce_func2ptr(scope, lhs);
-  rhs = coerce_array2ptr(scope, rhs);
-  rhs = coerce_func2ptr(scope, rhs);
+static Expr *new_expr_binop(int op, Expr *lhs, Expr *rhs, const Range *range) {
+  lhs = coerce_array2ptr(lhs);
+  lhs = coerce_func2ptr(lhs);
+  rhs = coerce_array2ptr(rhs);
+  rhs = coerce_func2ptr(rhs);
 
   Type *val_type;
   switch (op) {
@@ -1759,7 +1741,7 @@ static Expr *new_expr_binop(Scope *scope, int op, Expr *lhs, Expr *rhs,
   case EX_MUL:
   case EX_DIV:
   case EX_MOD:
-    val_type = arith_converted(scope, &lhs, &rhs);
+    val_type = arith_converted(&lhs, &rhs);
     if (val_type == NULL) {
       binop_type_error(op, lhs, rhs);
     }
@@ -1775,7 +1757,7 @@ static Expr *new_expr_binop(Scope *scope, int op, Expr *lhs, Expr *rhs,
       Expr *size = new_expr_num(
           new_number_size_t(get_val_size(lhs->val_type->ptr, lhs->range)),
           range);
-      rhs = new_expr_binop(scope, EX_MUL, rhs, size, range);
+      rhs = new_expr_binop(EX_MUL, rhs, size, range);
       val_type = lhs->val_type;
       break;
     }
@@ -1789,13 +1771,13 @@ static Expr *new_expr_binop(Scope *scope, int op, Expr *lhs, Expr *rhs,
       Expr *size = new_expr_num(
           new_number_size_t(get_val_size(rhs->val_type->ptr, rhs->range)),
           range);
-      lhs = new_expr_binop(scope, EX_MUL, lhs, size, range);
+      lhs = new_expr_binop(EX_MUL, lhs, size, range);
       val_type = rhs->val_type;
       break;
     }
 
     // int + int
-    val_type = arith_converted(scope, &lhs, &rhs);
+    val_type = arith_converted(&lhs, &rhs);
     if (val_type == NULL) {
       binop_type_error(op, lhs, rhs);
     }
@@ -1815,7 +1797,7 @@ static Expr *new_expr_binop(Scope *scope, int op, Expr *lhs, Expr *rhs,
         Expr *size = new_expr_num(
             new_number_ptrdiff_t(get_val_size(lhs->val_type->ptr, lhs->range)),
             range);
-        return new_expr_binop(scope, EX_DIV, sub, size, range);
+        return new_expr_binop(EX_DIV, sub, size, range);
       }
 
       if (is_integer_type(rhs->val_type)) {
@@ -1823,7 +1805,7 @@ static Expr *new_expr_binop(Scope *scope, int op, Expr *lhs, Expr *rhs,
         Expr *size = new_expr_num(
             new_number_size_t(get_val_size(lhs->val_type->ptr, lhs->range)),
             range);
-        rhs = new_expr_binop(scope, EX_MUL, rhs, size, range);
+        rhs = new_expr_binop(EX_MUL, rhs, size, range);
         val_type = lhs->val_type;
         break;
       }
@@ -1834,7 +1816,7 @@ static Expr *new_expr_binop(Scope *scope, int op, Expr *lhs, Expr *rhs,
       binop_type_error(op, lhs, rhs);
     }
 
-    val_type = arith_converted(scope, &lhs, &rhs);
+    val_type = arith_converted(&lhs, &rhs);
     if (val_type == NULL) {
       binop_type_error(op, lhs, rhs);
     }
@@ -1845,7 +1827,7 @@ static Expr *new_expr_binop(Scope *scope, int op, Expr *lhs, Expr *rhs,
     if (!is_integer_type(lhs->val_type) || !is_integer_type(rhs->val_type)) {
       binop_type_error(op, lhs, rhs);
     }
-    val_type = integer_promoted(scope, &lhs);
+    val_type = integer_promoted(&lhs);
     if (val_type == NULL) {
       binop_type_error(op, lhs, rhs);
     }
@@ -1857,7 +1839,7 @@ static Expr *new_expr_binop(Scope *scope, int op, Expr *lhs, Expr *rhs,
   case EX_GTEQ:
   case EX_EQEQ:
   case EX_NOTEQ:
-    arith_converted(scope, &lhs, &rhs);
+    arith_converted(&lhs, &rhs);
     val_type = new_type(TY_S_INT, EMPTY_TYPE_QUALIFIER);
     break;
   // and
@@ -1867,65 +1849,56 @@ static Expr *new_expr_binop(Scope *scope, int op, Expr *lhs, Expr *rhs,
     if (!is_integer_type(lhs->val_type) || !is_integer_type(rhs->val_type)) {
       binop_type_error(op, lhs, rhs);
     }
-    val_type = arith_converted(scope, &lhs, &rhs);
+    val_type = arith_converted(&lhs, &rhs);
     if (val_type == NULL) {
       binop_type_error(op, lhs, rhs);
     }
     break;
   case EX_LOG_AND: {
-    lhs = coerce_expr2cond(scope, lhs);
-    rhs = coerce_expr2cond(scope, rhs);
+    lhs = coerce_expr2cond(lhs);
+    rhs = coerce_expr2cond(rhs);
     val_type = new_type(TY_S_INT, EMPTY_TYPE_QUALIFIER);
     break;
   }
   case EX_LOG_OR:
-    lhs = coerce_expr2cond(scope, lhs);
-    rhs = coerce_expr2cond(scope, rhs);
+    lhs = coerce_expr2cond(lhs);
+    rhs = coerce_expr2cond(rhs);
     val_type = new_type(TY_S_INT, EMPTY_TYPE_QUALIFIER);
     break;
   case EX_ASSIGN:
-    rhs = new_expr_cast(scope, lhs->val_type, rhs, rhs->range);
+    rhs = new_expr_cast(lhs->val_type, rhs, rhs->range);
     val_type = lhs->val_type;
     break;
   case EX_MUL_ASSIGN:
-    return new_expr_binop(scope, EX_ASSIGN, lhs,
-                          new_expr_binop(scope, EX_MUL, lhs, rhs, range),
-                          range);
+    return new_expr_binop(EX_ASSIGN, lhs,
+                          new_expr_binop(EX_MUL, lhs, rhs, range), range);
   case EX_DIV_ASSIGN:
-    return new_expr_binop(scope, EX_ASSIGN, lhs,
-                          new_expr_binop(scope, EX_DIV, lhs, rhs, range),
-                          range);
+    return new_expr_binop(EX_ASSIGN, lhs,
+                          new_expr_binop(EX_DIV, lhs, rhs, range), range);
   case EX_MOD_ASSIGN:
-    return new_expr_binop(scope, EX_ASSIGN, lhs,
-                          new_expr_binop(scope, EX_MOD, lhs, rhs, range),
-                          range);
+    return new_expr_binop(EX_ASSIGN, lhs,
+                          new_expr_binop(EX_MOD, lhs, rhs, range), range);
   case EX_ADD_ASSIGN:
-    return new_expr_binop(scope, EX_ASSIGN, lhs,
-                          new_expr_binop(scope, EX_ADD, lhs, rhs, range),
-                          range);
+    return new_expr_binop(EX_ASSIGN, lhs,
+                          new_expr_binop(EX_ADD, lhs, rhs, range), range);
   case EX_SUB_ASSIGN:
-    return new_expr_binop(scope, EX_ASSIGN, lhs,
-                          new_expr_binop(scope, EX_SUB, lhs, rhs, range),
-                          range);
+    return new_expr_binop(EX_ASSIGN, lhs,
+                          new_expr_binop(EX_SUB, lhs, rhs, range), range);
   case EX_LSHIFT_ASSIGN:
-    return new_expr_binop(scope, EX_ASSIGN, lhs,
-                          new_expr_binop(scope, EX_LSHIFT, lhs, rhs, range),
-                          range);
+    return new_expr_binop(EX_ASSIGN, lhs,
+                          new_expr_binop(EX_LSHIFT, lhs, rhs, range), range);
   case EX_RSHIFT_ASSIGN:
-    return new_expr_binop(scope, EX_ASSIGN, lhs,
-                          new_expr_binop(scope, EX_RSHIFT, lhs, rhs, range),
-                          range);
+    return new_expr_binop(EX_ASSIGN, lhs,
+                          new_expr_binop(EX_RSHIFT, lhs, rhs, range), range);
   case EX_AND_ASSIGN:
-    return new_expr_binop(scope, EX_ASSIGN, lhs,
-                          new_expr_binop(scope, EX_AND, lhs, rhs, range),
-                          range);
+    return new_expr_binop(EX_ASSIGN, lhs,
+                          new_expr_binop(EX_AND, lhs, rhs, range), range);
   case EX_XOR_ASSIGN:
-    return new_expr_binop(scope, EX_ASSIGN, lhs,
-                          new_expr_binop(scope, EX_XOR, lhs, rhs, range),
-                          range);
+    return new_expr_binop(EX_ASSIGN, lhs,
+                          new_expr_binop(EX_XOR, lhs, rhs, range), range);
   case EX_OR_ASSIGN:
-    return new_expr_binop(scope, EX_ASSIGN, lhs,
-                          new_expr_binop(scope, EX_OR, lhs, rhs, range), range);
+    return new_expr_binop(EX_ASSIGN, lhs,
+                          new_expr_binop(EX_OR, lhs, rhs, range), range);
   case EX_COMMA: {
     if (lhs->ty == EX_COMMA && rhs->ty == EX_COMMA) {
       VEC_APPEND(lhs->comma.exprs, rhs->comma.exprs);
@@ -1960,19 +1933,19 @@ static Expr *new_expr_binop(Scope *scope, int op, Expr *lhs, Expr *rhs,
   return expr;
 }
 
-static Expr *new_expr_cond(Scope *scope, Expr *cond, Expr *then_expr,
-                           Expr *else_expr, const Range *range) {
-  cond = coerce_array2ptr(scope, cond);
-  cond = coerce_func2ptr(scope, cond);
-  then_expr = coerce_array2ptr(scope, then_expr);
-  then_expr = coerce_func2ptr(scope, then_expr);
-  else_expr = coerce_array2ptr(scope, else_expr);
-  else_expr = coerce_func2ptr(scope, else_expr);
+static Expr *new_expr_cond(Expr *cond, Expr *then_expr, Expr *else_expr,
+                           const Range *range) {
+  cond = coerce_array2ptr(cond);
+  cond = coerce_func2ptr(cond);
+  then_expr = coerce_array2ptr(then_expr);
+  then_expr = coerce_func2ptr(then_expr);
+  else_expr = coerce_array2ptr(else_expr);
+  else_expr = coerce_func2ptr(else_expr);
 
   Type *val_type;
   if (is_arith_type(then_expr->val_type) &&
       is_arith_type(else_expr->val_type)) {
-    val_type = arith_converted(scope, &then_expr, &else_expr);
+    val_type = arith_converted(&then_expr, &else_expr);
   } else if (is_ptr_type(then_expr->val_type) &&
              is_ptr_type(else_expr->val_type)) {
     if (then_expr->val_type->ptr->ty == TY_VOID) {
@@ -1995,8 +1968,8 @@ static Expr *new_expr_cond(Scope *scope, Expr *cond, Expr *then_expr,
              else_expr->val_type->ty == TY_VOID) {
     // NonStandard/GNU?: conditional expressions with only one void side
     val_type = new_type(TY_VOID, EMPTY_TYPE_QUALIFIER);
-    then_expr = new_expr_cast(scope, val_type, then_expr, then_expr->range);
-    else_expr = new_expr_cast(scope, val_type, else_expr, else_expr->range);
+    then_expr = new_expr_cast(val_type, then_expr, then_expr->range);
+    else_expr = new_expr_cast(val_type, else_expr, else_expr->range);
   } else {
     if (!is_sametype(then_expr->val_type, else_expr->val_type)) {
       range_error(range, "条件演算子の両辺の型が異なります: %s, %s",
@@ -2013,22 +1986,19 @@ static Expr *new_expr_cond(Scope *scope, Expr *cond, Expr *then_expr,
   return expr;
 }
 
-static Expr *new_expr_index(Scope *scope, Expr *array, Expr *index,
-                            const Range *range) {
-  array = coerce_array2ptr(scope, array);
-  array = coerce_func2ptr(scope, array);
-  index = coerce_array2ptr(scope, index);
-  index = coerce_func2ptr(scope, index);
+static Expr *new_expr_index(Expr *array, Expr *index, const Range *range) {
+  array = coerce_array2ptr(array);
+  array = coerce_func2ptr(array);
+  index = coerce_array2ptr(index);
+  index = coerce_func2ptr(index);
 
-  return new_expr_unary(scope, EX_INDIRECT,
-                        new_expr_binop(scope, EX_ADD, array, index, range),
-                        range);
+  return new_expr_unary(EX_INDIRECT,
+                        new_expr_binop(EX_ADD, array, index, range), range);
 }
 
-static Expr *new_expr_dot(Scope *scope, Expr *operand, const char *name,
-                          const Range *range) {
-  operand = coerce_array2ptr(scope, operand);
-  operand = coerce_func2ptr(scope, operand);
+static Expr *new_expr_dot(Expr *operand, const char *name, const Range *range) {
+  operand = coerce_array2ptr(operand);
+  operand = coerce_func2ptr(operand);
 
   if (operand->val_type->ty != TY_STRUCT && operand->val_type->ty != TY_UNION) {
     range_error(range, "構造体または共用体以外のメンバへのアクセスです");
@@ -2049,10 +2019,10 @@ static Expr *new_expr_dot(Scope *scope, Expr *operand, const char *name,
   return expr;
 }
 
-static Expr *new_expr_arrow(Scope *scope, Expr *operand, const char *name,
+static Expr *new_expr_arrow(Expr *operand, const char *name,
                             const Range *range) {
-  operand = coerce_array2ptr(scope, operand);
-  operand = coerce_func2ptr(scope, operand);
+  operand = coerce_array2ptr(operand);
+  operand = coerce_func2ptr(operand);
   if (operand->val_type->ty != TY_PTR ||
       (operand->val_type->ptr->ty != TY_STRUCT &&
        operand->val_type->ptr->ty != TY_UNION)) {
@@ -2184,8 +2154,8 @@ static Stmt *new_stmt_return(Scope *scope, Expr *expr, const Range *range) {
   Stmt *stmt =
       new_stmt(ST_RETURN, new_type(TY_VOID, EMPTY_TYPE_QUALIFIER), range);
   if (expr != NULL) {
-    stmt->expr = new_expr_cast(scope, scope->func_ctxt->type->func.ret, expr,
-                               expr->range);
+    stmt->expr =
+        new_expr_cast(scope->func_ctxt->type->func.ret, expr, expr->range);
   } else {
     stmt->expr = NULL;
   }
@@ -2212,24 +2182,22 @@ static Stmt *new_stmt_decl(StackVarDeclVector *decl, const Range *range) {
   return stmt;
 }
 
-static Expr *builtin_va_start_handler(Scope *scope, Expr *callee,
-                                      ExprVector *arguments,
+static Expr *builtin_va_start_handler(Expr *callee, ExprVector *arguments,
                                       const Range *range) {
-  return new_expr_builtin_va_start(scope, callee, arguments, range);
+  return new_expr_builtin_va_start(callee, arguments, range);
 }
 
-static Expr *builtin_va_arg_handler(Scope *scope, Expr *callee,
-                                    ExprVector *arguments, const Range *range) {
-  return new_expr_builtin_va_arg(scope, callee, arguments, range);
+static Expr *builtin_va_arg_handler(Expr *callee, ExprVector *arguments,
+                                    const Range *range) {
+  return new_expr_builtin_va_arg(callee, arguments, range);
 }
-static Expr *builtin_va_end_handler(Scope *scope, Expr *callee,
-                                    ExprVector *arguments, const Range *range) {
-  return new_expr_builtin_va_end(scope, callee, arguments, range);
+static Expr *builtin_va_end_handler(Expr *callee, ExprVector *arguments,
+                                    const Range *range) {
+  return new_expr_builtin_va_end(callee, arguments, range);
 }
-static Expr *builtin_va_copy_handler(Scope *scope, Expr *callee,
-                                     ExprVector *arguments,
+static Expr *builtin_va_copy_handler(Expr *callee, ExprVector *arguments,
                                      const Range *range) {
-  return new_expr_builtin_va_copy(scope, callee, arguments, range);
+  return new_expr_builtin_va_copy(callee, arguments, range);
 }
 
 static Expr *primary_expression(TokenIterator *ts, Scope *scope) {
@@ -2237,11 +2205,9 @@ static Expr *primary_expression(TokenIterator *ts, Scope *scope) {
   if ((token = ts_consume(ts, TK_NUM)) != NULL) {
     return new_expr_num(token->num, token->range);
   }
-
   if ((token = ts_consume(ts, TK_CHARCONST)) != NULL) {
     return new_expr_num(token->char_val, token->range);
   }
-
   if ((token = ts_consume(ts, TK_IDENT)) != NULL) {
     return new_expr_ident(scope, token);
   }
@@ -2287,7 +2253,7 @@ static Expr *primary_expression(TokenIterator *ts, Scope *scope) {
       }
     }
     ts_expect(ts, ')');
-    return new_expr_generic(scope, control, assoc_list);
+    return new_expr_generic(control, assoc_list);
   }
 
   range_error(ts_peek(ts)->range, "数値でも開きカッコでもないトークンです");
@@ -2300,8 +2266,7 @@ static Expr *postfix_expression(TokenIterator *ts, Scope *scope) {
     if (ts_consume(ts, '[')) {
       Expr *operand = expression(ts, scope);
       Token *end = ts_expect(ts, ']');
-      expr = new_expr_index(scope, expr, operand,
-                            range_join(expr->range, end->range));
+      expr = new_expr_index(expr, operand, range_join(expr->range, end->range));
       continue;
     }
 
@@ -2311,33 +2276,33 @@ static Expr *postfix_expression(TokenIterator *ts, Scope *scope) {
         arguments = argument_expression_list(ts, scope);
       }
       Token *end = ts_expect(ts, ')');
-      expr = new_expr_call(scope, expr, arguments,
-                           range_join(expr->range, end->range));
+      expr =
+          new_expr_call(expr, arguments, range_join(expr->range, end->range));
       continue;
     }
 
     if (ts_consume(ts, '.')) {
       Token *member = ts_expect(ts, TK_IDENT);
-      expr = new_expr_dot(scope, expr, member->ident,
+      expr = new_expr_dot(expr, member->ident,
                           range_join(expr->range, member->range));
       continue;
     }
 
     if (ts_consume(ts, TK_ARROW)) {
       Token *member = ts_expect(ts, TK_IDENT);
-      expr = new_expr_arrow(scope, expr, member->ident,
+      expr = new_expr_arrow(expr, member->ident,
                             range_join(expr->range, member->range));
       continue;
     }
 
     if ((token = ts_consume(ts, TK_INC)) != NULL) {
-      expr = new_expr_postfix(scope, EX_POST_INC, expr,
+      expr = new_expr_postfix(EX_POST_INC, expr,
                               range_join(expr->range, token->range));
       continue;
     }
 
     if ((token = ts_consume(ts, TK_DEC)) != NULL) {
-      expr = new_expr_postfix(scope, EX_POST_DEC, expr,
+      expr = new_expr_postfix(EX_POST_DEC, expr,
                               range_join(expr->range, token->range));
       continue;
     }
@@ -2367,7 +2332,7 @@ static Expr *unary_expression(TokenIterator *ts, Scope *scope) {
     Token *token;
     if ((token = ts_consume(ts, tk)) != NULL) {
       Expr *operand = cast_expression(ts, scope);
-      return new_expr_unary(scope, ex, operand,
+      return new_expr_unary(ex, operand,
                             range_join(token->range, operand->range));
     }
   }
@@ -2411,8 +2376,7 @@ static Expr *cast_expression(TokenIterator *ts, Scope *scope) {
       return new_expr_compound(scope, val_type, init, range);
     }
     Expr *operand = cast_expression(ts, scope);
-    return new_expr_cast(scope, val_type, operand,
-                         range_join(start, operand->range));
+    return new_expr_cast(val_type, operand, range_join(start, operand->range));
   }
   return unary_expression(ts, scope);
 }
@@ -2430,7 +2394,7 @@ static Expr *binary_expression(TokenIterator *ts, Scope *scope, const int *tks,
       Token *token;
       if ((token = ts_consume(ts, tk)) != NULL) {
         Expr *operand = op_parser(ts, scope);
-        expr = new_expr_binop(scope, ex, expr, operand,
+        expr = new_expr_binop(ex, expr, operand,
                               range_join(expr->range, operand->range));
         found = true;
         break;
@@ -2496,7 +2460,7 @@ static Expr *conditional_expression(TokenIterator *ts, Scope *scope) {
     Expr *then_expr = expression(ts, scope);
     ts_expect(ts, ':');
     Expr *else_expr = conditional_expression(ts, scope);
-    return new_expr_cond(scope, cond, then_expr, else_expr,
+    return new_expr_cond(cond, then_expr, else_expr,
                          range_join(cond->range, else_expr->range));
   }
   return cond;
@@ -2521,7 +2485,7 @@ static Expr *assignment_expression(TokenIterator *ts, Scope *scope) {
     if (ts_consume(ts, tk)) {
       Expr *rhs = assignment_expression(ts, scope);
       const Range *range = range_join(lhs->range, rhs->range);
-      return new_expr_binop(scope, ex, lhs, rhs, range);
+      return new_expr_binop(ex, lhs, rhs, range);
     }
   }
 
@@ -3308,7 +3272,7 @@ static void assign_initializer(Scope *scope, ParseInit *pinit, Type *type,
       return;
     }
 
-    (*init)->expr = new_expr_cast(scope, type, pinit->expr, pinit->range);
+    (*init)->expr = new_expr_cast(type, pinit->expr, pinit->range);
     return;
   }
 
