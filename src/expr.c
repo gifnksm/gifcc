@@ -1,5 +1,6 @@
 #include "gifcc.h"
 
+static void cast_as(Expr **expr, Type *type);
 static Type *integer_promoted(Expr **e);
 static Type *arith_converted(Expr **e1, Expr **e2);
 static Expr *coerce_array2ptr(Expr *expr);
@@ -9,6 +10,10 @@ static bool is_null_ptr_const(Expr *expr);
 static noreturn void binop_type_error_raw(int ty, Expr *lhs, Expr *rhs,
                                           const char *dbg_file, int dbg_line);
 static Expr *new_expr(int ty, Type *val_type, const Range *range);
+
+static void cast_as(Expr **expr, Type *type) {
+  *expr = new_expr_cast(type, (*expr), (*expr)->range);
+}
 
 static Type *integer_promoted(Expr **e) {
   if (!is_integer_type((*e)->val_type)) {
@@ -23,8 +28,7 @@ static Type *integer_promoted(Expr **e) {
   case TY_S_SHORT:
   case TY_U_SHORT:
   case TY_ENUM:
-    *e = new_expr_cast(new_type(TY_S_INT, EMPTY_TYPE_QUALIFIER), *e,
-                       (*e)->range);
+    cast_as(e, new_type(TY_S_INT, EMPTY_TYPE_QUALIFIER));
     break;
   case TY_S_INT:
   case TY_U_INT:
@@ -67,8 +71,8 @@ static Type *arith_converted(Expr **e1, Expr **e2) {
       assert(ty1->ty == TY_FLOAT || ty2->ty == TY_FLOAT);
       type = new_type(TY_FLOAT, EMPTY_TYPE_QUALIFIER);
     }
-    *e1 = new_expr_cast(type, *e1, r1);
-    *e2 = new_expr_cast(type, *e2, r2);
+    cast_as(e1, type);
+    cast_as(e2, type);
     return type;
   }
 
@@ -88,7 +92,7 @@ static Type *arith_converted(Expr **e1, Expr **e2) {
   if ((is_signed1 ^ is_signed2) == 0) {
     // both operands have signed type or both have unsigned type
     if (rank1 > rank2) {
-      *e2 = new_expr_cast(ty1, *e2, r2);
+      cast_as(e2, ty1);
       return ty1;
     }
     assert(is_sametype(ty1, ty2));
@@ -97,14 +101,14 @@ static Type *arith_converted(Expr **e1, Expr **e2) {
 
   if (!is_signed1) {
     // unsigned operand has rank greater or equal to another
-    *e2 = new_expr_cast(ty1, *e2, r2);
+    cast_as(e2, ty1);
     return ty1;
   }
 
   assert(is_signed1 && !is_signed2);
   if (get_val_size(ty1, r1) > get_val_size(ty2, r2)) {
     // signed type can represent all of the value of unsigned type
-    *e2 = new_expr_cast(ty1, *e2, r2);
+    cast_as(e2, ty1);
     return ty1;
   }
 
@@ -123,8 +127,8 @@ static Type *arith_converted(Expr **e1, Expr **e2) {
     range_internal_error(r1, "Invalid number type: %d", ty1->ty);
   }
 
-  *e1 = new_expr_cast(ty, *e1, r1);
-  *e2 = new_expr_cast(ty, *e2, r2);
+  cast_as(e1, ty);
+  cast_as(e2, ty);
   return ty;
 }
 
@@ -141,11 +145,9 @@ static Expr *coerce_func2ptr(Expr *expr) {
   return expr;
 }
 static Expr *coerce_expr2cond(Expr *expr) {
-  return new_expr_binop(
-      EX_NOTEQ, expr,
-      new_expr_cast(expr->val_type,
-                    new_expr_num(new_number_int(0), expr->range), expr->range),
-      expr->range);
+  Expr *zero = new_expr_num(new_number_int(0), expr->range);
+  cast_as(&zero, expr->val_type);
+  return new_expr_binop(EX_NOTEQ, expr, zero, expr->range);
 }
 
 static bool is_null_ptr_const(Expr *expr) {
@@ -280,8 +282,10 @@ Expr *new_expr_call(Expr *callee, ExprVector *arguments, const Range *range) {
   int narg = 0;
   if (arguments != NULL) {
     for (int i = 0; i < VEC_LEN(arguments); i++) {
-      VEC_SET(arguments, i, coerce_array2ptr(VEC_GET(arguments, i)));
-      VEC_SET(arguments, i, coerce_func2ptr(VEC_GET(arguments, i)));
+      Expr *arg = VEC_GET(arguments, i);
+      arg = coerce_array2ptr(arg);
+      arg = coerce_func2ptr(arg);
+      VEC_SET(arguments, i, arg);
     }
     narg = VEC_LEN(arguments);
   }
@@ -299,7 +303,8 @@ Expr *new_expr_call(Expr *callee, ExprVector *arguments, const Range *range) {
   for (int i = 0; i < nparam; i++) {
     Param *param = VEC_GET(params, i);
     Expr *arg = VEC_GET(arguments, i);
-    VEC_SET(arguments, i, new_expr_cast(param->type, arg, arg->range));
+    cast_as(&arg, param->type);
+    VEC_SET(arguments, i, arg);
   }
   // default argument promotion
   for (int i = nparam; i < narg; i++) {
@@ -307,8 +312,7 @@ Expr *new_expr_call(Expr *callee, ExprVector *arguments, const Range *range) {
     if (is_integer_type(arg->val_type)) {
       integer_promoted(&arg);
     } else if (arg->val_type->ty == TY_FLOAT) {
-      arg = new_expr_cast(new_type(TY_DOUBLE, EMPTY_TYPE_QUALIFIER), arg,
-                          arg->range);
+      cast_as(&arg, new_type(TY_DOUBLE, EMPTY_TYPE_QUALIFIER));
     } else {
       // do nothing
     }
@@ -505,12 +509,9 @@ Expr *new_expr_unary(int op, Expr *operand, const Range *range) {
     }
     break;
   case EX_LOG_NOT: {
-    return new_expr_binop(
-        EX_EQEQ, operand,
-        new_expr_cast(operand->val_type,
-                      new_expr_num(new_number_int(0), operand->range),
-                      operand->range),
-        operand->range);
+    Expr *zero = new_expr_num(new_number_int(0), operand->range);
+    cast_as(&zero, operand->val_type);
+    return new_expr_binop(EX_EQEQ, operand, zero, operand->range);
   }
   case EX_NOT:
     if (!is_integer_type(operand->val_type)) {
@@ -667,7 +668,7 @@ Expr *new_expr_binop(int op, Expr *lhs, Expr *rhs, const Range *range) {
     val_type = new_type(TY_S_INT, EMPTY_TYPE_QUALIFIER);
     break;
   case EX_ASSIGN:
-    rhs = new_expr_cast(lhs->val_type, rhs, rhs->range);
+    cast_as(&rhs, lhs->val_type);
     val_type = lhs->val_type;
     break;
   case EX_MUL_ASSIGN:
@@ -769,8 +770,8 @@ Expr *new_expr_cond(Expr *cond, Expr *then_expr, Expr *else_expr,
              else_expr->val_type->ty == TY_VOID) {
     // NonStandard/GNU?: conditional expressions with only one void side
     val_type = new_type(TY_VOID, EMPTY_TYPE_QUALIFIER);
-    then_expr = new_expr_cast(val_type, then_expr, then_expr->range);
-    else_expr = new_expr_cast(val_type, else_expr, else_expr->range);
+    cast_as(&then_expr, val_type);
+    cast_as(&else_expr, val_type);
   } else {
     if (!is_sametype(then_expr->val_type, else_expr->val_type)) {
       range_error(range, "条件演算子の両辺の型が異なります: %s, %s",
