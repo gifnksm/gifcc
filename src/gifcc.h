@@ -975,6 +975,27 @@ Expr *new_expr_index(Expr *array, Expr *index, const Range *range);
 Expr *new_expr_dot(Expr *operand, const char *name, const Range *range);
 Expr *new_expr_arrow(Expr *operand, const char *name, const Range *range);
 
+// stmt.c
+Stmt *new_stmt_null(const Range *range);
+Stmt *new_stmt_expr(Expr *expr, const Range *range);
+Stmt *new_stmt_if(Expr *cond, Stmt *then_stmt, Stmt *else_stmt,
+                  const Range *range);
+Stmt *new_stmt_switch(Expr *cond, Stmt *body, const Range *range);
+Stmt *new_stmt_case(Number val, Stmt *body, const Range *range);
+Stmt *new_stmt_default(Stmt *body, const Range *range);
+Stmt *new_stmt_label(const char *c_label, const char *asm_label, Stmt *body,
+                     const Range *range);
+Stmt *new_stmt_while(Expr *cond, Stmt *body, const Range *range);
+Stmt *new_stmt_do_while(Expr *cond, Stmt *body, const Range *range);
+Stmt *new_stmt_for(Stmt *init, Expr *cond, Expr *inc, Stmt *body,
+                   const Range *range);
+Stmt *new_stmt_goto(const char *c_label, const Range *range);
+Stmt *new_stmt_break(const Range *range);
+Stmt *new_stmt_continue(const Range *range);
+Stmt *new_stmt_return(Type *ret_type, Expr *expr, const Range *range);
+Stmt *new_stmt_compound(StmtVector *stmts, const Range *range);
+Stmt *new_stmt_decl(StackVarDeclVector *decl, const Range *range);
+
 // parse.c
 Scope *new_pp_scope(const Reader *reader);
 int get_val_size(const Type *ty, const Range *range);
