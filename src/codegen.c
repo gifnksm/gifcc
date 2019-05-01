@@ -2054,14 +2054,14 @@ static void emit_stmt(Stmt *stmt, bool leave_value) {
       range_assert(stmt->range, stack_pos == base_stack_pos,
                    "stack position mismatch");
       emit_op2("cmp", r->rax, r->rdi);
-      emit_op1("je", imm_symbol(case_stmt->label));
+      emit_op1("je", imm_symbol(case_stmt->asm_label));
       emit_push(Reg8.rdi);
     }
     emit_pop(Reg8.rdi);
     range_assert(stmt->range, stack_pos == base_stack_pos,
                  "stack position mismatch");
     if (stmt->default_case) {
-      emit_op1("jmp", imm_symbol(stmt->default_case->label));
+      emit_op1("jmp", imm_symbol(stmt->default_case->asm_label));
     } else {
       emit_op1("jmp", imm_symbol(end_label));
     }
@@ -2076,7 +2076,7 @@ static void emit_stmt(Stmt *stmt, bool leave_value) {
   case ST_CASE:
   case ST_DEFAULT:
   case ST_LABEL: {
-    emit_label(stmt->label);
+    emit_label(stmt->asm_label);
     emit_stmt(stmt->body, leave_value);
     return;
   }
@@ -2181,9 +2181,9 @@ static void emit_stmt(Stmt *stmt, bool leave_value) {
     return;
   }
   case ST_GOTO: {
-    char *label = get_label(func_ctxt, stmt->name);
+    const char *label = get_label(func_ctxt, stmt->c_label);
     if (label == NULL) {
-      range_error(stmt->range, "未知のラベルへのgotoです: %s", stmt->name);
+      range_error(stmt->range, "未知のラベルへのgotoです: %s", stmt->c_label);
     }
     emit_op1("jmp", imm_symbol(label));
     return;

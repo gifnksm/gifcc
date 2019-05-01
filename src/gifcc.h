@@ -635,9 +635,7 @@ typedef struct Stmt {
   Type *val_type;
   const Range *range;
 
-  // ST_LABEL, ST_GOTO
-  const char *name;
-
+  // ST_GOTO:     goto <c_label>;
   // ST_IF:       if (<cond>) <then_stmt> else <else_stmt>
   // ST_SWITCH:   switch (<cond>) <body>
   // ST_WHILE:    while (<cond>) <body>
@@ -645,14 +643,16 @@ typedef struct Stmt {
   // ST_FOR:      for (<init>; <cond>; <inc>) <body>
   // ST_CASE:     case: <body>
   // ST_DEFAULT:  default: <body>
-  // ST_LABEL:    <label>: <body>
-  char *label;
+  // ST_LABEL:    <c_label>: <body>
+  const char *c_label;
   struct Stmt *init;
   struct Expr *cond;
   struct Expr *inc;
   struct Stmt *then_stmt;
   struct Stmt *else_stmt;
   struct Stmt *body;
+
+  const char *asm_label;
 
   // ST_SWITCH
   StmtVector *cases;
@@ -992,7 +992,7 @@ char *make_label(const char *s);
 void gen(FILE *fp, TranslationUnit *tunit, asm_syntax_t syntax);
 
 // inline functions
-static inline char *get_label(Function *func, const char *name) {
+static inline const char *get_label(Function *func, const char *name) {
   return map_get(func->label_map, name);
 }
 
