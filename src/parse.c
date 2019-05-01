@@ -151,6 +151,8 @@ static Type *get_tag(Scope *scope, const char *tag);
 static bool register_typedef(Scope *scope, const char *name, Type *type);
 static Type *get_typedef(Scope *scope, const char *name);
 static StringLiteral *get_string_literal(Scope *scope, const char *val);
+static void register_label(FuncCtxt *fcx, const char *c_label,
+                           const char *asm_label);
 static bool token_is_storage_class_specifier(Token *token);
 static bool consume_storage_class_specifier(TokenIterator *ts,
                                             StorageClassSpecifier *scs);
@@ -171,16 +173,16 @@ static Stmt *new_stmt_if(Expr *cond, Stmt *then_stmt, Stmt *else_stmt,
 static Stmt *new_stmt_switch(Expr *cond, Stmt *body, const Range *range);
 static Stmt *new_stmt_case(Number val, Stmt *body, const Range *range);
 static Stmt *new_stmt_default(Stmt *body, const Range *range);
-static Stmt *new_stmt_label(FuncCtxt *fcx, const char *name, Stmt *body,
-                            const Range *range);
+static Stmt *new_stmt_label(const char *c_label, const char *asm_label,
+                            Stmt *body, const Range *range);
 static Stmt *new_stmt_while(Expr *cond, Stmt *body, const Range *range);
 static Stmt *new_stmt_do_while(Expr *cond, Stmt *body, const Range *range);
 static Stmt *new_stmt_for(Stmt *init, Expr *cond, Expr *inc, Stmt *body,
                           const Range *range);
-static Stmt *new_stmt_goto(const char *name, const Range *range);
+static Stmt *new_stmt_goto(const char *c_label, const Range *range);
 static Stmt *new_stmt_break(const Range *range);
 static Stmt *new_stmt_continue(const Range *range);
-static Stmt *new_stmt_return(Scope *scope, Expr *expr, const Range *range);
+static Stmt *new_stmt_return(Type *ret_type, Expr *expr, const Range *range);
 static Stmt *new_stmt_compound(StmtVector *stmts, const Range *range);
 static Stmt *new_stmt_decl(StackVarDeclVector *decl, const Range *range);
 
@@ -596,6 +598,11 @@ static StringLiteral *get_string_literal(Scope *scope, const char *val) {
   lit->val = val;
   VEC_PUSH(scope->global_ctxt->str_list, lit);
   return lit;
+}
+
+static void register_label(FuncCtxt *fcx, const char *c_label,
+                           const char *asm_label) {
+  map_put(fcx->label_map, c_label, (void *)asm_label);
 }
 
 static bool token_is_storage_class_specifier(Token *token) {
@@ -1157,7 +1164,7 @@ static Stmt *new_stmt_case(Number val, Stmt *body, const Range *range) {
   Stmt *stmt =
       new_stmt(ST_CASE, new_type(TY_VOID, EMPTY_TYPE_QUALIFIER), range);
   stmt->case_val = val;
-  stmt->label = make_label("case");
+  stmt->asm_label = make_label("case");
   stmt->body = body;
   return stmt;
 }
@@ -1165,18 +1172,17 @@ static Stmt *new_stmt_case(Number val, Stmt *body, const Range *range) {
 static Stmt *new_stmt_default(Stmt *body, const Range *range) {
   Stmt *stmt =
       new_stmt(ST_DEFAULT, new_type(TY_VOID, EMPTY_TYPE_QUALIFIER), range);
-  stmt->label = make_label("default");
+  stmt->asm_label = make_label("default");
   stmt->body = body;
   return stmt;
 }
 
-static Stmt *new_stmt_label(FuncCtxt *fcx, const char *name, Stmt *body,
-                            const Range *range) {
+static Stmt *new_stmt_label(const char *c_label, const char *asm_label,
+                            Stmt *body, const Range *range) {
   Stmt *stmt = new_stmt(ST_LABEL, body->val_type, range);
-  stmt->name = name;
-  stmt->label = make_label(name);
+  stmt->c_label = c_label;
+  stmt->asm_label = asm_label;
   stmt->body = body;
-  map_put(fcx->label_map, stmt->name, stmt->label);
   return stmt;
 }
 
@@ -1206,10 +1212,10 @@ static Stmt *new_stmt_for(Stmt *init, Expr *cond, Expr *inc, Stmt *body,
   return stmt;
 }
 
-static Stmt *new_stmt_goto(const char *name, const Range *range) {
+static Stmt *new_stmt_goto(const char *c_label, const Range *range) {
   Stmt *stmt =
       new_stmt(ST_GOTO, new_type(TY_VOID, EMPTY_TYPE_QUALIFIER), range);
-  stmt->name = name;
+  stmt->c_label = c_label;
   return stmt;
 }
 
@@ -1221,12 +1227,11 @@ static Stmt *new_stmt_continue(const Range *range) {
   return new_stmt(ST_CONTINUE, new_type(TY_VOID, EMPTY_TYPE_QUALIFIER), range);
 }
 
-static Stmt *new_stmt_return(Scope *scope, Expr *expr, const Range *range) {
+static Stmt *new_stmt_return(Type *ret_type, Expr *expr, const Range *range) {
   Stmt *stmt =
       new_stmt(ST_RETURN, new_type(TY_VOID, EMPTY_TYPE_QUALIFIER), range);
   if (expr != NULL) {
-    stmt->expr =
-        new_expr_cast(scope->func_ctxt->type->func.ret, expr, expr->range);
+    stmt->expr = new_expr_cast(ret_type, expr, expr->range);
   } else {
     stmt->expr = NULL;
   }
@@ -2584,9 +2589,9 @@ static Stmt *statement(TokenIterator *ts, Scope *scope) {
   }
   case TK_GOTO: {
     ts_succ(ts);
-    const char *name = ts_expect(ts, TK_IDENT)->ident;
+    const char *c_label = ts_expect(ts, TK_IDENT)->ident;
     Token *end = ts_expect(ts, ';');
-    return new_stmt_goto(name, range_join(start->range, end->range));
+    return new_stmt_goto(c_label, range_join(start->range, end->range));
   }
   case TK_BREAK: {
     ts_succ(ts);
@@ -2605,7 +2610,8 @@ static Stmt *statement(TokenIterator *ts, Scope *scope) {
       expr = expression(ts, scope);
     }
     Token *end = ts_expect(ts, ';');
-    return new_stmt_return(scope, expr, range_join(start->range, end->range));
+    return new_stmt_return(scope->func_ctxt->type->func.ret, expr,
+                           range_join(start->range, end->range));
   }
   case '{': {
     Scope *inner = new_inner_scope(scope);
@@ -2620,7 +2626,11 @@ static Stmt *statement(TokenIterator *ts, Scope *scope) {
       Token *ident = ts_pop(ts);
       ts_expect(ts, ':');
       Stmt *body = statement(ts, scope);
-      Stmt *stmt = new_stmt_label(scope->func_ctxt, ident->ident, body,
+
+      const char *c_label = ident->ident;
+      const char *asm_label = make_label(c_label);
+      register_label(scope->func_ctxt, c_label, asm_label);
+      Stmt *stmt = new_stmt_label(c_label, asm_label, body,
                                   range_join(start->range, body->range));
       return stmt;
     }

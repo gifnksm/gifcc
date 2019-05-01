@@ -404,7 +404,8 @@ static void dump_stmt(FILE *fp, Stmt *stmt, int level) {
     dump_stmt_end(fp, stmt, level);
     return;
   case ST_LABEL:
-    dump_stmt_start(fp, stmt, level, "LABEL %s", stmt->name);
+    dump_stmt_start(fp, stmt, level, "LABEL %s (%s)", stmt->c_label,
+                    stmt->asm_label);
     dump_stmt(fp, stmt->body, level + 1);
     dump_stmt_end(fp, stmt, level);
     return;
@@ -447,7 +448,7 @@ static void dump_stmt(FILE *fp, Stmt *stmt, int level) {
     dump_stmt_end(fp, stmt, level);
     return;
   case ST_GOTO:
-    dump_stmt_oneline(fp, stmt, level, "GOTO %s", stmt->name);
+    dump_stmt_oneline(fp, stmt, level, "GOTO %s", stmt->c_label);
     return;
   case ST_BREAK:
     dump_stmt_oneline(fp, stmt, level, "BREAK");
