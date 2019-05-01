@@ -173,6 +173,7 @@ static noreturn void binop_type_error_raw(int ty, Expr *lhs, Expr *rhs,
                                           const char *dbg_file, int dbg_line);
 static Expr *coerce_array2ptr(Scope *scope, Expr *expr);
 static Expr *coerce_func2ptr(Scope *scope, Expr *expr);
+static Expr *coerce_expr2cond(Scope *scope, Expr *expr);
 static bool is_null_ptr_const(Expr *expr);
 static Expr *new_expr(int ty, Type *val_type, const Range *range);
 static Expr *new_expr_num(Number val, const Range *range);
@@ -1277,6 +1278,13 @@ static Expr *coerce_func2ptr(Scope *scope, Expr *expr) {
   }
   return expr;
 }
+static Expr *coerce_expr2cond(Scope *scope, Expr *expr) {
+  return new_expr_binop(
+      scope, EX_NOTEQ, expr,
+      new_expr_cast(scope, expr->val_type,
+                    new_expr_num(new_number_int(0), expr->range), expr->range),
+      expr->range);
+}
 
 static bool is_null_ptr_const(Expr *expr) {
   if (!is_integer_type(expr->val_type)) {
@@ -1631,17 +1639,9 @@ static Expr *new_expr_cast(Scope *scope, Type *val_type, Expr *operand,
   operand = coerce_array2ptr(scope, operand);
   operand = coerce_func2ptr(scope, operand);
 
-  if (is_sametype(operand->val_type, val_type)) {
-    return operand;
-  }
-
   Expr *expr = new_expr(EX_CAST, val_type, range);
   if (val_type->ty == TY_BOOL) {
-    expr->unop.operand = new_expr_binop(
-        scope, EX_NOTEQ, operand,
-        new_expr_cast(scope, operand->val_type,
-                      new_expr_num(new_number_int(0), range), range),
-        range);
+    expr->unop.operand = coerce_expr2cond(scope, operand);
   } else {
     expr->unop.operand = operand;
   }
@@ -1873,22 +1873,14 @@ static Expr *new_expr_binop(Scope *scope, int op, Expr *lhs, Expr *rhs,
     }
     break;
   case EX_LOG_AND: {
-    lhs =
-        new_expr_binop(scope, EX_NOTEQ, lhs,
-                       new_expr_num(new_number_int(0), lhs->range), lhs->range);
-    rhs =
-        new_expr_binop(scope, EX_NOTEQ, rhs,
-                       new_expr_num(new_number_int(0), rhs->range), rhs->range);
+    lhs = coerce_expr2cond(scope, lhs);
+    rhs = coerce_expr2cond(scope, rhs);
     val_type = new_type(TY_S_INT, EMPTY_TYPE_QUALIFIER);
     break;
   }
   case EX_LOG_OR:
-    lhs =
-        new_expr_binop(scope, EX_NOTEQ, lhs,
-                       new_expr_num(new_number_int(0), lhs->range), lhs->range);
-    rhs =
-        new_expr_binop(scope, EX_NOTEQ, rhs,
-                       new_expr_num(new_number_int(0), rhs->range), rhs->range);
+    lhs = coerce_expr2cond(scope, lhs);
+    rhs = coerce_expr2cond(scope, rhs);
     val_type = new_type(TY_S_INT, EMPTY_TYPE_QUALIFIER);
     break;
   case EX_ASSIGN:
