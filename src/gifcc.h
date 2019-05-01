@@ -943,6 +943,8 @@ bool is_ptr_type(Type *ty);
 bool is_array_type(Type *ty);
 bool is_func_type(Type *ty);
 char *format_type(const Type *type, bool detail);
+int get_val_size(const Type *ty, const Range *range);
+int get_val_align(const Type *ty, const Range *range);
 
 // expr.c
 Expr *new_expr_num(Number val, const Range *range);
@@ -998,8 +1000,6 @@ Stmt *new_stmt_decl(StackVarDeclVector *decl, const Range *range);
 
 // parse.c
 Scope *new_pp_scope(const Reader *reader);
-int get_val_size(const Type *ty, const Range *range);
-int get_val_align(const Type *ty, const Range *range);
 Expr *constant_expression(TokenIterator *ts, Scope *scope);
 Number integer_constant_expression(TokenIterator *ts, Scope *scope);
 TranslationUnit *parse(const Reader *reader, TokenIterator *ts);

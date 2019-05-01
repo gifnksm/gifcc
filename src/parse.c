@@ -1,7 +1,6 @@
 #include "gifcc.h"
 #include <assert.h>
 #include <limits.h>
-#include <stdalign.h>
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -979,128 +978,6 @@ static bool consume_function_specifier(TokenIterator *ts,
   }
 
   return consumed;
-}
-
-int get_val_size(const Type *ty, const Range *range) {
-  switch (ty->ty) {
-  case TY_VOID:
-    return sizeof(void);
-  case TY_BOOL:
-    return sizeof(bool);
-  case TY_CHAR:
-    return sizeof(char);
-  case TY_S_CHAR:
-    return sizeof(signed char);
-  case TY_S_INT:
-    return sizeof(signed int);
-  case TY_S_SHORT:
-    return sizeof(signed short);
-  case TY_S_LONG:
-    return sizeof(signed long);
-  case TY_S_LLONG:
-    return sizeof(signed long long);
-  case TY_U_CHAR:
-    return sizeof(unsigned char);
-  case TY_U_INT:
-    return sizeof(unsigned int);
-  case TY_U_SHORT:
-    return sizeof(unsigned short);
-  case TY_U_LONG:
-    return sizeof(unsigned long);
-  case TY_U_LLONG:
-    return sizeof(unsigned long long);
-  case TY_FLOAT:
-    return sizeof(float);
-  case TY_DOUBLE:
-    return sizeof(double);
-  case TY_LDOUBLE:
-    return sizeof(long double);
-  case TY_PTR:
-    return sizeof(void *);
-  case TY_ARRAY:
-    if (ty->array.len < 0) {
-      range_error(range, "不完全な配列型のサイズを取得しようとしました: %s",
-                  format_type(ty, false));
-    }
-    return get_val_size(ty->array.elem, range) * ty->array.len;
-  case TY_FUNC:
-    range_error(range, "関数型の値サイズを取得しようとしました: %s",
-                format_type(ty, false));
-  case TY_STRUCT:
-  case TY_UNION:
-    if (ty->struct_body->members == NULL) {
-      range_error(range, "不完全型の値のサイズを取得しようとしました: %s",
-                  format_type(ty, false));
-    }
-    return align(ty->struct_body->member_size, ty->struct_body->member_align);
-  case TY_ENUM:
-    return sizeof(int);
-  case TY_BUILTIN:
-    range_error(range, "ビルトイン型の値サイズを取得しようとしました: %s",
-                format_type(ty, false));
-  }
-  range_error(range, "不明な型のサイズを取得しようとしました: %s",
-              format_type(ty, false));
-}
-
-int get_val_align(const Type *ty, const Range *range) {
-  switch (ty->ty) {
-  case TY_VOID:
-    return alignof(void);
-  case TY_BOOL:
-    return alignof(bool);
-  case TY_CHAR:
-    return alignof(char);
-  case TY_S_CHAR:
-    return alignof(signed char);
-  case TY_S_SHORT:
-    return alignof(signed short);
-  case TY_S_INT:
-    return alignof(signed int);
-  case TY_S_LONG:
-    return alignof(signed long);
-  case TY_S_LLONG:
-    return alignof(signed long long);
-  case TY_U_CHAR:
-    return alignof(unsigned char);
-  case TY_U_SHORT:
-    return alignof(unsigned short);
-  case TY_U_INT:
-    return alignof(unsigned int);
-  case TY_U_LONG:
-    return alignof(unsigned long);
-  case TY_U_LLONG:
-    return alignof(unsigned long long);
-  case TY_FLOAT:
-    return alignof(float);
-  case TY_DOUBLE:
-    return alignof(double);
-  case TY_LDOUBLE:
-    return alignof(long double);
-  case TY_PTR:
-    return alignof(void *);
-  case TY_ARRAY:
-    return get_val_align(ty->array.elem, range);
-  case TY_FUNC:
-    range_error(range, "関数型の値アラインメントを取得しようとしました: %s",
-                format_type(ty, false));
-  case TY_STRUCT:
-  case TY_UNION:
-    if (ty->struct_body->members == NULL) {
-      range_error(range,
-                  "不完全型の値のアラインメントを取得しようとしました: %s",
-                  format_type(ty, false));
-    }
-    return ty->struct_body->member_align;
-  case TY_ENUM:
-    return alignof(int);
-  case TY_BUILTIN:
-    range_error(range,
-                "ビルトイン型の値のアラインメントを取得しようとしました: %s",
-                format_type(ty, false));
-  }
-  range_error(range, "不明な型の値アラインメントを取得しようとしました: %s",
-              format_type(ty, false));
 }
 
 static Expr *builtin_va_start_handler(Expr *callee, ExprVector *arguments,
