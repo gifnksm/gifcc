@@ -158,6 +158,7 @@ static bool register_tag(Scope *scope, const char *tag, Type *type);
 static Type *get_tag(Scope *scope, const char *tag);
 static bool register_typedef(Scope *scope, const char *name, Type *type);
 static Type *get_typedef(Scope *scope, const char *name);
+static StringLiteral *get_string_literal(Scope *scope, const char *val);
 static Type *integer_promoted(Expr **e);
 static Type *arith_converted(Expr **e1, Expr **e2);
 static bool token_is_storage_class_specifier(Token *token);
@@ -186,7 +187,7 @@ static Expr *new_expr_global_var(Type *val_type, const char *name,
 static Expr *new_expr_builtin_func(const char *name,
                                    builtin_func_handler_t *handler,
                                    const Range *range);
-static Expr *new_expr_str(Scope *scope, const char *val, const Range *range);
+static Expr *new_expr_str(StringLiteral *lit, const Range *range);
 static Expr *new_expr_stmt(Stmt *stmt, const Range *range);
 static Expr *new_expr_generic(Expr *control,
                               GenericAssociationVector *assoc_list);
@@ -631,6 +632,20 @@ static Type *get_typedef(Scope *scope, const char *name) {
     scope = scope->outer;
   }
   return NULL;
+}
+
+static StringLiteral *get_string_literal(Scope *scope, const char *val) {
+  VEC_FOREACH (StringLiteral *lit, scope->global_ctxt->str_list) {
+    if (strcmp(lit->val, val) == 0) {
+      return lit;
+    }
+  }
+
+  StringLiteral *lit = NEW(StringLiteral);
+  lit->name = make_label("str");
+  lit->val = val;
+  VEC_PUSH(scope->global_ctxt->str_list, lit);
+  return lit;
 }
 
 static Type *integer_promoted(Expr **e) {
@@ -1356,26 +1371,10 @@ static Expr *new_expr_builtin_func(const char *name,
   return expr;
 }
 
-static Expr *new_expr_str(Scope *scope, const char *val, const Range *range) {
+static Expr *new_expr_str(StringLiteral *lit, const Range *range) {
   Type *type =
       new_type_array(new_type(TY_CHAR, EMPTY_TYPE_QUALIFIER),
-                     new_number_int(strlen(val)), EMPTY_TYPE_QUALIFIER);
-
-  StringLiteral *lit = NULL;
-  VEC_FOREACH (StringLiteral *l, scope->global_ctxt->str_list) {
-    if (strcmp(l->val, val) == 0) {
-      lit = l;
-      break;
-    }
-  }
-
-  if (lit == NULL) {
-    lit = NEW(StringLiteral);
-    lit->name = make_label("str");
-    lit->val = val;
-    VEC_PUSH(scope->global_ctxt->str_list, lit);
-  }
-
+                     new_number_int(strlen(lit->val)), EMPTY_TYPE_QUALIFIER);
   Expr *expr = new_expr(EX_STR, type, range);
   expr->str = lit;
   return expr;
@@ -2185,7 +2184,8 @@ static Expr *primary_expression(TokenIterator *ts, Scope *scope) {
     return new_expr_num(token->char_val, token->range);
   }
   if ((token = ts_consume(ts, TK_STR)) != NULL) {
-    return new_expr_str(scope, token->str, token->range);
+    StringLiteral *lit = get_string_literal(scope, token->str);
+    return new_expr_str(lit, token->range);
   }
 
   if ((token = ts_consume(ts, TK_IDENT)) != NULL) {
@@ -2208,7 +2208,8 @@ static Expr *primary_expression(TokenIterator *ts, Scope *scope) {
       return new_expr_num(*decl->number, range);
     }
     case DECL_STRING: {
-      return new_expr_str(scope, decl->string, range);
+      StringLiteral *lit = get_string_literal(scope, decl->string);
+      return new_expr_str(lit, range);
     }
     case DECL_BUILTIN_FUNC: {
       return new_expr_builtin_func(name, decl->builtin_func, range);
