@@ -27,6 +27,7 @@ typedef enum {
   DECL_STACK_VAR,
   DECL_GLOBAL_VAR,
   DECL_NUMBER,
+  DECL_STRING,
   DECL_BUILTIN_FUNC,
 } decl_t;
 
@@ -35,7 +36,8 @@ typedef struct Decl {
   Type *type;
   StackVar *stack_var;
   GlobalVar *global_var;
-  Number *num_val;
+  Number *number;
+  const char *string;
   builtin_func_handler_t *builtin_func;
 } Decl;
 
@@ -50,7 +52,6 @@ typedef struct Scope {
 } Scope;
 
 typedef enum { DEF_GLOBAL_VAR, DEF_STACK_VAR, DEF_FUNC } def_type_t;
-
 typedef struct VarDef {
   def_type_t type;
   Token *name;
@@ -145,11 +146,13 @@ static GlobalVar *register_global_var(Scope *scope, Token *name, Type *type,
                                       StorageClassSpecifier scs);
 static void register_number(Scope *scope, Token *name, Type *type,
                             Number *number);
+static void register_string(Scope *scope, const char *name, const char *val);
 static void register_builtin_func(Scope *scope, const char *name,
                                   builtin_func_handler_t *handler);
 static bool register_decl(Scope *scope, decl_t kind, const char *name,
                           Type *type, StackVar *svar, GlobalVar *gvar,
-                          Number *num_val, builtin_func_handler_t *handler);
+                          Number *number, const char *string,
+                          builtin_func_handler_t *handler);
 static Decl *get_decl(Scope *scope, const char *name);
 static bool register_tag(Scope *scope, const char *tag, Type *type);
 static Type *get_tag(Scope *scope, const char *tag);
@@ -183,7 +186,6 @@ static Expr *new_expr_global_var(Type *val_type, const char *name,
 static Expr *new_expr_builtin_func(const char *name,
                                    builtin_func_handler_t *handler,
                                    const Range *range);
-static Expr *new_expr_ident(Scope *scope, Token *ident);
 static Expr *new_expr_str(Scope *scope, const char *val, const Range *range);
 static Expr *new_expr_stmt(Stmt *stmt, const Range *range);
 static Expr *new_expr_generic(Expr *control,
@@ -434,7 +436,11 @@ static Scope *new_global_scope(GlobalCtxt *gcx, const Reader *reader) {
 }
 
 static Scope *new_func_scope(Scope *global, FuncCtxt *fcx) {
-  return new_scope(global->global_ctxt, fcx, global);
+  Scope *scope = new_scope(global->global_ctxt, fcx, global);
+
+  register_string(scope, "__func__", fcx->name);
+
+  return scope;
 }
 
 static Scope *new_inner_scope(Scope *outer) {
@@ -479,7 +485,7 @@ static VarDef *register_var(Scope *scope, Token *name, Type *type,
 
 static VarDef *register_func(Scope *scope, Token *name, Type *type) {
   (void)register_decl(scope, DECL_GLOBAL_VAR, name->ident, type, NULL, NULL,
-                      NULL, NULL);
+                      NULL, NULL, NULL);
 
   VarDef *def = NEW(VarDef);
   def->type = DEF_FUNC;
@@ -494,7 +500,7 @@ static VarDef *register_func(Scope *scope, Token *name, Type *type) {
 
 static void register_extern(Scope *scope, Token *name, Type *type) {
   (void)register_decl(scope, DECL_GLOBAL_VAR, name->ident, type, NULL, NULL,
-                      NULL, NULL);
+                      NULL, NULL, NULL);
 }
 
 static StackVar *register_stack_var(Scope *scope, Token *name, Type *type,
@@ -513,7 +519,7 @@ static StackVar *register_stack_var(Scope *scope, Token *name, Type *type,
   VEC_PUSH(fcx->var_list, var);
 
   if (!register_decl(scope, DECL_STACK_VAR, name->ident, type, var, NULL, NULL,
-                     NULL)) {
+                     NULL, NULL)) {
     range_error(range, "同じ名前のローカル変数が複数あります: %s", name->ident);
   }
 
@@ -525,7 +531,7 @@ static GlobalVar *register_global_var(Scope *scope, Token *name, Type *type,
                                       StorageClassSpecifier scs) {
   GlobalVar *gvar = new_global_variable(type, name->ident, range, scs);
   if (!register_decl(scope, DECL_GLOBAL_VAR, name->ident, type, NULL, gvar,
-                     NULL, NULL)) {
+                     NULL, NULL, NULL)) {
     Decl *decl = get_decl(scope, name->ident);
     if (decl->global_var == NULL) {
       decl->global_var = gvar;
@@ -539,21 +545,30 @@ static GlobalVar *register_global_var(Scope *scope, Token *name, Type *type,
 static void register_number(Scope *scope, Token *name, Type *type,
                             Number *number) {
   if (!register_decl(scope, DECL_NUMBER, name->ident, type, NULL, NULL, number,
-                     NULL)) {
+                     NULL, NULL)) {
     range_error(name->range, "定義済みの識別子です: %s", name->ident);
   }
+}
+
+static void register_string(Scope *scope, const char *name, const char *val) {
+  Type *type =
+      new_type_array(new_type(TY_CHAR, EMPTY_TYPE_QUALIFIER),
+                     new_number_int(strlen(val)), EMPTY_TYPE_QUALIFIER);
+  (void)register_decl(scope, DECL_STRING, name, type, NULL, NULL, NULL, val,
+                      NULL);
 }
 
 static void register_builtin_func(Scope *scope, const char *name,
                                   builtin_func_handler_t *handler) {
   Type *type = new_type(TY_BUILTIN, EMPTY_TYPE_QUALIFIER);
   (void)register_decl(scope, DECL_BUILTIN_FUNC, name, type, NULL, NULL, NULL,
-                      handler);
+                      NULL, handler);
 }
 
 static bool register_decl(Scope *scope, decl_t kind, const char *name,
                           Type *type, StackVar *svar, GlobalVar *gvar,
-                          Number *num_val, builtin_func_handler_t *handler) {
+                          Number *number, const char *string,
+                          builtin_func_handler_t *handler) {
   if (map_get(scope->decl_map, name)) {
     return false;
   }
@@ -562,7 +577,8 @@ static bool register_decl(Scope *scope, decl_t kind, const char *name,
   decl->type = type;
   decl->stack_var = svar;
   decl->global_var = gvar;
-  decl->num_val = num_val;
+  decl->number = number;
+  decl->string = string;
   decl->builtin_func = handler;
   map_put(scope->decl_map, name, decl);
   return true;
@@ -1338,46 +1354,6 @@ static Expr *new_expr_builtin_func(const char *name,
   expr->builtin_func.name = name;
   expr->builtin_func.handler = handler;
   return expr;
-}
-
-static Expr *new_expr_ident(Scope *scope, Token *ident) {
-  assert(ident->ty == TK_IDENT);
-  const char *name = ident->ident;
-  const Range *range = ident->range;
-
-  if (strcmp(name, "__func__") == 0) {
-    if (scope->func_ctxt == NULL) {
-      range_error(range, "関数外で__func__が使用されました");
-    }
-    return new_expr_str(scope, scope->func_ctxt->name, range);
-  }
-
-  Decl *decl = get_decl(scope, name);
-  if (decl == NULL) {
-    range_warn(range, "未定義の識別子です: %s", name);
-    Type *type = new_type(TY_S_INT, EMPTY_TYPE_QUALIFIER);
-    GlobalVar *gvar = register_global_var(scope, ident, type, ident->range,
-                                          EMPTY_STORAGE_CLASS_SPECIFIER);
-    return new_expr_global_var(type, name, gvar, range);
-  }
-
-  switch (decl->kind) {
-  case DECL_STACK_VAR: {
-    return new_expr_stack_var(decl->stack_var, range);
-  }
-  case DECL_GLOBAL_VAR: {
-    GlobalVar *gvar = decl->global_var;
-    return new_expr_global_var(decl->type, gvar != NULL ? gvar->name : name,
-                               gvar, range);
-  }
-  case DECL_NUMBER: {
-    return new_expr_num(*decl->num_val, range);
-  }
-  case DECL_BUILTIN_FUNC: {
-    return new_expr_builtin_func(name, decl->builtin_func, range);
-  }
-  }
-  range_internal_error(range, "invalid decl kind: %d", decl->kind);
 }
 
 static Expr *new_expr_str(Scope *scope, const char *val, const Range *range) {
@@ -2208,11 +2184,37 @@ static Expr *primary_expression(TokenIterator *ts, Scope *scope) {
   if ((token = ts_consume(ts, TK_CHARCONST)) != NULL) {
     return new_expr_num(token->char_val, token->range);
   }
-  if ((token = ts_consume(ts, TK_IDENT)) != NULL) {
-    return new_expr_ident(scope, token);
-  }
   if ((token = ts_consume(ts, TK_STR)) != NULL) {
     return new_expr_str(scope, token->str, token->range);
+  }
+
+  if ((token = ts_consume(ts, TK_IDENT)) != NULL) {
+    const char *name = token->ident;
+    const Range *range = token->range;
+    Decl *decl = get_decl(scope, name);
+    if (decl == NULL) {
+      range_error(range, "use of undeclared identifier: %s", name);
+    }
+    switch (decl->kind) {
+    case DECL_STACK_VAR: {
+      return new_expr_stack_var(decl->stack_var, range);
+    }
+    case DECL_GLOBAL_VAR: {
+      GlobalVar *gvar = decl->global_var;
+      return new_expr_global_var(decl->type, gvar != NULL ? gvar->name : name,
+                                 gvar, range);
+    }
+    case DECL_NUMBER: {
+      return new_expr_num(*decl->number, range);
+    }
+    case DECL_STRING: {
+      return new_expr_str(scope, decl->string, range);
+    }
+    case DECL_BUILTIN_FUNC: {
+      return new_expr_builtin_func(name, decl->builtin_func, range);
+    }
+    }
+    range_internal_error(range, "invalid decl kind: %d", decl->kind);
   }
 
   if ((token = ts_consume(ts, '(')) != NULL) {
