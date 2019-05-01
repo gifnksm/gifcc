@@ -505,9 +505,8 @@ typedef struct StringLiteral {
 typedef DEFINE_VECTOR(StringLiteralVector, StringLiteral *) StringLiteralVector;
 
 typedef DEFINE_VECTOR(ExprVector, Expr *) ExprVector;
-typedef struct Scope Scope;
-typedef Expr *builtin_func_handler_t(Scope *scope, Expr *callee,
-                                     ExprVector *argument, const Range *range);
+typedef Expr *builtin_func_handler_t(Expr *callee, ExprVector *argument,
+                                     const Range *range);
 
 typedef struct Stmt Stmt;
 typedef struct Expr {
