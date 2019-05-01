@@ -203,8 +203,8 @@ static Expr *new_expr_builtin_va_copy(Expr *callee, ExprVector *arguments,
                                       const Range *range);
 static Expr *new_expr_postfix(int ty, Expr *operand, const Range *range);
 static Expr *new_expr_cast(Type *val_type, Expr *operand, const Range *range);
-static Expr *new_expr_compound(Scope *scope, Type *val_type, Initializer *init,
-                               const Range *range);
+static Expr *new_expr_compound(Type *val_type, StackVar *svar,
+                               Initializer *init, const Range *range);
 static Expr *new_expr_unary(int op, Expr *operand, const Range *range);
 static Expr *new_expr_binop(int op, Expr *lhs, Expr *rhs, const Range *range);
 static Expr *new_expr_cond(Expr *cond, Expr *then_expr, Expr *else_expr,
@@ -1607,19 +1607,8 @@ static Expr *new_expr_cast(Type *val_type, Expr *operand, const Range *range) {
   return expr;
 }
 
-static Expr *new_expr_compound(Scope *scope, Type *val_type, Initializer *init,
-                               const Range *range) {
-  StackVar *svar = NULL;
-  if (scope->func_ctxt != NULL) {
-    FuncCtxt *fcx = scope->func_ctxt;
-    svar = NEW(StackVar);
-    svar->name = ".compound";
-    svar->offset = INT_MIN;
-    svar->type = val_type;
-    svar->range = range;
-    VEC_PUSH(fcx->var_list, svar);
-  }
-
+static Expr *new_expr_compound(Type *val_type, StackVar *svar,
+                               Initializer *init, const Range *range) {
   Expr *expr = new_expr(EX_COMPOUND, val_type, range);
   expr->compound.stack_var = svar;
   expr->compound.init = init;
@@ -2376,7 +2365,19 @@ static Expr *cast_expression(TokenIterator *ts, Scope *scope) {
       Initializer *init = NULL;
       const Range *range = NULL;
       initializer(ts, scope, val_type, &init, &range);
-      return new_expr_compound(scope, val_type, init, range);
+
+      StackVar *svar = NULL;
+      FuncCtxt *fcx = scope->func_ctxt;
+      if (fcx != NULL) {
+        svar = NEW(StackVar);
+        svar->name = ".compound";
+        svar->offset = INT_MIN;
+        svar->type = val_type;
+        svar->range = range;
+        VEC_PUSH(fcx->var_list, svar);
+      }
+
+      return new_expr_compound(val_type, svar, init, range);
     }
     Expr *operand = cast_expression(ts, scope);
     return new_expr_cast(val_type, operand, range_join(start, operand->range));
