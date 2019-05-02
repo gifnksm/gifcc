@@ -933,7 +933,7 @@ void register_struct_member(Type *type, const char *member_name,
 const Member *lookup_struct_member(Type *type, const char *name);
 bool is_unqualified_type(const Type *type);
 bool is_same_type_qualifier(const TypeQualifier *tq1, const TypeQualifier *tq2);
-bool is_sametype(Type *ty1, Type *ty2);
+bool is_same_type(Type *ty1, Type *ty2);
 bool is_integer_type(Type *ty);
 bool is_float_type(Type *ty);
 int get_int_type_rank(Type *ty, const Range *range);

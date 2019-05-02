@@ -1914,7 +1914,7 @@ static void assign_struct_initializer(Scope *scope, InitElemVector *list,
     }
     if (!is_root && is_first) {
       if (elem->pinit->expr != NULL &&
-          is_sametype(elem->pinit->expr->val_type, type)) {
+          is_same_type(elem->pinit->expr->val_type, type)) {
         (*init)->expr = elem->pinit->expr;
         (*init)->members = NULL;
         VEC_REMOVE(list, 0);
@@ -1959,7 +1959,7 @@ static void assign_union_initializer(Scope *scope, InitElemVector *list,
     }
     if (!is_root && is_first) {
       if (elem->pinit->expr != NULL &&
-          is_sametype(elem->pinit->expr->val_type, type)) {
+          is_same_type(elem->pinit->expr->val_type, type)) {
         (*init)->expr = elem->pinit->expr;
         (*init)->members = NULL;
         VEC_REMOVE(list, 0);

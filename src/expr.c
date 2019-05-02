@@ -95,7 +95,7 @@ static Type *arith_converted(Expr **e1, Expr **e2) {
       cast_as(e2, ty1);
       return ty1;
     }
-    assert(is_sametype(ty1, ty2));
+    assert(is_same_type(ty1, ty2));
     return ty1;
   }
 
@@ -244,7 +244,7 @@ Expr *new_expr_generic(Expr *control, GenericAssociationVector *assoc_list) {
       default_expr = assoc->expr;
       continue;
     }
-    if (is_sametype(assoc->type, control->val_type)) {
+    if (is_same_type(assoc->type, control->val_type)) {
       return assoc->expr;
     }
   }
@@ -587,7 +587,7 @@ Expr *new_expr_binop(int op, Expr *lhs, Expr *rhs, const Range *range) {
   case EX_SUB:
     if (is_ptr_type(lhs->val_type)) {
       if (is_ptr_type(rhs->val_type)) {
-        if (!is_sametype(lhs->val_type, rhs->val_type)) {
+        if (!is_same_type(lhs->val_type, rhs->val_type)) {
           binop_type_error(op, lhs, rhs);
         }
 
@@ -755,7 +755,7 @@ Expr *new_expr_cond(Expr *cond, Expr *then_expr, Expr *else_expr,
     } else if (else_expr->val_type->ptr->ty == TY_VOID) {
       val_type = then_expr->val_type;
     } else {
-      if (!is_sametype(then_expr->val_type, else_expr->val_type)) {
+      if (!is_same_type(then_expr->val_type, else_expr->val_type)) {
         range_error(range, "条件演算子の両辺の型が異なります: %s, %s",
                     format_type(then_expr->val_type, false),
                     format_type(else_expr->val_type, false));
@@ -773,7 +773,7 @@ Expr *new_expr_cond(Expr *cond, Expr *then_expr, Expr *else_expr,
     cast_as(&then_expr, val_type);
     cast_as(&else_expr, val_type);
   } else {
-    if (!is_sametype(then_expr->val_type, else_expr->val_type)) {
+    if (!is_same_type(then_expr->val_type, else_expr->val_type)) {
       range_error(range, "条件演算子の両辺の型が異なります: %s, %s",
                   format_type(then_expr->val_type, false),
                   format_type(else_expr->val_type, false));

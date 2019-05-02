@@ -231,7 +231,7 @@ bool is_same_type_qualifier(const TypeQualifier *tq1,
   return true;
 }
 
-bool is_sametype(Type *ty1, Type *ty2) {
+bool is_same_type(Type *ty1, Type *ty2) {
   if (ty1->ty != ty2->ty) {
     return false;
   }
@@ -259,12 +259,12 @@ bool is_sametype(Type *ty1, Type *ty2) {
   case TY_LDOUBLE:
     return true;
   case TY_PTR:
-    return is_sametype(ty1->ptr, ty2->ptr);
+    return is_same_type(ty1->ptr, ty2->ptr);
   case TY_ARRAY:
     return (ty1->array.len == ty2->array.len) &&
-           is_sametype(ty1->array.elem, ty2->array.elem);
+           is_same_type(ty1->array.elem, ty2->array.elem);
   case TY_FUNC: {
-    if (!is_sametype(ty1->func.ret, ty2->func.ret)) {
+    if (!is_same_type(ty1->func.ret, ty2->func.ret)) {
       return false;
     }
     if ((ty1->func.has_varargs ^ ty2->func.has_varargs) != 0) {
@@ -280,7 +280,7 @@ bool is_sametype(Type *ty1, Type *ty2) {
       for (int i = 0; i < VEC_LEN(ty1->func.params); i++) {
         Param *p1 = VEC_GET(ty1->func.params, i);
         Param *p2 = VEC_GET(ty2->func.params, i);
-        if (!is_sametype(p1->type, p2->type)) {
+        if (!is_same_type(p1->type, p2->type)) {
           return false;
         }
       }

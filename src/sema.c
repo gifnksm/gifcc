@@ -138,7 +138,7 @@ static void eval_unop(Expr *expr) {
 
 static void eval_cast(Expr *expr) {
   Expr *operand = expr->unop.operand;
-  if (is_sametype(expr->val_type, operand->val_type)) {
+  if (is_same_type(expr->val_type, operand->val_type)) {
     replace_expr(expr, operand);
     return;
   }
