@@ -675,58 +675,41 @@ static void test14(void) {
 static void test15(void) {
   int *p, *q, i;
 
-  p = 30;
-  q = 10;
+  p = (int *)30;
+  q = (int *)10;
 
-  i = p + 3;
+  i = (int)(p + 3);
   CHECK_INT(42, i);
 
-  i = 3 + p;
+  i = (int)(3 + p);
   CHECK_INT(42, i);
 
   p += 3;
-  CHECK_INT(42, p);
+  CHECK_INT(42, (int)p);
 
-  i = 3;
-  i += p;
-  CHECK_INT(54, i);
-
-  i = p - 3;
+  i = (int)(p - 3);
   CHECK_INT(30, i);
 
   i = p - q;
   CHECK_INT(8, i);
 
-  p -= q;
-  CHECK_INT(8, p);
-
-  p = 8;
+  p = (int *)8;
   p++;
-  CHECK_INT(12, p);
+  CHECK_INT(12, (int)p);
 
   ++p;
-  CHECK_INT(16, p);
+  CHECK_INT(16, (int)p);
 
   p--;
-  CHECK_INT(12, p);
+  CHECK_INT(12, (int)p);
 
   --p;
-  CHECK_INT(8, p);
+  CHECK_INT(8, (int)p);
 
-  p = 10;
+  p = (int *)10;
   i = 5;
   i += (int)p;
   CHECK_INT(15, i);
-
-  p = 10;
-  i = 5;
-  i += (int *)p;
-  CHECK_INT(30, i);
-
-  p = 10;
-  i = 5;
-  i += (int **)p;
-  CHECK_INT(50, i);
 }
 
 static void test16(void) {
@@ -762,7 +745,7 @@ static void test17(void) {
   test17_02();
 
   void *p, *q;
-  p = 3;
+  p = (int *)3;
   q = test17_03(p);
   CHECK_INT(1, p == q);
 }
@@ -1191,21 +1174,21 @@ static struct {
   int d;
   short e;
   void *f;
-} test37_t = {{{1}}, {2}, {3}, {{{4}}}, {5}, 6};
+} test37_t = {{{1}}, {2}, {3}, {{{4}}}, {5}, (void *)6};
 static void test37(void) {
   CHECK_INT(1, test37_s.a);
   CHECK_INT(2, test37_s.b);
   CHECK_INT(3, test37_s.c);
   CHECK_INT(4, test37_s.d);
   CHECK_INT(5, test37_s.e);
-  CHECK_INT(6, test37_s.f);
+  CHECK_INT(6, (int)test37_s.f);
 
   CHECK_INT(1, test37_t.a);
   CHECK_INT(2, test37_t.b);
   CHECK_INT(3, test37_t.c);
   CHECK_INT(4, test37_t.d);
   CHECK_INT(5, test37_t.e);
-  CHECK_INT(6, test37_t.f);
+  CHECK_INT(6, (int)test37_t.f);
 
   struct S {
     int a;
@@ -1214,13 +1197,13 @@ static void test37(void) {
     int d;
     short e;
     void *f;
-  } s = {11, 12, 13, 14, 15, 16};
+  } s = {11, 12, 13, 14, 15, (void *)16};
   CHECK_INT(11, s.a);
   CHECK_INT(12, s.b);
   CHECK_INT(13, s.c);
   CHECK_INT(14, s.d);
   CHECK_INT(15, s.e);
-  CHECK_INT(16, s.f);
+  CHECK_INT(16, (int)s.f);
 
   struct T {
     int a;
@@ -1229,13 +1212,13 @@ static void test37(void) {
     int d;
     short e;
     void *f;
-  } t = {{{11}}, {12}, {13}, {{{14}}}, {15}, 16};
+  } t = {{{11}}, {12}, {13}, {{{14}}}, {15}, (void *)16};
   CHECK_INT(11, t.a);
   CHECK_INT(12, t.b);
   CHECK_INT(13, t.c);
   CHECK_INT(14, t.d);
   CHECK_INT(15, t.e);
-  CHECK_INT(16, t.f);
+  CHECK_INT(16, (int)t.f);
 }
 
 static union {
